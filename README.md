@@ -51,7 +51,7 @@ cd sia-server
 The script relies on `requests` for sending notifications and `uvloop` for high-performance networking. Install them using `apt`:
 ```bash
 sudo apt update
-sudo apt install  python3-requests python3-uvloop
+sudo apt install python3-requests python3-uvloop
 ```
 Note: It is recommended to use `apt` instead of `pip` on Raspberry Pi OS / Debian systems to avoid environment conflicts.
 
