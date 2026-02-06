@@ -104,6 +104,7 @@ LOG_LEVEL = 'INFO'
 LOG_TO_FILE = True # True / False
 
 # Log file path (only used if LOG_TO_FILE = True)
+# Note, Windows users will need to escape \ like this: 'C:\\Temp\\sia-server.log'
 LOG_FILE = '/tmp/sia-server.log'
 
 # Log file rotation settings
