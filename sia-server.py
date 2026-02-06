@@ -14,14 +14,19 @@ import logging
 import logging.handlers
 import sys
 import signal
-import uvloop
 
 import config
 from galaxy.parser import parse_galaxy_event
 from galaxy.notification import send_notification
 
-# Use uvloop for better performance
-asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+# Try to use uvloop for performance, but fall back to standard asyncio on Windows
+try:
+    import uvloop
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+    print("Using uvloop for event loop.")
+except ImportError:
+    print("uvloop not found, using standard asyncio event loop.")
+    pass # On Windows, this will automatically use the standard ProactorEventLoop
 
 
 def setup_logging():
