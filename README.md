@@ -6,7 +6,7 @@ This project was created to replace the discontinued free push notification serv
 
 ## Features
 
--   **Self-Hosted:** Runs on any local Linux machine, like a Raspberry Pi.
+-   **Self-Hosted:** Runs on any local Linux machine, like a Raspberry Pi, it should also run on Windows but it has not been tested.
 -   **Real-time Notifications:** Instantly forwards alarm events to your devices.
 -   **Prioritized Alerts:** Uses ntfy.sh priorities to distinguish between urgent alarms (burglary, fire) and routine events (arm/disarm, tests).
 -   **Robust Protocol Handling:** Correctly parses the multi-message protocol used by Galaxy Flex panels, including handling multiple events in a single connection.
