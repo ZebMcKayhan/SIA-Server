@@ -102,9 +102,10 @@ This block provides a human-readable description of the event. It appears to hav
     -   **Site:** `        ` (8 spaces - unused)
     -   **Descriptor:** `IR Sovrum Ö` (16 chars, padded)
 
+The meaning of the prefix is not known.
+
 ---
 
-The meaning of the prefix is not known.
 
 ### Close Handshake Block
 
