@@ -4,6 +4,8 @@ A lightweight, self-hosted Python server to receive proprietary SIA protocol mes
 
 This project was created to replace the discontinued free push notification service, giving users full control over their alarm notifications without ongoing costs.
 
+This was developed on a Honywell Galaxy Flex 20 alarm system. It is quite possible that it will work for other Honywell Galaxy alarm system but it has not been tested.
+
 ## Features
 
 -   **Self-Hosted:** Runs on any local Linux machine, like a Raspberry Pi, it should also run on Windows but it has not been tested.
@@ -61,6 +63,7 @@ Log into your Galaxy Flex panel's installer menu and configure the Ethernet modu
 -  ARC Port: The port configured in `config.py` (default is `10000`).
 -  Protocol: SIA (Level 2 or 3) - Level 3 is recommended.
 -  Account Number: Your 4 or 6-digit alarm account number.
+-  Encryption: Off (for notifications) (encryption is not supported, not known)
 
 ## Configure the Server
 Edit the `config.py` file to match your setup. This is the only file you need to modify.
