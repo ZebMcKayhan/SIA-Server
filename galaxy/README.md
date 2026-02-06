@@ -82,17 +82,19 @@ The final section has two forms:
 
 ### Block 3: ASCII Block (A Block)
 
-This block provides a human-readable description of the event. It appears to have at least two different formats.
+This block provides a human-readable description of the event. It appears to have at least two different variants but in common the block consists of a 1 character prefix, the letter A followed by text.
 
-**Format 1: User Events (Variable Length)**
--   **Prefix:** `QA`
+**Format:** `<prefix>A<Ascii text>`
+
+**Variant 1: User Events (Variable Length)**
+-   **Prefix:** `Q`
 -   **Structure:** `QA <Action Text> <Username>`
 -   **Example:** `QA PÅSLAG    Kalle*`
 
-**Format 2: Zone/System Events (Fixed Length)**
--   **Prefix:** `eA`, `[A`, `JA`
+**Variant 2: Zone/System Events (Fixed Length)**
+-   **Prefix:** `e`, `[`, `J`
 -   **Structure:** `<Prefix>A<LogEvent(9)><State(1)><Site(8)><Descriptor(16)>`
--   **Example (`[A`):** `[A+INBROTT        IR Sovrum Ö\x34`
+-   **Example (`[`):** `[A+INBROTT        IR Sovrum Ö\x34`
     -   **Prefix:** `[`
     -   **A:** `A`
     -   **LogEvent:** `+INBROTT ` (9 chars)
@@ -101,6 +103,8 @@ This block provides a human-readable description of the event. It appears to hav
     -   **Descriptor:** `IR Sovrum Ö` (16 chars, padded)
 
 ---
+
+The meaning of the prefix is not known.
 
 ### Close Handshake Block
 
