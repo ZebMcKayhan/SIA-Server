@@ -28,8 +28,6 @@ sia-server.py # The main server application
 
 config.py # All user settings are here!
 
-galaxy/init.py
-
 galaxy/parser.py # Handles parsing of the Galaxy SIA protocol
 
 galaxy/notification.py # Handles formatting and sending of notifications
