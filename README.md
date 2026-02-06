@@ -122,6 +122,7 @@ RestartSec=5s
 [Install]
 WantedBy=multi-user.target
 ```
+Note, depending on yor system you may need to add firewall rules in here, typically via `ExecStartPre=` and `ExecStop=` and if so, you may need to remove or comment the `User=` directive so it runs as root.
 3. Enable and Start the Service:
 ```bash
 sudo systemctl daemon-reload
