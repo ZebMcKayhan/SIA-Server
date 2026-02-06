@@ -18,7 +18,7 @@ This project was created to replace the discontinued free push notification serv
 -   A Honeywell Galaxy Flex alarm system with an Ethernet module (E080-4).
 -   A Linux machine on the same network as the alarm system (a Raspberry Pi running OMV or Raspberry Pi OS is perfect).
 -   Python 3.
--   The `python3-requests` package.
+-   The `python3-requests` and the `python3-uvloop` package.
 
 ## File Structure
 
