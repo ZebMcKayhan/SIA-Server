@@ -1,4 +1,4 @@
-# Galaxy SIA Notification Server
+# Honywell Galaxy SIA Notification Server
 
 A lightweight, self-hosted Python server to receive proprietary SIA protocol messages from Honeywell Galaxy Flex alarm systems and send rich, prioritized push notifications via [ntfy.sh](https://ntfy.sh/).
 
