@@ -18,7 +18,7 @@ This project was created to replace the discontinued free push notification serv
 -   A Honeywell Galaxy Flex alarm system with an Ethernet module (E080-4).
 -   A Linux machine on the same network as the alarm system (a Raspberry Pi running OMV or Raspberry Pi OS is perfect).
 -   Python 3.
--   The `python3-requests` and the `python3-uvloop` package.
+-   The `python3-requests` and the optional `python3-uvloop` package.
 
 ## File Structure
 
@@ -33,7 +33,7 @@ galaxy/parser.py # Handles parsing of the Galaxy SIA protocol
 galaxy/notification.py # Handles formatting and sending of notifications
 
 
-## Installation & Setup
+## Installation & Setup (Linux)
 
 ### 1. Clone the Repository
 
@@ -133,6 +133,69 @@ sudo systemctl start sia-server.service
 -  Start the service: `sudo systemctl start sia-server.service`
 -  Restart the service: `sudo systemctl restart sia-server.service`
 -  View live logs: `journalctl -u sia-server.service -f` (if not logging to a file) or `tail -f /path/to/your/log/file.log` (if logging to a file).
+
+
+## Installation & Setup (Windows)
+This have not been tested, but there is nothing known to me that would prevent this from working.
+1. Download and install the latest Python 3 from the official Python website. Make sure to check the box that says "Add Python to PATH" during installation.
+2. Install Dependencies:
+Open a Command Prompt `cmd` or PowerShell and use `pip` (Python's package installer, which comes with the Windows installer).
+```bash
+pip install requests
+```
+(You would not install `uvloop` on Windows).
+
+3. Configure config.py:
+Use same procedure as for Linux, but when selecting log file path you will need to escape the backslash, like this:
+```bash
+LOG_FILE = 'C:\\Temp\\sia-server.log'
+```
+4. Running the Server on Windows
+You have two main options, similar to Linux: manual testing or running as a background service.
+
+
+### For Testing (Manual Start)
+
+Just open a Command Prompt, navigate to your script's directory, and run it.
+```bash
+cd C:\path\to\your\sia-server
+python sia-server.py
+```
+The server will run in that window. Pressing `Ctrl+C` will stop it.
+
+### As a Service (Recommended for Production):
+
+Windows doesn't have `systemd`. The equivalent is "Windows Services". Making a Python script a true Windows Service is more complex, but the easiest and most popular way is to use a helper tool.
+
+The Easiest Method is using NSSM (the Non-Sucking Service Manager)
+1. Download NSSM. It's a small, free command-line tool.
+2. Place `nssm.exe` somewhere accessible (e.g., C:\NSSM).
+3. Open a Command Prompt as an Administrator.
+4. Run the NSSM installer for your service:
+```bash
+C:\NSSM\nssm.exe install SIA-Server
+```
+5. A GUI window will pop up. Fill in the tabs:
+- Application Tab:
+  - Path: Browse to your Python executable (e.g., `C:\Python312\python.exe`).
+  - Startup directory: Browse to the folder containing your script (e.g., `C:\path\to\your\sia-server`).
+  - Arguments: `sia-server.py`
+- Details Tab:
+  - You can set a Display Name and Description.
+- Log on Tab:
+  - Usually, you can leave this as Local System account.
+6. Click Install service.
+Now you can manage it from the Windows Services app (services.msc) or via the command line:
+```bash
+# Start the service
+nssm start SIA-Server
+
+# Stop the service
+nssm stop SIA-Server
+
+# Check status
+nssm status SIA-Server
+```
 
 # Acknowledgments
 
