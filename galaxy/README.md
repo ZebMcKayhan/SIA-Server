@@ -90,9 +90,9 @@ This block provides a human-readable description of the event. It appears to hav
 -   **Example:** `QA PÅSLAG    Kalle*`
 
 **Format 2: Zone/System Events (Fixed Length)**
--   **Prefix:** `eA`, `[A+`, `JA`
+-   **Prefix:** `eA`, `[A`, `JA`
 -   **Structure:** `<Prefix>A<LogEvent(9)><State(1)><Site(8)><Descriptor(16)>`
--   **Example (`[A+`):** `[A+INBROTT        IR Sovrum Ö\x34`
+-   **Example (`[A`):** `[A+INBROTT        IR Sovrum Ö\x34`
     -   **Prefix:** `[`
     -   **A:** `A`
     -   **LogEvent:** `+INBROTT ` (9 chars)
