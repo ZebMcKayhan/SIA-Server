@@ -42,7 +42,7 @@ galaxy/notification.py # Handles formatting and sending of notifications
 Clone this project to a directory on your Linux machine (e.g., `/home/pi/Scripts/sia-server`).
 
 ```bash
-git clone https://github.com/ZebMcKayhan/SIA-Server/edit/main/sia-server
+git clone https://github.com/ZebMcKayhan/SIA-Server.git
 cd sia-server
 ```
 
