@@ -111,23 +111,21 @@ def parse_data_payload(payload: bytes, event: GalaxyEvent):
 
 
 def parse_ascii_payload(payload: bytes, event: GalaxyEvent, char_map: Dict[bytes, str]):
-    """Parses the clean payload of an ASCII block."""
+    """
+    Parses the clean payload of an ASCII block.
+    The payload IS the full human-readable text.
+    
+    Args:
+        payload: The raw payload bytes from the ASCII block.
+        event: The GalaxyEvent object to populate.
+        char_map: The custom character mapping dictionary.
+    """
     event.ascii_payload = payload
     
-    # The payload is the text content, starting with a prefix.
-    # Example: b'Q PÅSLAG    Magnus'
+    # The entire payload is the text we want. We just need to decode it correctly.
+    event.action_text = decode_unknown_text(payload, char_map)
     
-    # We find the prefix by splitting at the first space.
-    try:
-        space_index = payload.index(b' ')
-        event.ascii_prefix = payload[:space_index].decode('utf-8', errors='ignore')
-        raw_text = payload[space_index+1:]
-    except ValueError:
-        # If no space, the whole payload might be the prefix or a single word.
-        event.ascii_prefix = payload.decode('utf-8', errors='ignore')
-        raw_text = b''
-        
-    event.action_text = decode_unknown_text(raw_text, char_map)
+    log.debug("Parsed action_text: '%s'", event.action_text)
 
 
 def parse_galaxy_event(blocks: List[Dict], account_sites: Dict, 
