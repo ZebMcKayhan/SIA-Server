@@ -99,9 +99,21 @@ The structure of the last section is always a **two-character uppercase Event Co
     -   `BA1011`: Event Code is "Burglary Alarm" (`BA` - 2 chars) in Zone `1011`.
 
 #### ASCII (`A`) Payload
--   Contains a human-readable string with a prefix.
--   *Example Payload:* `b'Q P\x8fSLAG    Magnus'`
--   *Example Payload (alarm):* `b'+INBROTT        IR Sovrum \x99'`
+
+This block's payload contains the full, human-readable description of the event. The examples below show the **clean payload** that is passed to the parser after the Length Byte, Command Byte (`A`), and Checksum Byte have been stripped by the server.
+
+The content of this payload is what is used to generate the final notification message after being decoded.
+
+**Example 1: Zone Alarm Event**
+-   **Original Raw Block:** `b'[A+INBROTT      IR Sovrum \x99\x34'`
+-   **Clean Payload Sent to Parser:** `b'+INBROTT      IR Sovrum \x99'`
+-   **Note:** The trailing `\x99` in this payload is the proprietary byte for the character `Ö` and is part of the zone name ("IR Sovrum Ö"). 
+-   **Final Decoded Text:** `"+INBROTT      IR Sovrum Ö"`
+
+**Example 2: System Auto Test**
+-   **Original Raw Block:** `b'eA AUTO TEST...Modul\x9a'`
+-   **Clean Payload Sent to Parser:** `b' AUTO TEST...Modul'`
+-   **Final Decoded Text:** `"AUTO TEST...Modul"`
 
 ### Character Encoding
 
