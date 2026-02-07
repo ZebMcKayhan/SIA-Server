@@ -1,56 +1,49 @@
-
 """
 Constants related to the Galaxy SIA Protocol.
+
+This file defines the known Command Bytes (the second byte of every message block)
+and their human-readable names.
 """
 
 # Defines the meaning of the second byte (Command Byte) in each message block.
+# Source: Reverse-engineered and cross-referenced with public SIA documentation.
 COMMANDS = {
-    # Client to Server
+    # --- Client to Server Commands (Observed) ---
     0x23: 'ACCOUNT_ID',
     0x4E: 'NEW_EVENT',
     0x41: 'ASCII',
     0x30: 'END_OF_DATA',
-    
-    # Server to Client
+
+    # --- Server to Client Commands (Implemented) ---
     0x38: 'ACKNOWLEDGE',
     0x39: 'REJECT',
-    
-    # Other known but unused commands
+
+    # --- Other Known SIA Command Codes (Not yet observed/implemented) ---
+    # Control Commands
     0x31: 'WAIT',
     0x32: 'ABORT',
+    0x36: 'ACK_AND_STANDBY',
     0x37: 'ACK_AND_DISCONNECT',
+    0x08: 'ALT_ACKNOWLEDGE',
+    0x09: 'ALT_REJECT',
+    
+    # Info Blocks
+    0x43: 'CONTROL',
+    0x45: 'ENVIRONMENTAL',
+    0x4F: 'OLD_EVENT',
+    0x50: 'PROGRAM',
+    
+    # Special Blocks
+    0x40: 'CONFIGURATION',
+    0x3F: 'REMOTE_LOGIN',
+    0x26: 'ORIGIN_ID',
+    0x58: 'EXTENDED',
+    0x4C: 'LISTEN_IN',
+    0x56: 'VCHN_REQUEST',
+    0x76: 'VCHN_FRAME',
+    0x49: 'VIDEO',
 }
 
-# Create a reverse mapping for easily sending commands by name
+# Create a reverse mapping for easily sending commands by name.
+# This allows us to use 'ACKNOWLEDGE' in the code instead of the raw hex value.
 COMMAND_BYTES = {name: byte for byte, name in COMMANDS.items()}
-
-# event codes from https://github.com/666djb/SIA2MQTT4HA:
-#    end_of_data        = 0x30,    #Already used
-#    wait               = 0x31,    #Already used
-#    abort              = 0x32,    #Already used
-#    res_3              = 0x33,
-#    res_4              = 0x34,
-#    res_5              = 0x35,
-#    ack_and_standby    = 0x36,
-#    ack_and_disconnect = 0x37,    #Already used
-#    acknowledge        = 0x38,    #Already used
-#    alt_acknowledge    = 0x08,
-#    reject             = 0x39,    #Already used
-#    alt_reject         = 0x09,
-#    // Info blocks
-#    control            = 0x43,
-#    environmental      = 0x45,
-#    new_event          = 0x4E,    #Already used
-#    old_event          = 0x4F,
-#    program            = 0x50,
-#    // Special blocks
-#    configuration      = 0x40,
-#    remote_login       = 0x3F,
-#    account_id         = 0x23,    #Already used
-#    origin_id          = 0x26,
-#    ascii              = 0x41,    #Already used
-#    extended           = 0x58,
-#    listen_in          = 0x4C,
-#    vchn_request       = 0x56,
-#    vchn_frame         = 0x76,
-#    video              = 0x49
