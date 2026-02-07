@@ -73,7 +73,6 @@ def validate_and_strip(data: bytes) -> tuple[int, bytes] | tuple[None, None]:
     message_to_check = data[:-1]
     
     checksum = 0xFF
-    checksum ^= (message_to_check[0] - 0x40) # Use true length
     for byte in message_to_check[1:]:
         checksum ^= byte
         
@@ -102,7 +101,6 @@ async def build_and_send(writer, command: str, payload: bytes = b''):
     message_part = bytes([length_byte, command_byte]) + payload
     
     checksum = 0xFF
-    checksum ^= (message_part[0] - 0x40) # True length
     for byte in message_part[1:]:
         checksum ^= byte
         
