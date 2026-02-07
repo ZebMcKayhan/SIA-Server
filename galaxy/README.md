@@ -29,7 +29,7 @@ Every message block, whether from the client or server, follows a unified struct
 
 -   **Command Byte:** A single byte that defines the purpose of the block.
 
--   **Payload:** The data content of the block. Its length can be from 0 to 255 bytes.
+-   **Payload:** The data content of the block. Its length can be from 0 to 191 bytes.
 
 -   **Checksum Byte:** A single byte used for integrity checking.
     -   *Algorithm:* The checksum is a simple XOR calculation starting with `0xFF`.
