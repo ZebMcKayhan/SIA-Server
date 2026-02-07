@@ -26,7 +26,6 @@ class GalaxyEvent:
     site_name: Optional[str] = None
     
     # Parsed from Data Payload
-    message_type: Optional[str] = None
     time: Optional[str] = None
     user_id: Optional[str] = None
     partition: Optional[str] = None
@@ -74,12 +73,8 @@ def parse_data_payload(payload: bytes, event: GalaxyEvent):
     event.data_payload = payload
     data_str = payload.decode('utf-8', errors='ignore')
     
-    # The payload starts with a 2-character message type (e.g., 'VN', 'NN')
-    event.message_type = data_str[:2]
-    
-    # The rest of the string is split by '/'
-    remaining_str = data_str[2:]
-    sections = remaining_str.split('/')
+    # The entire payload is composed of sections. There is no message_type prefix inside the payload.
+    sections = data_str.split('/')
     
     if not sections:
         return
@@ -101,7 +96,7 @@ def parse_data_payload(payload: bytes, event: GalaxyEvent):
             
     # The last section is always the Event Code, with an optional Zone number appended
     last_section = sections[-1]
-    ec_match = re.match(r'([A-Z]{2,4})(\d{3,4})?', last_section)
+    ec_match = re.match(r'([A-Z]{2})(\d{3,4})?', last_section)
     if ec_match:
         event.event_code = ec_match.group(1)
         if ec_match.group(2):
