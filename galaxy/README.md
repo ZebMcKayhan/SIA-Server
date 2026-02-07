@@ -32,8 +32,8 @@ Every message block, whether from the client or server, follows a unified struct
 -   **Payload:** The data content of the block. Its length can be from 0 to 255 bytes.
 
 -   **Checksum Byte:** A single byte used for integrity checking.
-    -   *Algorithm:* The checksum is a simple XOR calculation starting with `0xFF`. Crucially, the *true length* of the payload (Length Byte - 0x40) is used for the first byte in the XOR chain.
-    -   *Formula:* `Checksum = 0xFF ^ (Length Byte - 0x40) ^ Command Byte ^ (all bytes in Payload)`
+    -   *Algorithm:* The checksum is a simple XOR calculation starting with `0xFF`.
+    -   *Formula:* `Checksum = 0xFF ^ (Length Byte + 0x40) ^ Command Byte ^ (all bytes in Payload)`
 
 ### Known Command Bytes
 
