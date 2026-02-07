@@ -92,11 +92,11 @@ The structure of the last section is always a **two-character uppercase Event Co
     -   `ti11:45`: Time is 11:45
     -   `id001`: User ID is 001
     -   `pi010`: Partition is 010
-    -   `CL`: Event Code is "Closing" (2 chars)
+    -   `CL`: Event Code is "Closing"
 
 -   **Burglary Alarm Event Payload:** `ti11:46/BA1011`
     -   `ti11:46`: Time is 11:46
-    -   `BA1011`: Event Code is "Burglary Alarm" (`BA` - 2 chars) in Zone `1011`.
+    -   `BA1011`: Event Code is "Burglary Alarm" in Zone `1011`.
 
 #### ASCII (`A`) Payload
 
