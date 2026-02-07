@@ -73,7 +73,7 @@ def validate_and_strip(data: bytes) -> tuple[int, bytes] | tuple[None, None]:
     message_to_check = data[:-1]
     
     checksum = 0xFF
-    for byte in message_to_check[1:]:
+    for byte in message_to_check:
         checksum ^= byte
         
     if checksum != expected_checksum:
