@@ -101,7 +101,7 @@ async def build_and_send(writer, command: str, payload: bytes = b''):
     message_part = bytes([length_byte, command_byte]) + payload
     
     checksum = 0xFF
-    for byte in message_part[1:]:
+    for byte in message_part:
         checksum ^= byte
         
     final_message = message_part + bytes([checksum])
