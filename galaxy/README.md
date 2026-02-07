@@ -56,12 +56,10 @@ The `Command Byte` (the second byte of every block) determines the message's mea
 
 #### NEW_EVENT (`N`) Payload
 
-This is the most information-rich block, containing the core details of the alarm event. Its payload is a string composed of a 2-character message type, followed by one or more sections delimited by a forward slash (`/`).
+This is the most information-rich block, containing the core details of the alarm event. The payload is a string composed of one or more sections delimited by a forward slash (`/`).
 
 **General Structure:**
-`[MessageType][Section1]/[Section2]/.../[FinalSection]`
-
--   **MessageType:** The first two characters of the payload define the context of the event (e.g., `VN` for a user event, `NN` for a new alarm).
+`[Section1]/[Section2]/.../[FinalSection]`
 
 -   **Identifier Sections:** Every section *before the last one* is prefixed with a 2-character identifier that defines its content.
 
@@ -90,17 +88,15 @@ The structure of the last section is always a **two-character uppercase Event Co
 
 **Full Payload Examples:**
 
--   **User Arm Event:** `VNti11:45/id001/pi010/CL`
-    -   `VN`: Message Length and Command
+-   **User Arm Event Payload:** `ti11:45/id001/pi010/CL`
     -   `ti11:45`: Time is 11:45
     -   `id001`: User ID is 001
     -   `pi010`: Partition is 010
-    -   `CL`: Event Code is "Closing"
+    -   `CL`: Event Code is "Closing" (2 chars)
 
--   **Burglary Alarm Event:** `NNti11:46/BA1011`
-    -   `NN`: Message Type
+-   **Burglary Alarm Event Payload:** `ti11:46/BA1011`
     -   `ti11:46`: Time is 11:46
-    -   `BA1011`: Event Code is "Burglary Alarm" in Zone `1011`.
+    -   `BA1011`: Event Code is "Burglary Alarm" (`BA` - 2 chars) in Zone `1011`.
 
 #### ASCII (`A`) Payload
 -   Contains a human-readable string with a prefix.
