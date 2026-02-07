@@ -35,7 +35,6 @@ class GalaxyEvent:
     zone: Optional[str] = None
     
     # Parsed from ASCII Payload
-    ascii_prefix: Optional[str] = None
     action_text: Optional[str] = None
 
 
