@@ -136,8 +136,9 @@ async def handle_connection(reader, writer):
 
             command_name = COMMANDS.get(command_byte, f'UNKNOWN(0x{command_byte:02x})')
             log.info("Received Command: %s, Payload: %r", command_name, payload)
-            
-            valid_blocks.append({'command': command_name, 'payload': payload})
+
+            if command_name != 'END_OF_DATA':
+                valid_blocks.append({'command': command_name, 'payload': payload})
 
             await build_and_send(writer, 'ACKNOWLEDGE')
             
