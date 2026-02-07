@@ -72,7 +72,7 @@ def parse_data_payload(payload: bytes, event: GalaxyEvent):
     event.data_payload = payload
     data_str = payload.decode('utf-8', errors='ignore')
     
-    # The entire payload is composed of sections. There is no message_type prefix inside the payload.
+    # The entire payload is composed of sections.
     sections = data_str.split('/')
     
     if not sections:
@@ -82,24 +82,31 @@ def parse_data_payload(payload: bytes, event: GalaxyEvent):
     for section in sections[:-1]:
         if section.startswith('ti'):
             event.time = section[2:]
+            log.debug("Parsed time: '%s'", event.time)
         elif section.startswith('id'):
             event.user_id = section[2:]
+            log.debug("Parsed user_id: '%s'", event.user_id)
         elif section.startswith('pi'):
             event.partition = section[2:]
+            log.debug("Parsed partition: '%s'", event.partition)
         elif section.startswith('ri'):
             event.group = section[2:]
+            log.debug("Parsed group: '%s'", event.group)
         elif section.startswith('va'):
             event.value = section[2:]
+            log.debug("Parsed value: '%s'", event.value)
         else:
-            log.debug("Unknown data section identifier found: %s", section)
+            log.debug("Unknown data section identifier found: '%s'", section)
             
     # The last section is always the Event Code, with an optional Zone number appended
     last_section = sections[-1]
     ec_match = re.match(r'([A-Z]{2})(\d{3,4})?', last_section)
     if ec_match:
         event.event_code = ec_match.group(1)
+        log.debug("Parsed event_code: '%s'", event.event_code)
         if ec_match.group(2):
             event.zone = ec_match.group(2)
+            log.debug("Parsed zone: '%s'", event.zone)
     else:
         log.warning("Could not parse event code from last section: %s", last_section)
 
