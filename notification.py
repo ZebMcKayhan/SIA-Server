@@ -39,8 +39,7 @@ def format_notification_text(event: GalaxyEvent) -> str:
         if event.user_id:
             notification += f" User: {event.user_id}"
         if event.event_code:
-            description = event.event_description or "Unknown"
-            notification += f" Event: {event.event_code} ({description})"
+            notification += f" Event: {event.event_code} ({event.event_description})"
         if event.zone:
             notification += f" Zone: {event.zone}"
         if event.partition:
