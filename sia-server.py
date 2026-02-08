@@ -8,6 +8,8 @@ Honeywell Galaxy Flex alarm systems. It sends notifications via ntfy.sh.
 Author: Built with assistance from Claude (Anthropic)
 License: MIT
 """
+# --- Application Version ---
+__version__ = "1.1.0-beta"
 
 import asyncio
 import logging
@@ -220,7 +222,7 @@ def main():
     signal.signal(signal.SIGINT, handle_shutdown)
     signal.signal(signal.SIGTERM, handle_shutdown)
     
-    log.info("Starting Galaxy SIA Server...")
+    log.info("Starting Galaxy SIA Server version %s", __version__)
     
     try:
         asyncio.run(start_server(config.LISTEN_ADDR, config.LISTEN_PORT))
