@@ -2,12 +2,14 @@
 """
 Galaxy SIA Server
 
-Receives SIA protocol messages from Galaxy Flex alarm systems,
-parses events, and sends notifications via ntfy.sh.
+Receives, validates, and parses proprietary SIA protocol messages from
+Honeywell Galaxy Flex alarm systems. It sends notifications via ntfy.sh.
 
 Author: Built with assistance from Claude (Anthropic)
 License: MIT
 """
+# --- Application Version ---
+__version__ = "1.1.0-beta"
 
 import asyncio
 import logging
@@ -15,154 +17,172 @@ import logging.handlers
 import sys
 import signal
 
-import config
-from galaxy.parser import parse_galaxy_event
-from galaxy.notification import send_notification
-
-# Try to use uvloop for performance, but fall back to standard asyncio on Windows
+# Make uvloop optional for cross-platform compatibility (e.g., Windows)
 try:
     import uvloop
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
     print("Using uvloop for event loop.")
 except ImportError:
     print("uvloop not found, using standard asyncio event loop.")
-    pass # On Windows, this will automatically use the standard ProactorEventLoop
+    pass
 
+import config
+from galaxy.parser import parse_galaxy_event
+from notification import send_notification
+from galaxy.constants import COMMANDS, COMMAND_BYTES, EVENT_CODE_DESCRIPTIONS
 
 def setup_logging():
     """Configure logging based on config.py settings"""
-    
     log = logging.getLogger()
-    
-    # Avoid adding handlers multiple times if already configured
     if log.handlers:
         return log
-        
-    log.setLevel(getattr(logging, config.LOG_LEVEL))
-    
-    # Create formatter
-    formatter = logging.Formatter(
-        config.LOG_FORMAT,
-        datefmt=config.LOG_DATE_FORMAT
-    )
-    
+    log.setLevel(getattr(logging, config.LOG_LEVEL, 'INFO'))
+    formatter = logging.Formatter(config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT)
     if config.LOG_TO_FILE:
-        # Log to rotating file
-        file_handler = logging.handlers.RotatingFileHandler(
-            config.LOG_FILE,
-            maxBytes=config.LOG_MAX_BYTES,
-            backupCount=config.LOG_BACKUP_COUNT
+        handler = logging.handlers.RotatingFileHandler(
+            config.LOG_FILE, maxBytes=config.LOG_MAX_BYTES, backupCount=config.LOG_BACKUP_COUNT
         )
-        file_handler.setFormatter(formatter)
-        log.addHandler(file_handler)
         print(f"Logging to file: {config.LOG_FILE}")
     else:
-        # Log to console/screen
-        console_handler = logging.StreamHandler(stream=sys.stderr)
-        console_handler.setFormatter(formatter)
-        log.addHandler(console_handler)
+        handler = logging.StreamHandler(sys.stderr)
         print("Logging to console")
-    
+    handler.setFormatter(formatter)
+    log.addHandler(handler)
     return log
 
-
-# Setup logging
 log = setup_logging()
+
+
+def validate_and_strip(data: bytes) -> tuple[int, bytes] | tuple[None, None]:
+    """
+    Validates a raw message block for length and checksum, then strips them.
+    Returns the command byte and payload if valid.
+    """
+    if len(data) < 3:
+        log.warning("Invalid block: too short. Raw: %r", data)
+        return None, None
+
+    # 1. Validate length
+    declared_payload_length = data[0] - 0x40
+    actual_payload_length = len(data) - 3
+    if declared_payload_length != actual_payload_length:
+        log.warning("Block length mismatch! Declared: %d, Actual: %d. Raw: %r",
+                    declared_payload_length, actual_payload_length, data)
+        return None, None
+        
+    # 2. Validate checksum
+    expected_checksum = data[-1]
+    message_to_check = data[:-1]
+    
+    checksum = 0xFF
+    for byte in message_to_check:
+        checksum ^= byte
+        
+    if checksum != expected_checksum:
+        log.warning("Checksum mismatch! Calculated: 0x%02x, Expected: 0x%02x. Raw: %r",
+                    checksum, expected_checksum, data)
+        return None, None
+
+    # Block is valid. Strip and return.
+    command_byte = data[1]
+    payload = data[2:-1]
+    
+    return command_byte, payload
+
+
+async def build_and_send(writer, command: str, payload: bytes = b''):
+    """
+    Builds a valid Galaxy message block and sends it.
+    Calculates length and checksum automatically.
+    """
+    command_byte = COMMAND_BYTES[command]
+    
+    payload_length = len(payload)
+    length_byte = payload_length + 0x40
+    
+    message_part = bytes([length_byte, command_byte]) + payload
+    
+    checksum = 0xFF
+    for byte in message_part:
+        checksum ^= byte
+        
+    final_message = message_part + bytes([checksum])
+    
+    writer.write(final_message)
+    await writer.drain()
+    log.debug("Sent Command: %s, Raw: %r", command, final_message)
 
 
 async def handle_connection(reader, writer):
     """
-    Handle incoming SIA connection from alarm panel.
-    
-    Collects all message blocks, sends ACKs, chunks them into separate events,
-    parses each event, and sends notifications.
+    Handle incoming connection, validate blocks, and process events.
     """
     addr = writer.get_extra_info('peername')
     log.info("Connection from %r", addr)
     
-    all_messages = []
+    valid_blocks = []
     
     try:
-        # --- 1. Collect all messages from the connection ---
         while True:
             data = await reader.read(1024)
-            
             if not data:
                 log.info("Connection closed by peer")
                 break
             
-            all_messages.append(data)
+            command_byte, payload = validate_and_strip(data)
             
-            # Log the raw block as it's received
-            log.info("Received raw block: %r", data)
-            log.debug("Raw block HEX: %s", data.hex())
+            if command_byte is None:
+                await build_and_send(writer, 'REJECT')
+                log.error("Received invalid block, sent REJECT. Raw: %r", data)
+                continue
+
+            command_name = COMMANDS.get(command_byte, f'UNKNOWN(0x{command_byte:02x})')
+            log.info("Received Command: %s, Payload: %r", command_name, payload)
+
+            if command_name != 'END_OF_DATA':
+                valid_blocks.append({'command': command_name, 'payload': payload})
+
+            await build_and_send(writer, 'ACKNOWLEDGE')
             
-            # Always send ACK
-            writer.write(b'@8\x87')
-            await writer.drain()
-            log.debug("Sent ACK")
-            
-            # Break on close message
-            if data.startswith(b'@0'):
-                log.info("Close message received, ending collection")
+            if command_name == 'END_OF_DATA':
+                log.info("End of data received, processing sequence.")
                 break
         
-        if not all_messages:
+        # --- Chunk and process the collected valid blocks ---
+        if not valid_blocks:
             return
             
-        # --- 2. Chunk all messages into separate events ---
         event_chunks = []
         current_chunk = []
         
-        for msg in all_messages:
-            # An event always starts with an account block, which has '#' as the second character
-            if len(msg) >= 2 and msg[1:2] == b'#' and current_chunk:
-                # This is the start of a new event, so save the previous one
+        for block in valid_blocks:
+            if block['command'] == 'ACCOUNT_ID' and current_chunk:
                 event_chunks.append(current_chunk)
-                current_chunk = [msg]
-            elif not msg.startswith(b'@0'):
-                # Add message to the current event chunk
-                current_chunk.append(msg)
+                current_chunk = [block]
+            else:
+                current_chunk.append(block)
         
-        # Add the last chunk if it's not empty
         if current_chunk:
             event_chunks.append(current_chunk)
         
         log.info("Found %d distinct event(s) in this connection", len(event_chunks))
 
-        # --- 3. Process each event chunk individually ---
         for i, chunk in enumerate(event_chunks, 1):
             log.info("--- Processing Event %d of %d ---", i, len(event_chunks))
             
-            # Make sure the chunk is valid
-            if len(chunk) < 2:
-                log.warning("Skipping incomplete event chunk: %r", chunk)
-                continue
-                
-            # Parse the event
             event = parse_galaxy_event(
                 chunk,
                 config.ACCOUNT_SITES,
                 config.DEFAULT_SITE,
-                config.UNKNOWN_CHAR_MAP
+                config.UNKNOWN_CHAR_MAP,
+                EVENT_CODE_DESCRIPTIONS
             )
             
-            # Log parsed event details
             log.info("Site: %s (Account: %s)", event.site_name, event.account)
-            log.info("Time: %s", event.time)
-            log.info("Message Type: %s", event.message_type)
-            log.info("Event Code: %s", event.event_code)
-            if event.user_id:
-                log.info("User ID: %s", event.user_id)
-            if event.partition:
-                log.info("Partition: %s", event.partition)
-            if event.zone:
-                log.info("Zone: %s", event.zone)
-            if event.action_text:
-                log.info("Action: %s", event.action_text)
+            description = event.action_text or event.event_description
+            log.info("Event: %s (%s)", event.event_code, description)
             
-            # Send notification
-            notification_sent = send_notification(
+            send_notification(
                 event,
                 config.NTFY_URL,
                 config.EVENT_PRIORITIES,
@@ -171,16 +191,10 @@ async def handle_connection(reader, writer):
                 config.NOTIFICATION_TITLE
             )
             
-            if notification_sent:
-                log.info("Event processed and notification sent successfully")
-            else:
-                log.info("Event processed (notification skipped or failed)")
-            
             log.info("--- Event %d complete ---", i)
-        
+
     except Exception as e:
-        log.error("Error handling connection: %s", e, exc_info=True)
-    
+        log.error("Error in connection handler: %s", e, exc_info=True)
     finally:
         log.info("Closing connection from %r", addr)
         try:
@@ -191,52 +205,28 @@ async def handle_connection(reader, writer):
 
 
 async def start_server(address, port):
-    """
-    Start the SIA server.
-    
-    Args:
-        address: IP address to listen on
-        port: Port number to listen on
-    """
     server = await asyncio.start_server(handle_connection, address, port)
-    
     addrs = ', '.join(str(sock.getsockname()) for sock in server.sockets)
     log.info('='*60)
     log.info('Galaxy SIA Server Started')
     log.info('Listening on: %s', addrs)
-    log.info('Notifications: %s', 'ENABLED' if config.NTFY_ENABLED else 'DISABLED')
-    if config.NTFY_ENABLED:
-        log.info('ntfy.sh URL: %s', config.NTFY_URL)
     log.info('='*60)
-    
     async with server:
         await server.serve_forever()
 
 
 def handle_shutdown(signum, frame):
-    """Handle shutdown signals gracefully"""
     log.info("Received shutdown signal (%d), stopping server...", signum)
-    # The asyncio.run in main() will handle cleanup
     sys.exit(0)
 
 
 def main():
-    """Main entry point"""
-    
-    # Register signal handlers for graceful shutdown
     signal.signal(signal.SIGINT, handle_shutdown)
     signal.signal(signal.SIGTERM, handle_shutdown)
     
-    log.info("Starting Galaxy SIA Server...")
-    log.info("Configuration:")
-    log.info("  Listen Address: %s", config.LISTEN_ADDR)
-    log.info("  Listen Port: %d", config.LISTEN_PORT)
-    log.info("  Log Level: %s", config.LOG_LEVEL)
-    log.info("  Notifications: %s", 'Enabled' if config.NTFY_ENABLED else 'Disabled')
-    log.info("  Configured Sites: %d", len(config.ACCOUNT_SITES))
+    log.info("Starting Galaxy SIA Server version %s", __version__)
     
     try:
-        # Start the server
         asyncio.run(start_server(config.LISTEN_ADDR, config.LISTEN_PORT))
     except (KeyboardInterrupt, SystemExit):
         log.info("Server stopped")

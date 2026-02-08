@@ -1,142 +1,120 @@
-# Galaxy SIA Protocol Specification
+## Galaxy SIA Protocol Specification
 
-This document describes the proprietary, TCP-based SIA protocol variant used by Honeywell Galaxy Flex alarm systems, as reverse-engineered from captured network traffic. It serves as the technical documentation for the parsing logic in this module.
+This project interacts with a proprietary, TCP-based SIA protocol variant used by Honeywell Galaxy Flex alarm systems. The protocol was reverse-engineered from captured network traffic.
 
-## High-Level Overview
+### High-Level Overview
 
-The protocol is a stateful, sequential exchange over a single TCP connection. Unlike standard SIA which often uses UDP, this variant uses TCP to ensure message delivery. An "event" is not a single message, but a sequence of message "blocks".
+The protocol is a stateful, sequential exchange over a single TCP connection. An "event" is not a single message, but a sequence of message "blocks". During an alarm state, the panel may send multiple complete event sequences over a single TCP connection.
 
-The typical flow for a single event sequence is:
-1.  Client (Alarm Panel) establishes a TCP connection to the server.
-2.  Client sends **Block 1 (Account)**.
-3.  Server sends an **ACK**.
-4.  Client sends **Block 2 (Data)**.
-5.  Server sends an **ACK**.
-6.  Client sends **Block 3 (ASCII)** (This is optional and may be omitted, e.g., in SIA Level 2).
-7.  Server sends an **ACK**.
+The flow for a single event sequence is:
+1.  Client (Alarm Panel) sends **Block 1 (Account)**.
+2.  Server sends an **ACK**.
+3.  Client sends **Block 2 (Data)**.
+4.  Server sends an **ACK**.
+5.  Client sends **Block 3 (ASCII)** (This is optional and may be omitted).
+6.  Server sends an **ACK**.
+7.  (This repeats for any subsequent events in the same connection).
 8.  Client sends a **Close Handshake** message.
 9.  Server sends a final **ACK**.
 10. The connection is closed.
 
-**Important:** During an alarm state, the panel may send multiple complete event sequences (each containing multiple blocks) over a single TCP connection before sending the final Close Handshake. In such case the sequence repeats after step 7 and back to step 2.
+### Message Block Framing
 
-## Message Block Formats
+Every message block, whether from the client or server, follows a unified structure:
 
-Each block is terminated by a single checksum byte.
+`<Length Byte><Command Byte><Payload><Checksum Byte>`
 
-### Block 1: Account Block
+-   **Length Byte:** A single byte representing the length of the `<Payload>` with an offset of +64 (`0x40`).
+    -   *Formula:* `Length Byte = len(Payload) + 0x40`
 
-This block identifies the alarm panel.
+-   **Command Byte:** A single byte that defines the purpose of the block.
 
--   **Format:** `<Prefix>#<AccountID><Checksum>`
--   **Example:** `F#027178\x99`
+-   **Payload:** The data content of the block. Its length can be from 0 to 191 bytes.
 
-| Part          | Example    | Description                                                 |
-| :------------ | :--------- | :---------------------------------------------------------- |
-| **Prefix**    | `F`        | An identifier. Appears to be consistently `F`.              |
-| **Delimiter** | `#`        | Separates the prefix from the account ID.                   |
-| **AccountID** | `027178`   | The 4 or 6-digit account number of the panel.               |
-| **Checksum**  | `\x99`     | A single checksum byte for the preceding data (`F#027178`). |
+-   **Checksum Byte:** A single byte used for integrity checking.
+    -   *Algorithm:* The checksum is a simple XOR calculation starting with `0xFF`.
+    -   *Formula:* `Checksum = 0xFF ^ (Length Byte + 0x40) ^ Command Byte ^ (all bytes in Payload)`
 
----
+### Known Command Bytes
 
-### Block 2: Data Block (N Block)
+The `Command Byte` (the second byte of every block) determines the message's meaning.
 
-This block contains the core event data in a semi-structured format.
+| Hex    | ASCII | Command Name      | Source | Description                                             |
+| :----- | :---- | :---------------- | :----- | :------------------------------------------------------ |
+| `0x23` | `#`   | `ACCOUNT_ID`      | Client | Identifies the alarm panel account.                       |
+| `0x4E` | `N`   | `NEW_EVENT`       | Client | Contains the core event data (time, codes, zones, etc.).|
+| `0x41` | `A`   | `ASCII`           | Client | Contains a human-readable description of the event.     |
+| `0x30` | `0`   | `END_OF_DATA`     | Client | Signals the end of all transmissions for the connection.|
+| `0x38` | `8`   | `ACKNOWLEDGE`     | Server | Sent by the server to confirm a block was received OK.  |
+| `0x39` | `9`   | `REJECT`          | Server | Sent by the server to indicate a block was invalid.     |
 
--   **Format:** `<Prefix><section1>/<section2>/.../<EventCode_and_Zone>`
--   **Logic:** The block consists of a 2-character prefix followed by sections delimited by `/`. All sections *except the last one* have a 2-character identifier (e.g., `ti`, `id`, `pi`). The final section is always the event code, which may have a zone number appended directly to it.
+### Payload Structures
 
-**Examples:**
--   `VNti11:45/id001/pi010/CL\xf5` (User Event)
--   `NNti11:46/BA1011\xf7` (Zone Alarm)
--   `QNti12:16/va1440/RP\xd7` (Auto Test)
--   `JNti11:46/BV\xe5` (Simple Event)
+#### ACCOUNT_ID (`#`) Payload
+-   The payload is simply the account number.
+-   *Example Payload:* `b'012345'`
 
-**Known Prefixes:**
+#### NEW_EVENT (`N`) Payload
 
-| Prefix | Type (Guessed)       | Observed In                                |
-| :----- | :------------------- | :----------------------------------------- |
-| `VN`   | User/Verified Event  | Arm, Disarm, Reset                         |
-| `PN`   | Panel Event          | Manual Engineering Test                    |
-| `QN`   | Queued/Periodic Event | Automatic Test                             |
-| `NN`   | New/Notification Alarm | Burglary Alarms                            |
-| `JN`   | Just-in/Join Event   | Burglary Verified, "Just Armed" confirmation |
+This is the most information-rich block, containing the core details of the alarm event. The payload is a string composed of one or more sections delimited by a forward slash (`/`).
+
+**General Structure:**
+`[Section1]/[Section2]/.../[FinalSection]`
+
+-   **Identifier Sections:** Every section *before the last one* is prefixed with a 2-character identifier that defines its content.
+
+-   **Final Section:** The *very last section* of the string is always the **Event Code**, and it does not have an identifier. It may also have a Zone Number appended directly to it.
 
 **Known Section Identifiers:**
 
-| ID   | Meaning          | Example     |
-| :--- | :--------------- | :---------- |
-| `ti` | Time             | `ti11:45`   |
-| `id` | User ID          | `id001`     |
-| `pi` | Partition/Peripheral | `pi010`     |
-| `va` | Value            | `va1440`    |
+| Identifier | Description          | Example Payload Section |
+| :--------- | :------------------- | :---------------------- |
+| `ti`       | **Time**             | `ti11:45`               |
+| `id`       | **User ID**          | `id001`                 |
+| `pi`       | **Partition ID**     | `pi010`                 |
+| `va`       | **Value** (for tests)| `va1440`                |
 
 **Final Section (Event Code & Zone):**
 
-The final section has two forms:
-1.  **Event Code Only:** `CL`, `OP`, `BC`, `BV`, `RP`
-2.  **Event Code + Zone:** `BA1011` (Event `BA`, Zone `1011`)
+The structure of the last section is always a **two-character uppercase Event Code**, which may be followed immediately by a 3-4 digit Zone Number.
 
----
+1.  **Event Code only:**
+    -   *Format:* `[EventCode(2)]`
+    -   *Example:* `CL` (Closing/Arm)
 
-### Block 3: ASCII Block (A Block)
+2.  **Event Code + Zone Number:**
+    -   *Format:* `[EventCode(2)][ZoneNumber]`
+    -   *Example:* `BA1011` (Burglary Alarm in Zone 1011)
 
-This block provides a human-readable description of the event. It appears to have at least two different variants but in common the block consists of a 1 character prefix, the letter A followed by text.
+**Full Payload Examples:**
 
-**Format:** `<prefix>A<Ascii text>`
+-   **User Arm Event Payload:** `ti11:45/id001/pi010/CL`
+    -   `ti11:45`: Time is 11:45
+    -   `id001`: User ID is 001
+    -   `pi010`: Partition is 010
+    -   `CL`: Event Code is "Closing"
 
-**Variant 1: User Events (Variable Length)**
--   **Prefix:** `Q`
--   **Structure:** `QA <Action Text> <Username>`
--   **Example:** `QA PÅSLAG    Kalle*`
+-   **Burglary Alarm Event Payload:** `ti11:46/BA1011`
+    -   `ti11:46`: Time is 11:46
+    -   `BA1011`: Event Code is "Burglary Alarm" in Zone `1011`.
 
-**Variant 2: Zone/System Events (Fixed Length)**
--   **Prefix:** `e`, `[`, `J`
--   **Structure:** `<Prefix>A<LogEvent(9)><State(1)><Site(8)><Descriptor(16)>`
--   **Example (`[`):** `[A+INBROTT        IR Sovrum Ö\x34`
-    -   **Prefix:** `[`
-    -   **A:** `A`
-    -   **LogEvent:** `+INBROTT ` (9 chars)
-    -   **State:** ` ` (space)
-    -   **Site:** `        ` (8 spaces - unused)
-    -   **Descriptor:** `IR Sovrum Ö` (16 chars, padded)
+#### ASCII (`A`) Payload
 
-The meaning of the prefix is not known.
+This block's payload contains the full, human-readable description of the event. The examples below show the **clean payload** that is passed to the parser after the Length Byte, Command Byte (`A`), and Checksum Byte have been stripped by the server.
 
----
+The content of this payload is what is used to generate the final notification message after being decoded.
 
+**Example 1: Zone Alarm Event**
+-   **Original Raw Block:** `b'[A+INBROTT      IR Sovrum \x99\x34'`
+-   **Clean Payload Sent to Parser:** `b'+INBROTT      IR Sovrum \x99'`
+-   **Note:** The trailing `\x99` in this payload is the proprietary byte for the character `Ö` and is part of the zone name ("IR Sovrum Ö"). 
+-   **Final Decoded Text:** `"+INBROTT      IR Sovrum Ö"`
 
-### Close Handshake Block
-
-This block is sent by the client to signal the end of all event transmissions for the current connection.
-
--   **Format:** `\x40\x30<Checksum>`
--   **Example:** `\x40\x30\x8f`
-
----
-
-## Server Acknowledgments (ACK/NACK)
-
-The server must respond to **every block** received from the panel, **including the final Close Handshake**, with a 3-byte acknowledgment. This confirms receipt of each message at the application level before the TCP connection is eventually closed.
-
--   **Format:** `\x40<Status><Checksum>`
-
-| Response | Bytes         | Meaning                               |
-| :------- | :------------ | :------------------------------------ |
-| **ACK**  | `\x40\x38\x87`| Message received successfully.        |
-| **NACK** | `\x40\x39\x86`| Message received with an error (e.g., bad checksum). |
-
----
-
-## Implementation Details
-
-### Checksums
-
-The panel uses at least two different checksum algorithms:
-1.  **For short 2-byte messages (like ACKs):** The checksum is a single byte calculated as `(0xFF - sum_of_previous_bytes) & 0xFF`.
-2.  **For longer data blocks:** The algorithm is more complex and has not been fully reverse-engineered. It is not necessary to validate these checksums to operate the server, as TCP provides transport-level integrity.
+**Example 2: System Auto Test**
+-   **Original Raw Block:** `b'eA AUTO TEST...Modul\x9a'`
+-   **Clean Payload Sent to Parser:** `b' AUTO TEST...Modul'`
+-   **Final Decoded Text:** `"AUTO TEST...Modul"`
 
 ### Character Encoding
 
-The panel does **not** use standard UTF-8 or ISO-8859-1. It uses a proprietary mapping where common Swedish characters (Å, Ä, Ö, etc.) are mapped into the C1 Controls and Latin-1 Supplement range (`0x80` - `0x9F`). The parser must manually replace these bytes with their correct UTF-8 equivalents. Refer to `UNKNOWN_CHAR_MAP` in `config.py` for the known mappings.
+The panel uses a proprietary character set for the ASCII block, where some non-standard characters in the `0x80`-`0x9F` range are used to represent Swedish letters (Å, Ä, Ö, etc.). This server's parser includes a mapping to translate these bytes into correct UTF-8 characters.
