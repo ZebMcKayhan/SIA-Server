@@ -14,7 +14,7 @@ The flow for a single event sequence is:
 5.  Client sends **Block 3 (ASCII)** (This is optional and may be omitted).
 6.  Server sends an **ACK**.
 7.  (This repeats for any subsequent events in the same connection).
-8.  Client sends a **Close Handshake** message.
+8.  Client sends a **END_OF_DATA** message.
 9.  Server sends a final **ACK**.
 10. The connection is closed.
 
