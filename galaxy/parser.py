@@ -105,7 +105,7 @@ def parse_data_payload(payload: bytes, event: GalaxyEvent):
     if ec_match:
         event.event_code = ec_match.group(1)
         log.debug("Parsed event_code: '%s'", event.event_code)
-        event.event_description = event_code_descriptions.get(event.event_code, event.event_code)
+        event.event_description = event_code_descriptions.get(event.event_code, "Unknown")
         log.debug("Mapped event description: '%s'", event.event_description)
         
         if ec_match.group(2):
