@@ -174,14 +174,13 @@ async def handle_connection(reader, writer):
                 chunk,
                 config.ACCOUNT_SITES,
                 config.DEFAULT_SITE,
-                config.UNKNOWN_CHAR_MAP
+                config.UNKNOWN_CHAR_MAP,
                 EVENT_CODE_DESCRIPTIONS
             )
             
             log.info("Site: %s (Account: %s)", event.site_name, event.account)
-            log.info("Event: %s (%s)", event.event_code, event.event_description)
-            if event.action_text:
-                log.info("Action Text: %s", event.action_text)
+            description = event.action_text or event.event_description
+            log.info("Event: %s (%s)", event.event_code, description)
             
             send_notification(
                 event,
