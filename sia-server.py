@@ -29,7 +29,7 @@ except ImportError:
 import config
 from galaxy.parser import parse_galaxy_event
 from notification import send_notification
-from galaxy.constants import COMMANDS, COMMAND_BYTES
+from galaxy.constants import COMMANDS, COMMAND_BYTES, EVENT_CODE_DESCRIPTIONS
 
 def setup_logging():
     """Configure logging based on config.py settings"""
@@ -175,10 +175,13 @@ async def handle_connection(reader, writer):
                 config.ACCOUNT_SITES,
                 config.DEFAULT_SITE,
                 config.UNKNOWN_CHAR_MAP
+                EVENT_CODE_DESCRIPTIONS
             )
             
             log.info("Site: %s (Account: %s)", event.site_name, event.account)
-            log.info("Event Code: %s, Action: %s", event.event_code, event.action_text)
+            log.info("Event: %s (%s)", event.event_code, event.event_description)
+            if event.action_text:
+                log.info("Action Text: %s", event.action_text)
             
             send_notification(
                 event,
