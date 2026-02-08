@@ -32,6 +32,7 @@ class GalaxyEvent:
     group: Optional[str] = None
     value: Optional[str] = None
     event_code: Optional[str] = None
+    event_description: Optional[str] = None 
     zone: Optional[str] = None
     
     # Parsed from ASCII Payload
@@ -104,6 +105,9 @@ def parse_data_payload(payload: bytes, event: GalaxyEvent):
     if ec_match:
         event.event_code = ec_match.group(1)
         log.debug("Parsed event_code: '%s'", event.event_code)
+        event.event_description = event_code_descriptions.get(event.event_code, event.event_code)
+        log.debug("Mapped event description: '%s'", event.event_description)
+        
         if ec_match.group(2):
             event.zone = ec_match.group(2)
             log.debug("Parsed zone: '%s'", event.zone)
@@ -130,7 +134,8 @@ def parse_ascii_payload(payload: bytes, event: GalaxyEvent, char_map: Dict[bytes
 
 
 def parse_galaxy_event(blocks: List[Dict], account_sites: Dict, 
-                      default_site: str, char_map: Dict) -> GalaxyEvent:
+                      default_site: str, char_map: Dict,
+                      event_code_descriptions: Dict) -> GalaxyEvent:
     """
     Parses a chunk of valid blocks (from a single event sequence) into a GalaxyEvent object.
     
@@ -155,7 +160,7 @@ def parse_galaxy_event(blocks: List[Dict], account_sites: Dict,
                 event.site_name = account_sites.get(event.account, default_site)
         
         elif command == 'NEW_EVENT':
-            parse_data_payload(payload, event)
+           parse_data_payload(payload, event, event_code_descriptions)
             
         elif command == 'ASCII':
             parse_ascii_payload(payload, event, char_map)
