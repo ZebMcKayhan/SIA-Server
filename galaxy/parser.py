@@ -68,7 +68,7 @@ def parse_account_payload(payload: bytes, event: GalaxyEvent):
     log.debug("Parsed account: '%s'", event.account)
 
 
-def parse_data_payload(payload: bytes, event: GalaxyEvent):
+def parse_data_payload(payload: bytes, event: GalaxyEvent, event_code_descriptions: Dict):
     """Parses the clean payload of a NEW_EVENT block."""
     event.data_payload = payload
     data_str = payload.decode('utf-8', errors='ignore')
