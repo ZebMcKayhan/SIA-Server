@@ -184,7 +184,7 @@ async def handle_connection(reader, writer):
             
             send_notification(
                 event,
-                config.NTFY_URL,
+                config.NTFY_TOPICS,
                 config.EVENT_PRIORITIES,
                 config.DEFAULT_PRIORITY,
                 config.NTFY_ENABLED,
