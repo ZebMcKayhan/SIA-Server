@@ -25,17 +25,21 @@ def format_notification_text(event: GalaxyEvent) -> str:
     or constructs a message from the Data block fields.
     """
     time = event.time or "??"
-    site = event.site_name or "Unknown"
+    site = event.site_name or "Unknown"    
     
     # If we have the rich text from the ASCII block, use it (SIA Level 3+)
     if event.action_text:
-        notification = f"{time} {site} {event.action_text}"
+        # site name is already in the header, so there is no need to have it in the body as well, it will make cleaner output without it.
+        #notification = f"{time} {site} {event.action_text}"
+        notification = f"{time} {event.action_text}"
         # Add zone info if it was parsed separately and isn't already in the text
         if event.zone and event.zone not in str(event.action_text):
             notification += f" (Zone {event.zone})"
     # Otherwise, build a basic message from the Data block fields (SIA Level 2)
     else:
-        notification = f"{time} {site}"
+        # site name is already in the header, so there is no need to have it in the body as well, it will make cleaner output without it.
+        #notification = f"{time} {site}"
+        notification = f"{time}"
         if event.event_code:
             notification += f" Event: {event.event_code} ({event.event_description})"
         if event.user_id:
