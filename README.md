@@ -11,6 +11,7 @@ This was developed on a Honywell Galaxy Flex 20 alarm system. It is quite possib
 -   **Self-Hosted:** Runs on any local Linux machine, like a Raspberry Pi, it should also run on Windows but it has not been tested.
 -   **Real-time Notifications:** Instantly forwards alarm events to your devices.
 -   **Prioritized Alerts:** Uses ntfy.sh priorities to distinguish between urgent alarms (burglary, fire) and routine events (arm/disarm, tests).
+-   **Multiple sites:** Ability to map different account numbers to different notification topics.
 -   **Robust Protocol Handling:** Correctly parses the multi-message protocol used by Galaxy Flex panels, including handling multiple events in a single connection.
 -   **Character Encoding Fixes:** Decodes the proprietary character set used by Galaxy panels to correctly display special characters (e.g., Å, Ä, Ö).
 -   **Highly Configurable:** All settings, including account names, notification priorities, and logging, are in a single `config.py` file.
