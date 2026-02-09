@@ -36,10 +36,10 @@ def format_notification_text(event: GalaxyEvent) -> str:
     # Otherwise, build a basic message from the Data block fields (SIA Level 2)
     else:
         notification = f"{time} {site}"
-        if event.user_id:
-            notification += f" User: {event.user_id}"
         if event.event_code:
             notification += f" Event: {event.event_code} ({event.event_description})"
+        if event.user_id:
+            notification += f" User: {event.user_id}"
         if event.zone:
             notification += f" Zone: {event.zone}"
         if event.partition:
