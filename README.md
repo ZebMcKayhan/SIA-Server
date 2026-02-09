@@ -75,7 +75,7 @@ nano config.py
 
 ### Configuration Explained
 -  `LISTEN_ADDR` & `LISTEN_PORT`: The IP and port the server listens on. `0.0.0.0` allows it to accept connections from any device on your network.
--  `ACCOUNT_SITES`: IMPORTANT! Map your alarm's account number to a friendly site name.
+-  `ACCOUNT_SITES`: Map your alarm's account number to a friendly site name. If not mapped the script will send the account number as it is.
 ```python
 ACCOUNT_SITES = {
     '090909': 'Main House',
@@ -83,7 +83,7 @@ ACCOUNT_SITES = {
 }
 ```
 -  `NOTIFICATION_TITLE`: The title of your push notifications (e.g., "Galaxy FLEX", "Home Alarm").
--  `NTFY_ENABLED` & `NTFY_URL`: Set `NTFY_ENABLED` to `True` and change `NTFY_URL` to your ntfy.sh topic URL.
+-  `NTFY_ENABLED` & `NTFY_URL`: Set `NTFY_ENABLED` to `True` and change `NTFY_TOPICS` to your default ntfy.sh topic URL. You may also map different account numbers to different ntfy topics, see examples in the file.
 -  `EVENT_PRIORITIES`: Customize the priority for different events. Any event code not listed here will default to `DEFAULT_PRIORITY`. This is pre-configured with safe defaults.
 -  `UNKNOWN_CHAR_MAP`: If your alarm uses special characters that don't display correctly, you can add their byte-to-character mappings here. The common Swedish characters are already included.
 -  `LOGGING`: For normal use, you can leave these as they are. For debugging, you can change `LOG_LEVEL` to `DEBUG` and set `LOG_TO_FILE` to `True` to log to a file.
