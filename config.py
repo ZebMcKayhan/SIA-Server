@@ -31,17 +31,32 @@ ACCOUNT_SITES = {
     # '758432': 'Office',
 }
 
-# Default site name if account not found in mapping
-DEFAULT_SITE = 'Unknown Site'
-
-
 # ============================================
 # NOTIFICATION CONFIGURATION
 # ============================================
 
 # ntfy.sh configuration
 NTFY_ENABLED = True #True / False
-NTFY_URL = 'https://ntfy.sh/<your-channel-name>'
+
+# --- Notification Routing ---
+# Define how notifications are sent. You can use a single topic for all
+# accounts or specify a different topic for each account number.
+
+# Option 1: Simple Mode (all alerts go to one topic)
+# Just define a 'default' topic.
+NTFY_TOPICS = {
+    'default': 'https://ntfy.sh/my-main-alarm-topic',
+}
+
+# Option 2: Multi-User / Multi-Site Mode (route by account number)
+# Define a topic for each account number. The 'default' is used for any
+# account not explicitly listed. This is perfect for hosting for friends.
+# NTFY_TOPICS = {
+#     '027178': 'https://ntfy.sh/my-home-alarms',      # My house
+#     '123456': 'https://ntfy.sh/friends-cabin-alarms', # Friend 1's cabin
+#     '789012': 'https://ntfy.sh/another-friends-house', # Friend 2's house
+#     'default': 'https://ntfy.sh/unknown-alarm-topic', # Optional: for any other accounts
+# }
 
 NOTIFICATION_TITLE = 'Galaxy FLEX'
 
