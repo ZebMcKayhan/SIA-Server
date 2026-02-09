@@ -47,8 +47,7 @@ def format_notification_text(event: GalaxyEvent) -> str:
     
     return notification
 
-
-def send_notification(event: GalaxyEvent, ntfy_url: str, priority_map: Dict, 
+def send_notification(event: GalaxyEvent, ntfy_topics: Dict, priority_map: Dict, 
                      default_priority: int, enabled: bool, notification_title: str) -> bool:
     """Sends a formatted notification for a Galaxy event to ntfy.sh."""
     
