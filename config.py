@@ -24,6 +24,7 @@ LISTEN_PORT = 10000
 
 # Map account numbers to site names
 # Add your alarm system account numbers here
+# If account number does not exist in the list, it will just use the account number for log and notification.
 ACCOUNT_SITES = {
     '023456': 'Main House',
     # Add more accounts if monitoring multiple sites:
@@ -42,7 +43,7 @@ NTFY_ENABLED = True #True / False
 # Define how notifications are sent. You can use a single topic for all
 # accounts or specify a different topic for each account number.
 
-# Option 1: Simple Mode (all alerts go to one topic)
+# Option 1: Simple Mode (all accounts go to one topic)
 # Just define a 'default' topic.
 NTFY_TOPICS = {
     'default': 'https://ntfy.sh/my-main-alarm-topic',
@@ -50,7 +51,7 @@ NTFY_TOPICS = {
 
 # Option 2: Multi-User / Multi-Site Mode (route by account number)
 # Define a topic for each account number. The 'default' is used for any
-# account not explicitly listed. This is perfect for hosting for friends.
+# account not explicitly listed. This is perfect for hosting for friends (preferably via VPN as this is unencrypted).
 # NTFY_TOPICS = {
 #     '027178': 'https://ntfy.sh/my-home-alarms',      # My house
 #     '123456': 'https://ntfy.sh/friends-cabin-alarms', # Friend 1's cabin
@@ -98,7 +99,7 @@ EVENT_PRIORITIES = {
     # - PA: Panic alarm
     # - AT: AC trouble (mains failure)
     # - XT: Battery trouble
-    # etc.
+    # etc. (see full list in galaxy/constants.py)
 }
 
 # Default priority for unknown/unlisted event codes
