@@ -173,7 +173,6 @@ async def handle_connection(reader, writer):
             event = parse_galaxy_event(
                 chunk,
                 config.ACCOUNT_SITES,
-                config.DEFAULT_SITE,
                 config.UNKNOWN_CHAR_MAP,
                 EVENT_CODE_DESCRIPTIONS
             )
