@@ -55,9 +55,12 @@ def send_notification(event: GalaxyEvent, ntfy_url: str, priority_map: Dict,
     if not enabled:
         log.debug("Notifications are disabled in config, skipping.")
         return False
-    
+     
+    # Determine the correct ntfy.sh URL to use for this event's account
+    ntfy_url = ntfy_topics.get(event.account, ntfy_topics.get('default'))
+                         
     if not ntfy_url or 'your-topic-here' in ntfy_url:
-        log.warning("ntfy.sh URL is not configured, skipping notification.")
+        log.warning("No valid ntfy.sh URL found for account '%s' or default. Skipping notification.", event.account)
         return False
     
     if not event.event_code:
