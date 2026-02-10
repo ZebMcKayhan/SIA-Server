@@ -75,7 +75,7 @@ NTFY_TOPICS = {
     #     'url': 'https://ntfy.sh/unknown-alarm-logs',
     #     'auth': None
     # }
-
+}
 # Event code to notification priority mapping
 # Priority levels (ntfy.sh):
 #   1 = Min (no notification, no sound)
