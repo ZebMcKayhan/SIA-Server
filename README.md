@@ -21,7 +21,7 @@ This was developed on a Honeywell Galaxy Flex 20 alarm system. It is quite possi
 
 ## Prerequisites
 
--   A Honeywell Galaxy Flex alarm system with an Ethernet module (e.g., A083-00-10 or E080-4).
+-   A Honeywell Galaxy Flex alarm system with an Ethernet module (A083-00-10 or E080-4).
 -   A Linux (or Windows) machine on the same network as the alarm system (a Raspberry Pi running OMV or Raspberry Pi OS is perfect).
 -   Python 3.
 -   The `python3-requests` package and the optional `python3-uvloop` package (for Linux).
