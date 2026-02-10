@@ -102,6 +102,8 @@ If you plan on hosting this server on a cloud machine for yourself or for friend
 -   **Topic Privacy:** By default, ntfy.sh topics are public. Anyone who knows your topic name can subscribe to your notifications. To secure this:
     -   **Use a long, unguessable topic name.** Treat your ntfy.sh topic name like a password. Instead of `my-home-alarm`, use a randomly generated string like `alarm-skUHvisapP2J382MDI2`.
     -   **Consider your Site Name.** For added privacy, you can choose a generic `site_name` in your `config.py` (e.g., "Site A") that cannot be easily linked back to your physical address.
+    -   **Alternatively, host ntfy.sh yourself** By hosting the notification server yourself you could secure your topics.
+    -   **Alternatively, purchase ntfy.sh pro** By paying a subscription you can use login or token to create and access private topics. `config.py` and `notification.py` is prepared for this already.
 
 **Disclaimer:** By following these guidelines, you can significantly improve the security and privacy of your notification system. However, you are ultimately responsible for securing your own setup.
 
