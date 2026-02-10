@@ -25,21 +25,25 @@ def format_notification_text(event: GalaxyEvent) -> str:
     or constructs a message from the Data block fields.
     """
     time = event.time or "??"
-    site = event.site_name or "Unknown"
+    site = event.site_name or "Unknown"    
     
     # If we have the rich text from the ASCII block, use it (SIA Level 3+)
     if event.action_text:
-        notification = f"{time} {site} {event.action_text}"
+        # site name is already in the header, so there is no need to have it in the body as well, it will make cleaner output without it.
+        #notification = f"{time} {site} {event.action_text}"
+        notification = f"{time} {event.action_text}"
         # Add zone info if it was parsed separately and isn't already in the text
         if event.zone and event.zone not in str(event.action_text):
             notification += f" (Zone {event.zone})"
     # Otherwise, build a basic message from the Data block fields (SIA Level 2)
     else:
-        notification = f"{time} {site}"
-        if event.user_id:
-            notification += f" User: {event.user_id}"
+        # site name is already in the header, so there is no need to have it in the body as well, it will make cleaner output without it.
+        #notification = f"{time} {site}"
+        notification = f"{time}"
         if event.event_code:
             notification += f" Event: {event.event_code} ({event.event_description})"
+        if event.user_id:
+            notification += f" User: {event.user_id}"
         if event.zone:
             notification += f" Zone: {event.zone}"
         if event.partition:
@@ -47,17 +51,19 @@ def format_notification_text(event: GalaxyEvent) -> str:
     
     return notification
 
-
-def send_notification(event: GalaxyEvent, ntfy_url: str, priority_map: Dict, 
+def send_notification(event: GalaxyEvent, ntfy_topics: Dict, priority_map: Dict, 
                      default_priority: int, enabled: bool, notification_title: str) -> bool:
     """Sends a formatted notification for a Galaxy event to ntfy.sh."""
     
     if not enabled:
         log.debug("Notifications are disabled in config, skipping.")
         return False
-    
+     
+    # Determine the correct ntfy.sh URL to use for this event's account
+    ntfy_url = ntfy_topics.get(event.account, ntfy_topics.get('default'))
+                         
     if not ntfy_url or 'your-topic-here' in ntfy_url:
-        log.warning("ntfy.sh URL is not configured, skipping notification.")
+        log.warning("No valid ntfy.sh URL found for account '%s' or default. Skipping notification.", event.account)
         return False
     
     if not event.event_code:

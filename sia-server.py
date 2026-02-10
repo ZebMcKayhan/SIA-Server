@@ -9,7 +9,7 @@ Author: Built with assistance from Claude (Anthropic)
 License: MIT
 """
 # --- Application Version ---
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 import asyncio
 import logging
@@ -173,7 +173,6 @@ async def handle_connection(reader, writer):
             event = parse_galaxy_event(
                 chunk,
                 config.ACCOUNT_SITES,
-                config.DEFAULT_SITE,
                 config.UNKNOWN_CHAR_MAP,
                 EVENT_CODE_DESCRIPTIONS
             )
@@ -184,7 +183,7 @@ async def handle_connection(reader, writer):
             
             send_notification(
                 event,
-                config.NTFY_URL,
+                config.NTFY_TOPICS,
                 config.EVENT_PRIORITIES,
                 config.DEFAULT_PRIORITY,
                 config.NTFY_ENABLED,

@@ -134,8 +134,7 @@ def parse_ascii_payload(payload: bytes, event: GalaxyEvent, char_map: Dict[bytes
 
 
 def parse_galaxy_event(blocks: List[Dict], account_sites: Dict, 
-                      default_site: str, char_map: Dict,
-                      event_code_descriptions: Dict) -> GalaxyEvent:
+                      char_map: Dict, event_code_descriptions: Dict) -> GalaxyEvent:
     """
     Parses a chunk of valid blocks (from a single event sequence) into a GalaxyEvent object.
     
@@ -157,7 +156,8 @@ def parse_galaxy_event(blocks: List[Dict], account_sites: Dict,
         if command == 'ACCOUNT_ID':
             parse_account_payload(payload, event)
             if event.account:
-                event.site_name = account_sites.get(event.account, default_site)
+                # Use the mapped site name if it exists, otherwise fall back to the account number itself.
+                event.site_name = account_sites.get(event.account, event.account)
         
         elif command == 'NEW_EVENT':
            parse_data_payload(payload, event, event_code_descriptions)
