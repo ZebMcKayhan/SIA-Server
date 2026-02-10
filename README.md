@@ -208,4 +208,3 @@ You can now manage it from the Windows Services app (`services.sc`) or via the `
 ## License
 This project is licensed under the MIT License.
 
-```
