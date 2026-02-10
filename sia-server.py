@@ -9,7 +9,7 @@ Author: Built with assistance from Claude (Anthropic)
 License: MIT
 """
 # --- Application Version ---
-__version__ = "1.2.0"
+__version__ = "1.3.0-beta"
 
 import asyncio
 import logging
