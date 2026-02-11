@@ -42,7 +42,18 @@ The project is structured to separate the server logic, protocol parsing, and co
 ## Installation & Setup (Linux)
 
 ### 1. Clone the Repository
-Clone this project to a directory on your Linux machine (e.g., `/home/pi/Scripts/sia-server`).
+You have two options for downloading the code.
+
+**Option A: Download the Latest Stable Release (Recommended)**
+
+1.  Go to the [Releases page](https://github.com/ZebMcKayhan/SIA-Server/releases) on GitHub.
+2.  Under the latest release, download the `Source code (zip)` file.
+3.  Unzip the file on your server.
+
+**Option B: Clone via Git (for developers)**
+
+This will get you the very latest development version from the `main` branch.
+
 ```bash
 git clone https://github.com/ZebMcKayhan/SIA-Server.git sia-server
 cd sia-server
