@@ -62,7 +62,7 @@ EVENT_CODE_DESCRIPTIONS = {
     'BA': "Burglary Alarm",
     'BC': "Burglary Cancelled",
     'BF': "Intruder High",
-    'BJ': "Burglary Trouble (Resistance)",
+    'BJ': "Burglary Trouble Restored",
     'BL': "Intruder Low",
     'BR': "Burglary Alarm Restored",
     'BT': "Burglary Trouble",
@@ -94,7 +94,7 @@ EVENT_CODE_DESCRIPTIONS = {
     # F - Fire
     'FA': "Fire Alarm",
     'FB': "Fire Bypass",
-    'FJ': "Fire Trouble (Resistance)",
+    'FJ': "Fire Trouble Restored",
     'FR': "Fire Alarm Restored",
     'FT': "Fire Trouble",
     'FU': "Fire Unbypass",
@@ -111,7 +111,7 @@ EVENT_CODE_DESCRIPTIONS = {
     # H - Holdup
     'HA': "Holdup / Duress Alarm",
     'HB': "Holdup Bypass",
-    'HJ': "Holdup Trouble (Resistance)",
+    'HJ': "Holdup Trouble Restored",
     'HR': "Holdup Alarm Restored",
     'HT': "Holdup Trouble",
     'HU': "Holdup Unbypass",
@@ -129,22 +129,22 @@ EVENT_CODE_DESCRIPTIONS = {
     # K - Heat (Custom SIA)
     'KA': "Heat Alarm",
     'KB': "Heat Bypass",
-    'KJ': "Heat Trouble (Resistance)",
-    'KR': "Heat Alarm Restore",
+    'KJ': "Heat Trouble Restored",
+    'KR': "Heat Alarm Restored",
     'KT': "Heat Trouble",
     'KU': "Heat Unbypass",
 
     # L - Phone / Program
     'LB': "Program Begin",
-    'LR': "Line Restore",
-    'LT': "Line Trouble",
+    'LR': "Phone Line Restore",
+    'LT': "Phone Line Trouble",
     'LX': "Local Program End",
 
     # M - Medical (Custom SIA)
     'MA': "Medical Alarm",
     'MB': "Medical Bypass",
     'MJ': "Medical Trouble Restored",
-    'MR': "Medical Alarm Restore",
+    'MR': "Medical Alarm Restored",
     'MT': "Medical Trouble",
     'MU': "Medical Unbypass",
 
@@ -158,7 +158,7 @@ EVENT_CODE_DESCRIPTIONS = {
     # P - Panic
     'PA': "Panic Alarm",
     'PB': "Panic Bypass",
-    'PJ': "Panic Trouble (Resistance)",
+    'PJ': "Panic Trouble Restored",
     'PR': "Panic Alarm Restored",
     'PT': "Panic Trouble",
     'PU': "Panic Unbypass",
@@ -167,7 +167,7 @@ EVENT_CODE_DESCRIPTIONS = {
     'QA': "Assist Alarm",
     'QB': "Assist Bypass",
     'QJ': "Assist Trouble Restored",
-    'QR': "Assist Alarm Restore",
+    'QR': "Assist Alarm Restored",
     'QT': "Assist Trouble",
     'QU': "Assist Unbypass",
 
@@ -185,8 +185,8 @@ EVENT_CODE_DESCRIPTIONS = {
     # S - Sprinkler (Custom SIA)
     'SA': "Sprinkler Alarm",
     'SB': "Sprinkler Bypass",
-    'SJ': "Sprinkler Trouble (Resistance)",
-    'SR': "Sprinkler Alarm Restore",
+    'SJ': "Sprinkler Trouble Restored",
+    'SR': "Sprinkler Alarm Restored",
     'ST': "Sprinkler Trouble",
     'SU': "Sprinkler Unbypass",
 
@@ -202,8 +202,8 @@ EVENT_CODE_DESCRIPTIONS = {
     # W - Water (Custom SIA)
     'WA': "Water Alarm",
     'WB': "Water Bypass",
-    'WJ': "Water Trouble (Resistance)",
-    'WR': "Water Alarm Restore",
+    'WJ': "Water Trouble Restored",
+    'WR': "Water Alarm Restored",
     'WT': "Water Trouble",
     'WU': "Water Unbypass",
 
@@ -225,8 +225,8 @@ EVENT_CODE_DESCRIPTIONS = {
     # Z - Freezer (Custom SIA)
     'ZA': "Freezer Alarm",
     'ZB': "Freezer Bypass",
-    'ZJ': "Freezer Trouble (Resistance)",
-    'ZR': "Freezer Alarm Restore",
+    'ZJ': "Freezer Trouble Restored",
+    'ZR': "Freezer Alarm Restored",
     'ZT': "Freezer Trouble",
     'ZU': "Freezer Unbypass",
 }
