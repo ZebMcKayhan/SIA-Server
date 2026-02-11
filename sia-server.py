@@ -132,8 +132,25 @@ async def handle_connection(reader, writer):
             command_byte, payload = validate_and_strip(data)
             
             if command_byte is None:
+                if len(data) > 0:
+                    declared_len = data[0] - 0x40
+                    if declared_len < 0:
+                        # The declared length is negative. This is the tell-tale sign.
+                        log.error("="*60)
+                        log.error("VALIDATION FAILED - LIKELY DUE TO ENCRYPTION BEING ENABLED")
+                        log.error("The panel at IP address '%s' is sending data that failed validation.", addr[0])
+                        log.error("This is a strong indicator that encryption is enabled on the panel.")
+                        log.error("Please disable encryption in the alarm panel's SIA settings.")
+                        log.error("Raw block received: %r", data)
+                        log.error("="*60)
+                    else:
+                        # If not the encryption signature, it's a standard corruption error.
+                        log.error("Validation failed (length or checksum error). Raw: %r", data)
+                else:
+                    log.error("Validation failed (received empty data block).")
+                # --- END NEW LOGIC ---
+                
                 await build_and_send(writer, 'REJECT')
-                log.error("Received invalid block, sent REJECT. Raw: %r", data)
                 continue
 
             command_name = COMMANDS.get(command_byte, f'UNKNOWN(0x{command_byte:02x})')
