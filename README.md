@@ -34,7 +34,9 @@ The project is structured to separate the server logic, protocol parsing, and co
 ├── sia-server.py           # The main server application
 ├── config.py               # All user settings are here!
 ├── notification.py         # Handles formatting and sending of notifications
+├── README.md               # Installation and usage instructions.
 └── galaxy/
+    ├── README.md           # Description of the SIA over TCP protocol.  
     ├── parser.py           # Handles parsing of the Galaxy SIA protocol
     └── constants.py        # Constants used in the SIA protocol
 ```
