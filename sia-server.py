@@ -139,19 +139,16 @@ async def handle_connection(reader, writer):
                 if is_encrypted_handshake:
                     # --- SPECIAL HANDLING FOR ENCRYPTED HANDSHAKE ---
                     log.error("="*60)
-                    log.error("VALIDATION FAILED - ENCRYPTION IS ENABLED ON THE PANEL")
-                    log.error("The panel at IP address '%s' is sending an encrypted handshake.", addr[0])
-                    log.error("This server does not support encryption. Please disable it in the panel settings.")
-                    log.error("Attempting to gracefully terminate the session by echoing the handshake.")
+                    log.error("ENCRYPTION DETECTED - UNSUPPORTED")
+                    log.error("The panel at IP address '%s' has encryption enabled.", addr[0])
+                    log.error("This server does not support the proprietary encryption.")
+                    log.error("Please disable encryption in the panel's SIA settings.")
+                    log.error("Closing connection to stop the panel from retrying.")
                     log.error("Raw block received: %r", data)
                     log.error("="*60)
                     
-                    # Echo the received data back to the panel.
-                    # This might be interpreted as an error, causing the panel to stop retrying.
-                    writer.write(data)
-                    await writer.drain()
-                    
-                    # End this connection immediately.
+                    # Do not send anything back. Just break the loop.
+                    # The 'finally' block will close the connection.
                     break 
 
                 else:
