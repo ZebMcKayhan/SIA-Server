@@ -132,26 +132,38 @@ async def handle_connection(reader, writer):
             command_byte, payload = validate_and_strip(data)
             
             if command_byte is None:
-                if len(data) > 0:
-                    declared_len = data[0] - 0x40
-                    if declared_len < 0:
-                        # The declared length is negative. This is the tell-tale sign.
-                        log.error("="*60)
-                        log.error("VALIDATION FAILED - LIKELY DUE TO ENCRYPTION BEING ENABLED")
-                        log.error("The panel at IP address '%s' is sending data that failed validation.", addr[0])
-                        log.error("This is a strong indicator that encryption is enabled on the panel.")
-                        log.error("Please disable encryption in the alarm panel's SIA settings.")
-                        log.error("Raw block received: %r", data)
-                        log.error("="*60)
-                    else:
-                        # If not the encryption signature, it's a standard corruption error.
-                        log.error("Validation failed (length or checksum error). Raw: %r", data)
+                is_encrypted_handshake = False
+                if len(data) >= 2 and data[0:2] == b'\x05\x01':
+                    is_encrypted_handshake = True
+
+                if is_encrypted_handshake:
+                    # --- SPECIAL HANDLING FOR ENCRYPTED HANDSHAKE ---
+                    log.error("="*60)
+                    log.error("VALIDATION FAILED - ENCRYPTION IS ENABLED ON THE PANEL")
+                    log.error("The panel at IP address '%s' is sending an encrypted handshake.", addr[0])
+                    log.error("This server does not support encryption. Please disable it in the panel settings.")
+                    log.error("Attempting to gracefully terminate the session by echoing the handshake.")
+                    log.error("Raw block received: %r", data)
+                    log.error("="*60)
+                    
+                    # Echo the received data back to the panel.
+                    # This might be interpreted as an error, causing the panel to stop retrying.
+                    writer.write(data)
+                    await writer.drain()
+                    
+                    # End this connection immediately.
+                    break 
+
                 else:
-                    log.error("Validation failed (received empty data block).")
-                # --- END NEW LOGIC ---
-                
-                await build_and_send(writer, 'REJECT')
-                continue
+                    # --- STANDARD HANDLING FOR CORRUPTED DATA ---
+                    if len(data) > 0:
+                        log.error("Validation failed (length or checksum error). Raw: %r", data)
+                    else:
+                        log.error("Validation failed (received empty data block).")
+
+                    # Send a standard unencrypted REJECT.
+                    await build_and_send(writer, 'REJECT')
+                    continue # Continue to listen for more data on this connection if any.
 
             command_name = COMMANDS.get(command_byte, f'UNKNOWN(0x{command_byte:02x})')
             log.info("Received Command: %s, Payload: %r", command_name, payload)
