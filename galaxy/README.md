@@ -7,9 +7,9 @@ This project interacts with a proprietary, TCP-based SIA protocol variant used b
 The protocol is a stateful, sequential exchange over a single TCP connection. An "event" is not a single message, but a sequence of message "blocks". During an alarm state, the panel may send multiple complete event sequences over a single TCP connection.
 
 The flow for a single event sequence is:
-1.  Client (Alarm Panel) sends **Block 1 ACCOUNT_ID**.
+1.  Client (Alarm Panel) sends **Block 1 (ACCOUNT_ID)**.
 2.  Server sends an **ACK**.
-3.  Client sends **Block 2 NEW_EVENT**.
+3.  Client sends **Block 2 (NEW_EVENT)**.
 4.  Server sends an **ACK**.
 5.  Client sends **Block 3 (ASCII)** (This is optional and may be omitted).
 6.  Server sends an **ACK**.
