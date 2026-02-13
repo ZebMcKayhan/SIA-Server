@@ -118,3 +118,42 @@ The content of this payload is what is used to generate the final notification m
 ### Character Encoding
 
 The panel uses a proprietary character set for the ASCII block, where some non-standard characters in the `0x80`-`0x9F` range are used to represent Swedish letters (Å, Ä, Ö, etc.). This server's parser includes a mapping to translate these bytes into correct UTF-8 characters.
+
+### IP Check Protocol (Heartbeat)
+
+In addition to the main SIA event reporting, the Galaxy panel has an optional, proprietary "IP Check" feature designed for high-frequency path viability testing. This feature operates on a separate, user-configurable TCP port (e.g., 10001).
+
+Our analysis shows this is a proprietary binary protocol, completely distinct from the main SIA event protocol. Its purpose is for the panel to "ping" the server to ensure a connection is possible.
+
+#### The "Ping" Packet (Panel to Server)
+
+When an IP Check is performed, the panel sends a single, fixed-length **26-byte** TCP packet. This packet has a well-defined structure.
+
+**Structure of the 26-byte IP Check Packet:**
+
+| Byte Index(es) | Length | Example Hex               | Description                                     |
+| :------------- | :----- | :------------------------ | :---------------------------------------------- |
+| **0**          | 1 byte | `00`                      | **Header:** A static byte, likely identifying this as an IP Check ping. |
+| **1-8**        | 8 bytes| `30 30 30 32 37 39 37 38` | **Account Number:** The panel's account number, ASCII encoded and padded with leading zeros. |
+| **9-14**       | 6 bytes| `11 0c 00 fd 09 00`       | **Static ID Block 1:** An unknown but static block of identifier data. |
+| **15**         | 1 byte | *(dynamic)*               | **Nonce:** A pseudo-random byte that changes with each ping to ensure message uniqueness. |
+| **16**         | 1 byte | *(dynamic)*               | **Sequence Counter:** A byte that increments over time, likely to prevent replay attacks. |
+| **17-21**      | 5 bytes| `8d 69 3c 78 00`          | **Static ID Block 2:** Another unknown but static block of data. |
+| **22-23**      | 2 bytes| `00 00`                   | **Padding:** Static null bytes for alignment. |
+| **24-25**      | 2 bytes| *(dynamic)*               | **Checksum:** A 16-bit value composed of two independent 8-bit checksums (see below). |
+
+#### The "Pong" Response (Server to Panel)
+
+I have not been able to capture this as I dont have a ip-check available Honywell server. Using same port as for SIA messages gives a standard SIA **REJECT** reply and the panel seems ok with this and does not give an ip-check error. It could be that any data response is considered a success. The panel closes the connection after 15 seconds which could indicate that this was not the response it was expecting. 
+
+#### Checksum Algorithm (Interleaved 8-bit XOR)
+
+The final two bytes of the IP Check packet are not a standard 16-bit CRC. They are two separate 8-bit checksums calculated over the preceding 24 bytes of the payload.
+
+-   **First Checksum Byte (at index 24):** This is a checksum of all the **even-indexed** bytes of the payload.
+    -   **Formula:** `0xFF ^ payload[0] ^ payload[2] ^ payload[4] ^ ... ^ payload[22]`
+
+-   **Second Checksum Byte (at index 25):** This is a checksum of all the **odd-indexed** bytes of the payload.
+    -   **Formula:** `0xFF ^ payload[1] ^ payload[3] ^ payload[5] ^ ... ^ payload[23]`
+
+This unconventional, interleaved design explains why a change in an odd-indexed byte (like the Nonce at index 15) only affects the second checksum byte, while a change in an even-indexed byte (like the Counter at index 16) only affects the first checksum byte.
