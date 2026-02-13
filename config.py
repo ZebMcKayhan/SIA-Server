@@ -17,6 +17,18 @@ LISTEN_ADDR = '0.0.0.0'
 # Default SIA port is 10000
 LISTEN_PORT = 10000
 
+# ============================================
+# IP CHECK (HEARTBEAT) SERVER CONFIGURATION
+# ============================================
+
+# Set to True to enable the optional IP Check server.
+# This responds to the proprietary Honeywell heartbeat pings.
+IP_CHECK_ENABLED = True
+
+# The IP address and port for the IP Check server to listen on.
+# This must match the secondary "IP Check" port configured in the alarm panel.
+IP_CHECK_ADDR = '0.0.0.0'
+IP_CHECK_PORT = 10001
 
 # ============================================
 # ACCOUNT MAPPING
