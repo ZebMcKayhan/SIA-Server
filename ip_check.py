@@ -3,14 +3,14 @@
 Galaxy IP Check (Heartbeat) Server
 
 A minimal server that listens on a dedicated port for the proprietary
-Honeywell "Path Viability Check" ping. It responds with a REJECT message,
-which satisfies the panel's check without generating errors on the panel
-or flooding the main SIA server.
+Honeywell "Path Viability Check" ping. It can send various responses
+to test the panel's behavior.
 """
-
 import asyncio
 import logging
 import sys
+# The 'signal' import is not needed for this script
+# import signal 
 
 # Make uvloop optional for cross-platform compatibility
 try:
@@ -26,7 +26,7 @@ from galaxy.constants import COMMAND_BYTES
 log = logging.getLogger('ip_check_server')
 log.setLevel(getattr(logging, config.LOG_LEVEL, 'INFO'))
 formatter = logging.Formatter('%(asctime)s - IP_CHECK - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-handler = logging.StreamHandler(sys.stderr) # Always log to console/journal for this simple service
+handler = logging.StreamHandler(sys.stderr)
 handler.setFormatter(formatter)
 log.addHandler(handler)
 
@@ -46,6 +46,8 @@ async def handle_ip_check(reader, writer):
 
         log.info("Received IP Check ping: %r", data)
         
+        # --- YOUR EXPERIMENT GOES HERE ---
+        
         # Experiment 1: Send a standard REJECT
         command_to_send = 'REJECT'
         payload_to_send = b''
@@ -53,15 +55,18 @@ async def handle_ip_check(reader, writer):
         # Experiment 2: Send a standard ACKNOWLEDGE
         # command_to_send = 'ACKNOWLEDGE'
         # payload_to_send = b''
-
+        
         # Experiment 3: Send a custom, fixed byte string
         # custom_response = b'some test data'
-        # log.info("Sending custom response: %r", custom_response)
-        # writer.write(custom_response)
-        # await writer.drain()
 
+        # --- END OF EXPERIMENT CONFIGURATION ---
+        
         # Build and send the response based on the chosen experiment
-        if 'command_to_send' in locals():
+        if 'custom_response' in locals():
+            log.info("Sending custom response: %r", custom_response)
+            writer.write(custom_response)
+            await writer.drain()
+        elif 'command_to_send' in locals():
             command_byte = COMMAND_BYTES[command_to_send]
             length_byte = len(payload_to_send) + 0x40
             message_part = bytes([length_byte, command_byte]) + payload_to_send
@@ -73,8 +78,9 @@ async def handle_ip_check(reader, writer):
             log.info("Sending experimental response (%s): %r", command_to_send, final_message)
             writer.write(final_message)
             await writer.drain()
+        else:
+            log.info("No response configured, will wait for panel to close.")
 
-        # --- END OF EXPERIMENT ---
         
         # Now, wait indefinitely for the panel to close the connection
         log.info("Waiting for panel to close the connection...")
@@ -92,10 +98,10 @@ async def handle_ip_check(reader, writer):
         await writer.wait_closed()
 
 async def main():
-    if not config.IP_CHECK_ENABLED:
+    if not hasattr(config, 'IP_CHECK_ENABLED') or not config.IP_CHECK_ENABLED:
         print("IP Check server is disabled in config.py. Exiting.")
         return
-
+        
     log.info("="*60)
     log.info("Starting Galaxy IP Check (Heartbeat) Server...")
     
