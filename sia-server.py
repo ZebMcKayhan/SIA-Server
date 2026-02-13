@@ -230,15 +230,37 @@ async def handle_connection(reader, writer):
 
 
 async def monitor_subprocess(process, name):
-    """Monitors a subprocess and logs its output and exit status."""
+    """Monitors a subprocess, parses its log level, and logs its output."""
     log.info("Monitoring subprocess '%s' (PID: %d)", name, process.pid)
     
-    # Asynchronously read stdout and stderr
-    async def log_stream(stream, level):
+    # Map level names to logging constants
+    LEVEL_MAP = {
+        'DEBUG': logging.DEBUG,
+        'INFO': logging.INFO,
+        'WARNING': logging.WARNING,
+        'ERROR': logging.ERROR,
+        'CRITICAL': logging.CRITICAL,
+    }
+
+    async def log_stream(stream, default_level):
         while not stream.at_eof():
             line = await stream.readline()
             if line:
-                log.log(level, "[%s] %s", name, line.decode().strip())
+                line_str = line.decode().strip()
+                
+                # Check for our "LEVEL:message" format
+                parts = line_str.split(':', 1)
+                if len(parts) == 2 and parts[0] in LEVEL_MAP:
+                    # We found a log level prefix
+                    level_name = parts[0]
+                    msg = parts[1].strip()
+                    log_level = LEVEL_MAP[level_name]
+                else:
+                    # It's a plain message with no level, use the default
+                    msg = line_str
+                    log_level = default_level
+                
+                log.log(log_level, "[%s] %s", name, msg)
 
     await asyncio.gather(
         log_stream(process.stdout, logging.INFO),
