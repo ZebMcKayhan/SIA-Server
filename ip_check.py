@@ -43,7 +43,7 @@ if not log.hasHandlers():
     # If run as a subprocess, the parent will add the timestamp.
     is_standalone = sys.stdout.isatty()
     log_format = '%(asctime)s - IP_CHECK - %(message)s' if is_standalone else '%(message)s'
-    formatter = logging.Formatter(log_format, datefmt='%Y-%m-%d %H:%M:%S')
+    formatter = logging.Formatter('%(levelname)s:%(message)s') # e.g., "INFO:Server started" or "DEBUG:Ping HEX..."
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(formatter)
     log.addHandler(handler)
