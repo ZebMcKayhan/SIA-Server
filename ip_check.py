@@ -11,7 +11,6 @@ or flooding the main SIA server.
 import asyncio
 import logging
 import sys
-import signal
 
 # Make uvloop optional for cross-platform compatibility
 try:
@@ -31,43 +30,64 @@ handler = logging.StreamHandler(sys.stderr) # Always log to console/journal for 
 handler.setFormatter(formatter)
 log.addHandler(handler)
 
-# We re-implement a minimal build_and_send here to be self-contained
-async def build_and_send_reject(writer):
-    """Builds and sends a standard REJECT message."""
-    command_byte = COMMAND_BYTES['REJECT']
-    payload = b''
-    length_byte = len(payload) + 0x40
-    message_part = bytes([length_byte, command_byte]) + payload
-    
-    checksum = 0xFF
-    for byte in message_part:
-        checksum ^= byte
-        
-    final_message = message_part + bytes([checksum])
-    
-    writer.write(final_message)
-    await writer.drain()
-
 async def handle_ip_check(reader, writer):
-    """Handles an incoming IP Check connection."""
+    """
+    Handles an incoming IP Check connection by sending an experimental response
+    and waiting for the panel to close the connection.
+    """
     addr = writer.get_extra_info('peername')
+    log.info("Received IP Check connection from %r", addr)
     
     try:
-        data = await reader.read(1024)
+        data = await reader.read(1024) # Read the panel's ping
+        if not data:
+            log.info("IP Check client connected but sent no data.")
+            return
+
+        log.info("Received IP Check ping: %r", data)
         
-        if data:
-            # We have received the proprietary IP Check packet.
-            # The correct response is a standard REJECT.
-            log.info("Received IP Check ping from %s (%d bytes). Responding with REJECT.", addr[0], len(data))
-            await build_and_send_reject(writer)
-        else:
-            log.info("IP Check client at %s connected but sent no data.", addr[0])
+        # Experiment 1: Send a standard REJECT
+        command_to_send = 'REJECT'
+        payload_to_send = b''
+        
+        # Experiment 2: Send a standard ACKNOWLEDGE
+        # command_to_send = 'ACKNOWLEDGE'
+        # payload_to_send = b''
+
+        # Experiment 3: Send a custom, fixed byte string
+        # custom_response = b'some test data'
+        # log.info("Sending custom response: %r", custom_response)
+        # writer.write(custom_response)
+        # await writer.drain()
+
+        # Build and send the response based on the chosen experiment
+        if 'command_to_send' in locals():
+            command_byte = COMMAND_BYTES[command_to_send]
+            length_byte = len(payload_to_send) + 0x40
+            message_part = bytes([length_byte, command_byte]) + payload_to_send
+            checksum = 0xFF
+            for byte in message_part:
+                checksum ^= byte
+            final_message = message_part + bytes([checksum])
             
+            log.info("Sending experimental response (%s): %r", command_to_send, final_message)
+            writer.write(final_message)
+            await writer.drain()
+
+        # --- END OF EXPERIMENT ---
+        
+        # Now, wait indefinitely for the panel to close the connection
+        log.info("Waiting for panel to close the connection...")
+        await reader.read(-1)
+        log.info("Panel at %r has closed the connection.", addr)
+
+    except asyncio.IncompleteReadError:
+        # This is the expected outcome when the other side closes the connection
+        log.info("Panel at %r has closed the connection (IncompleteReadError).", addr)
     except Exception as e:
         log.error("Error in IP Check handler: %s", e)
     finally:
-        # The panel expects the connection to be closed after the response.
-        log.debug("Closing IP Check connection from %r", addr)
+        log.info("Closing our side of the IP Check connection from %r", addr)
         writer.close()
         await writer.wait_closed()
 
