@@ -229,15 +229,70 @@ async def handle_connection(reader, writer):
             log.error("Error closing connection: %s", e)
 
 
-async def start_server(address, port):
-    server = await asyncio.start_server(handle_connection, address, port)
-    addrs = ', '.join(str(sock.getsockname()) for sock in server.sockets)
+async def monitor_subprocess(process, name):
+    """Monitors a subprocess and logs its output and exit status."""
+    log.info("Monitoring subprocess '%s' (PID: %d)", name, process.pid)
+    
+    # Asynchronously read stdout and stderr
+    async def log_stream(stream, level):
+        while not stream.at_eof():
+            line = await stream.readline()
+            if line:
+                log.log(level, "[%s] %s", name, line.decode().strip())
+
+    await asyncio.gather(
+        log_stream(process.stdout, logging.INFO),
+        log_stream(process.stderr, logging.ERROR)
+    )
+    
+    await process.wait()
+    log.warning("Subprocess '%s' (PID: %d) has exited with code %d.", name, process.pid, process.returncode)
+
+
+async def start_servers():
+    """Starts the main SIA server and launches the IP Check server as a subprocess."""
+    
+    # --- Start the main SIA Event Server ---
+    sia_server = await asyncio.start_server(
+        handle_connection, config.LISTEN_ADDR, config.LISTEN_PORT
+    )
+    sia_addrs = ', '.join(str(sock.getsockname()) for sock in sia_server.sockets)
     log.info('='*60)
-    log.info('Galaxy SIA Server Started')
-    log.info('Listening on: %s', addrs)
+    log.info('Galaxy SIA Event Server Started')
+    log.info('Listening for events on: %s', sia_addrs)
+    
+    # --- Launch the optional IP Check Server as a Subprocess ---
+    ip_check_task = None
+    if config.IP_CHECK_ENABLED:
+        try:
+            # Command to run the ip_check.py script using the same Python interpreter
+            command = [sys.executable, 'ip_check.py']
+            log.info("Launching IP Check server as a subprocess: %s", " ".join(command))
+            
+            process = await asyncio.create_subprocess_exec(
+                *command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            # Create a task to monitor the subprocess in the background
+            ip_check_task = asyncio.create_task(monitor_subprocess(process, 'ip_check.py'))
+            
+        except Exception as e:
+            log.error("Failed to launch IP Check server subprocess: %s", e)
+            log.error("IP Check feature will be disabled.")
+    
     log.info('='*60)
-    async with server:
-        await server.serve_forever()
+    
+    # Now, run the main SIA server forever
+    try:
+        await sia_server.serve_forever()
+    finally:
+        # When the main server is shut down, also terminate the subprocess
+        if ip_check_task and process.returncode is None:
+            log.info("Terminating IP Check server subprocess...")
+            process.terminate()
+            await ip_check_task # Wait for it to exit
 
 
 def handle_shutdown(signum, frame):
@@ -252,7 +307,8 @@ def main():
     log.info("Starting Galaxy SIA Server version %s", __version__)
     
     try:
-        asyncio.run(start_server(config.LISTEN_ADDR, config.LISTEN_PORT))
+        asyncio.run(start_servers())
+                
     except (KeyboardInterrupt, SystemExit):
         log.info("Server stopped")
     except Exception as e:
