@@ -145,6 +145,7 @@ When an IP Check is performed, the panel sends a single, fixed-length **26-byte*
 #### The "Pong" Response (Server to Panel)
 
 I have not been able to capture this as I dont have a ip-check available Honywell server. Using same port as for SIA messages gives a standard SIA **REJECT** reply and the panel seems ok with this and does not give an ip-check error. It could be that any data response is considered a success. The panel closes the connection after 15 seconds which could indicate that this was not the response it was expecting. 
+I have not found a response that makes the panel close the connection earlier than 15s and as so, it would be a bad idea to keep using the same port as the SIA server. Instead, I have created ip_check.py to run as a separate instance on a separate port, so it does not block the connection for real alarms. Currently ip_check.py echoes back the same data as it recieved and the panel seems contempt.
 
 #### Checksum Algorithm (Interleaved 8-bit XOR)
 
