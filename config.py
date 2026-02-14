@@ -144,7 +144,7 @@ DEFAULT_PRIORITY = 5  # Urgent - better safe than sorry!
 LOG_LEVEL = 'INFO'
 
 # Log to file (True) or console/screen (False)
-LOG_TO_FILE = True # True / False
+LOG_TO_FILE = False # True / False
 
 # Log file path (only used if LOG_TO_FILE = True)
 # Note, Windows users will need to escape \ like this: 'C:\\Temp\\sia-server.log'
