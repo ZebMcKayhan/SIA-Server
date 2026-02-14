@@ -17,6 +17,18 @@ LISTEN_ADDR = '0.0.0.0'
 # Default SIA port is 10000
 LISTEN_PORT = 10000
 
+# ============================================
+# IP CHECK (HEARTBEAT) SERVER CONFIGURATION
+# ============================================
+
+# Set to True to enable the optional IP Check server.
+# This responds to the proprietary Honeywell heartbeat pings.
+IP_CHECK_ENABLED = True
+
+# The IP address and port for the IP Check server to listen on.
+# This must match the secondary "IP Check" port configured in the alarm panel.
+IP_CHECK_ADDR = '0.0.0.0'
+IP_CHECK_PORT = 10001
 
 # ============================================
 # ACCOUNT MAPPING
@@ -38,29 +50,44 @@ ACCOUNT_SITES = {
 
 # ntfy.sh configuration
 NTFY_ENABLED = True #True / False
-
-# --- Notification Routing ---
-# Define how notifications are sent. You can use a single topic for all
-# accounts or specify a different topic for each account number.
-
-# Option 1: Simple Mode (all accounts go to one topic)
-# Just define a 'default' topic.
-NTFY_TOPICS = {
-    'default': 'https://ntfy.sh/my-main-alarm-topic',
-}
-
-# Option 2: Multi-User / Multi-Site Mode (route by account number)
-# Define a topic for each account number. The 'default' is used for any
-# account not explicitly listed. This is perfect for hosting for friends (preferably via VPN as this is unencrypted).
-# NTFY_TOPICS = {
-#     '027178': 'https://ntfy.sh/my-home-alarms',      # My house
-#     '123456': 'https://ntfy.sh/friends-cabin-alarms', # Friend 1's cabin
-#     '789012': 'https://ntfy.sh/another-friends-house', # Friend 2's house
-#     'default': 'https://ntfy.sh/unknown-alarm-topic', # Optional: for any other accounts
-# }
-
 NOTIFICATION_TITLE = 'Galaxy FLEX'
 
+# --- Notification Routing ---
+# Define how notifications are sent. Each account number can be mapped to a
+# specific ntfy.sh topic with its own authentication details.
+
+NTFY_TOPICS = {
+    # --- Example 1: A simple, public topic for a single user ---
+    'default': {
+        'url': 'https://ntfy.sh/my-public-alarm-topic',
+        'auth': None, # No authentication needed
+    },
+
+# --- Example 2: A multi-user setup with different private topics ---
+    # '027978': { # My Home (Private, using a token)
+    #     'url': 'https://ntfy.sh/my-private-home-topic',
+    #     'auth': {
+    #         'method': 'token',
+    #         'token': 'tk_secrettokenformyhome_abc123'
+    #     }
+    # },
+    # '123456': { # Friend's Cabin (Private, using user/pass)
+    #     'url': 'https://ntfy.sh/friends-private-cabin',
+    #     'auth': {
+    #         'method': 'userpass',
+    #         'user': 'friend_user',
+    #         'pass': 'friend_password'
+    #     }
+    # },
+    # '789012': { # Another friend's public topic
+    #     'url': 'https://ntfy.sh/another-friend-public',
+    #     'auth': None # Explicitly no authentication
+    # },
+    # 'default': { # For any unknown accounts
+    #     'url': 'https://ntfy.sh/unknown-alarm-logs',
+    #     'auth': None
+    # }
+}
 # Event code to notification priority mapping
 # Priority levels (ntfy.sh):
 #   1 = Min (no notification, no sound)

@@ -58,13 +58,15 @@ def send_notification(event: GalaxyEvent, ntfy_topics: Dict, priority_map: Dict,
     if not enabled:
         log.debug("Notifications are disabled in config, skipping.")
         return False
-     
-    # Determine the correct ntfy.sh URL to use for this event's account
-    ntfy_url = ntfy_topics.get(event.account, ntfy_topics.get('default'))
-                         
-    if not ntfy_url or 'your-topic-here' in ntfy_url:
-        log.warning("No valid ntfy.sh URL found for account '%s' or default. Skipping notification.", event.account)
+        
+    topic_config = ntfy_topics.get(event.account, ntfy_topics.get('default'))
+    
+    if not topic_config or not topic_config.get('url') or 'your-topic-here' in topic_config.get('url'):
+        log.warning("No valid ntfy.sh URL found for account '%s' or default. Skipping.", event.account)
         return False
+    
+    ntfy_url = topic_config['url']
+    auth_config = topic_config.get('auth') # This will be the auth dict or None
     
     if not event.event_code:
         log.warning("Event has no event_code, cannot determine priority. Skipping notification.")
@@ -78,7 +80,24 @@ def send_notification(event: GalaxyEvent, ntfy_topics: Dict, priority_map: Dict,
         "Title": title,
         "Priority": str(priority),
     }
-    
+    auth_details = None
+    if auth_config:
+        log.debug("ntfy.sh authentication is configured for this topic.")
+        method = auth_config.get('method')
+        
+        if method == 'token':
+            token = auth_config.get('token')
+            if token:
+                headers['Authorization'] = f"Bearer {token}"
+                log.debug("Using Bearer token authentication.")
+        
+        elif method == 'userpass':
+            user = auth_config.get('user')
+            password = auth_config.get('pass')
+            if user and password:
+                auth_details = (user, password)
+                log.debug("Using username/password authentication.")
+                         
     log.info("Sending notification (priority %d): %s", priority, message)
     log.debug("ntfy.sh URL: %s, Headers: %s", ntfy_url, headers)
     
@@ -87,7 +106,8 @@ def send_notification(event: GalaxyEvent, ntfy_topics: Dict, priority_map: Dict,
             ntfy_url,
             data=message.encode('utf-8'),
             headers=headers,
-            timeout=10
+            timeout=10,
+            auth=auth_details
         )
         response.raise_for_status() # Raise an exception for bad status codes (4xx or 5xx)
         log.info("Notification sent successfully.")

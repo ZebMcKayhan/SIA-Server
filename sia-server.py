@@ -9,7 +9,7 @@ Author: Built with assistance from Claude (Anthropic)
 License: MIT
 """
 # --- Application Version ---
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 import asyncio
 import logging
@@ -132,9 +132,35 @@ async def handle_connection(reader, writer):
             command_byte, payload = validate_and_strip(data)
             
             if command_byte is None:
-                await build_and_send(writer, 'REJECT')
-                log.error("Received invalid block, sent REJECT. Raw: %r", data)
-                continue
+                is_encrypted_handshake = False
+                if len(data) >= 2 and data[0:2] == b'\x05\x01':
+                    is_encrypted_handshake = True
+
+                if is_encrypted_handshake:
+                    # --- SPECIAL HANDLING FOR ENCRYPTED HANDSHAKE ---
+                    log.error("="*60)
+                    log.error("ENCRYPTION DETECTED - UNSUPPORTED")
+                    log.error("The panel at IP address '%s' has encryption enabled.", addr[0])
+                    log.error("This server does not support the proprietary encryption.")
+                    log.error("Please disable encryption in the panel's SIA settings.")
+                    log.error("Closing connection to stop the panel from retrying.")
+                    log.error("Raw block received: %r", data)
+                    log.error("="*60)
+                    
+                    # Do not send anything back. Just break the loop.
+                    # The 'finally' block will close the connection.
+                    break 
+
+                else:
+                    # --- STANDARD HANDLING FOR CORRUPTED DATA ---
+                    if len(data) > 0:
+                        log.error("Validation failed (length or checksum error). Raw: %r", data)
+                    else:
+                        log.error("Validation failed (received empty data block).")
+
+                    # Send a standard unencrypted REJECT.
+                    await build_and_send(writer, 'REJECT')
+                    continue # Continue to listen for more data on this connection if any.
 
             command_name = COMMANDS.get(command_byte, f'UNKNOWN(0x{command_byte:02x})')
             log.info("Received Command: %s, Payload: %r", command_name, payload)
@@ -203,15 +229,92 @@ async def handle_connection(reader, writer):
             log.error("Error closing connection: %s", e)
 
 
-async def start_server(address, port):
-    server = await asyncio.start_server(handle_connection, address, port)
-    addrs = ', '.join(str(sock.getsockname()) for sock in server.sockets)
+async def monitor_subprocess(process, name):
+    """Monitors a subprocess, parses its log level, and logs its output."""
+    log.info("Monitoring subprocess '%s' (PID: %d)", name, process.pid)
+    
+    # Map level names to logging constants
+    LEVEL_MAP = {
+        'DEBUG': logging.DEBUG,
+        'INFO': logging.INFO,
+        'WARNING': logging.WARNING,
+        'ERROR': logging.ERROR,
+        'CRITICAL': logging.CRITICAL,
+    }
+
+    async def log_stream(stream, default_level):
+        while not stream.at_eof():
+            line = await stream.readline()
+            if line:
+                line_str = line.decode().strip()
+                
+                # Check for our "LEVEL:message" format
+                parts = line_str.split(':', 1)
+                if len(parts) == 2 and parts[0] in LEVEL_MAP:
+                    # We found a log level prefix
+                    level_name = parts[0]
+                    msg = parts[1].strip()
+                    log_level = LEVEL_MAP[level_name]
+                else:
+                    # It's a plain message with no level, use the default
+                    msg = line_str
+                    log_level = default_level
+                
+                log.log(log_level, "[%s] %s", name, msg)
+
+    await asyncio.gather(
+        log_stream(process.stdout, logging.INFO),
+        log_stream(process.stderr, logging.ERROR)
+    )
+    
+    await process.wait()
+    log.warning("Subprocess '%s' (PID: %d) has exited with code %d.", name, process.pid, process.returncode)
+
+
+async def start_servers():
+    """Starts the main SIA server and launches the IP Check server as a subprocess."""
+    
+    # --- Start the main SIA Event Server ---
+    sia_server = await asyncio.start_server(
+        handle_connection, config.LISTEN_ADDR, config.LISTEN_PORT
+    )
+    sia_addrs = ', '.join(str(sock.getsockname()) for sock in sia_server.sockets)
     log.info('='*60)
-    log.info('Galaxy SIA Server Started')
-    log.info('Listening on: %s', addrs)
+    log.info('Galaxy SIA Event Server Started')
+    log.info('Listening for events on: %s', sia_addrs)
+    
+    # --- Launch the optional IP Check Server as a Subprocess ---
+    ip_check_task = None
+    if config.IP_CHECK_ENABLED:
+        try:
+            # Command to run the ip_check.py script using the same Python interpreter
+            command = [sys.executable, 'ip_check.py']
+            log.info("Launching IP Check server as a subprocess: %s", " ".join(command))
+            
+            process = await asyncio.create_subprocess_exec(
+                *command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            # Create a task to monitor the subprocess in the background
+            ip_check_task = asyncio.create_task(monitor_subprocess(process, 'ip_check.py'))
+            
+        except Exception as e:
+            log.error("Failed to launch IP Check server subprocess: %s", e)
+            log.error("IP Check feature will be disabled.")
+    
     log.info('='*60)
-    async with server:
-        await server.serve_forever()
+    
+    # Now, run the main SIA server forever
+    try:
+        await sia_server.serve_forever()
+    finally:
+        # When the main server is shut down, also terminate the subprocess
+        if ip_check_task and process.returncode is None:
+            log.info("Terminating IP Check server subprocess...")
+            process.terminate()
+            await ip_check_task # Wait for it to exit
 
 
 def handle_shutdown(signum, frame):
@@ -226,7 +329,8 @@ def main():
     log.info("Starting Galaxy SIA Server version %s", __version__)
     
     try:
-        asyncio.run(start_server(config.LISTEN_ADDR, config.LISTEN_PORT))
+        asyncio.run(start_servers())
+                
     except (KeyboardInterrupt, SystemExit):
         log.info("Server stopped")
     except Exception as e:

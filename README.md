@@ -14,8 +14,10 @@ This was developed on a Honeywell Galaxy Flex 20 alarm system. It is quite possi
 -   **Self-Hosted:** Runs on any local Linux machine, like a Raspberry Pi. It should also run on Windows, but this has not been tested.
 -   **Real-time Notifications:** Instantly forwards alarm events to your devices.
 -   **Prioritized Alerts:** Uses ntfy.sh priorities to distinguish between urgent alarms (burglary, fire) and routine events (arm/disarm, tests).
--   **Multiple Sites:** Ability to map different account numbers to different notification topics.
+-   **Advanced Notification Routing:** Route notifications for different accounts to different ntfy.sh topics, each with its own authentication (Bearer Token or User/Pass).
 -   **Robust Protocol Handling:** Correctly parses the multi-message protocol used by Galaxy Flex panels, including handling multiple events in a single connection.
+-   **Broad SIA Level Support:** The flexible parser can correctly handle event data from SIA Levels 0, 1, 2, and 3.
+-   **Optional Heartbeat Server:** Includes a separate, optional server to correctly handle the proprietary Honeywell "IP Check" heartbeat, ensuring full panel compatibility without generating errors.
 -   **Character Encoding Fixes:** Decodes the proprietary character set used by Galaxy panels to correctly display special characters (e.g., Å, Ä, Ö).
 -   **Highly Configurable:** All settings, including account names, notification priorities, and logging, are in a single `config.py` file.
 
@@ -34,9 +36,10 @@ The project is structured to separate the server logic, protocol parsing, and co
 ├── sia-server.py           # The main server application
 ├── config.py               # All user settings are here!
 ├── notification.py         # Handles formatting and sending of notifications
+├── ip_check.py             # Subprocess for answering the panel IP-Checks (Heartbeats)
 ├── README.md               # Installation and usage instructions.
 └── galaxy/
-    ├── README.md           # Description of the SIA over TCP protocol.          
+    ├── README.md           # Description of the SIA over TCP protocol.  
     ├── parser.py           # Handles parsing of the Galaxy SIA protocol
     └── constants.py        # Constants used in the SIA protocol
 ```
@@ -44,7 +47,18 @@ The project is structured to separate the server logic, protocol parsing, and co
 ## Installation & Setup (Linux)
 
 ### 1. Clone the Repository
-Clone this project to a directory on your Linux machine (e.g., `/home/pi/Scripts/sia-server`).
+You have two options for downloading the code.
+
+**Option A: Download the Latest Stable Release (Recommended)**
+
+1.  Go to the [Releases page](https://github.com/ZebMcKayhan/SIA-Server/releases) on GitHub.
+2.  Under the latest release, download the `Source code (zip)` file.
+3.  Unzip the file on your server.
+
+**Option B: Clone via Git (for developers)**
+
+This will get you the very latest development version from the `main` branch.
+
 ```bash
 git clone https://github.com/ZebMcKayhan/SIA-Server.git sia-server
 cd sia-server
@@ -73,7 +87,8 @@ nano config.py
 ```
 
 ## Configuration Explained
--   `LISTEN_ADDR` & `LISTEN_PORT`: The IP and port the server listens on. `0.0.0.0` allows it to accept connections from any device on your network.
+-   `LISTEN_ADDR` & `LISTEN_PORT`: The IP and port the main SIA event server listens on.
+-   `IP_CHECK_ENABLED`, `IP_CHECK_ADDR`, `IP_CHECK_PORT`: (Optional) Settings to enable and configure the separate heartbeat server for compatibility with the panel's "IP Check" feature.
 -   `ACCOUNT_SITES`: Map your alarm's account number to a friendly site name. If an account is not mapped, the script will use the account number as the site name.
     ```python
     ACCOUNT_SITES = {
@@ -82,10 +97,10 @@ nano config.py
     }
     ```
 -   `NOTIFICATION_TITLE`: The title of your push notifications (e.g., "Galaxy FLEX", "Home Alarm").
--   `NTFY_TOPICS`: Set `NTFY_ENABLED` to `True` and configure your ntfy.sh topic(s). You may map different account numbers to different topics; see examples in the file.
+-   `NTFY_TOPICS`: Configure your ntfy.sh notification destinations. This flexible dictionary allows you to set up a simple 'default' topic for all alerts, or define specific topics for each account number. You can also configure authentication (Bearer Token or User/Pass) on a per-topic basis for private channels.
 -   `EVENT_PRIORITIES`: Customize the priority for different events. Any event code not listed here will default to `DEFAULT_PRIORITY`. This is pre-configured with safe defaults.
 -   `UNKNOWN_CHAR_MAP`: If your alarm uses special characters that don't display correctly, you can add their byte-to-character mappings here. The common Swedish characters are already included.
--   `LOGGING`: Configure logging level and output. For debugging, you can change `LOG_LEVEL` to `DEBUG` and set `LOG_TO_FILE` to `True`.
+-   `LOGGING`: Configure logging level and output for the main SIA server.
 
 ## Security & Privacy Guidelines
 Please read these guidelines carefully to ensure you are using this software securely.
@@ -104,6 +119,8 @@ If you plan on hosting this server on a cloud machine for yourself or for friend
 -   **Topic Privacy:** By default, ntfy.sh topics are public. Anyone who knows your topic name can subscribe to your notifications. To secure this:
     -   **Use a long, unguessable topic name.** Treat your ntfy.sh topic name like a password. Instead of `my-home-alarm`, use a randomly generated string like `alarm-skUHvisapP2J382MDI2`.
     -   **Consider your Site Name.** For added privacy, you can choose a generic `site_name` in your `config.py` (e.g., "Site A") that cannot be easily linked back to your physical address.
+    -   **Alternatively, host ntfy.sh yourself** By hosting the notification server yourself you could secure your topics.
+    -   **Alternatively, purchase ntfy.sh pro** By paying a subscription you can use login or token to create and access private topics. `config.py` and `notification.py` is prepared for this already.
 
 **Disclaimer:** By following these guidelines, you can significantly improve the security and privacy of your notification system. However, you are ultimately responsible for securing your own setup.
 
@@ -210,4 +227,3 @@ You can now manage it from the Windows Services app (`services.sc`) or via the `
 ## License
 This project is licensed under the MIT License.
 
-```
