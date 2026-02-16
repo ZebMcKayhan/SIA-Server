@@ -10,6 +10,17 @@ import requests
 from typing import Dict
 from galaxy.parser import GalaxyEvent
 
+# --- Force PyOpenSSL to be used by requests ---
+# This is a robust way to ensure the more compatible OpenSSL backend is used,
+# especially on Windows, to prevent intermittent SSLErrors in difficult
+# network environments.
+try:
+    import urllib3.contrib.pyopenssl
+    urllib3.contrib.pyopenssl.inject_into_urllib3()
+    logging.getLogger(__name__).info("Successfully injected PyOpenSSL into urllib3.")
+except ImportError:
+    logging.getLogger(__name__).warning("PyOpenSSL not available; using default SSL context.")
+
 log = logging.getLogger(__name__)
 
 
