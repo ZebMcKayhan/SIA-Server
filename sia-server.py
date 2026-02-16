@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """
 Galaxy SIA Server
-
 Receives, validates, and parses proprietary SIA protocol messages from
 Honeywell Galaxy Flex alarm systems. It sends notifications via ntfy.sh.
-
 Author: Built with assistance from Claude (Anthropic)
 License: MIT
 """
@@ -17,19 +15,12 @@ import logging.handlers
 import sys
 import signal
 
-# Make uvloop optional for cross-platform compatibility (e.g., Windows)
-try:
-    import uvloop
-    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-    print("Using uvloop for event loop.")
-except ImportError:
-    print("uvloop not found, using standard asyncio event loop.")
-    pass
+# ====================================================================
+# SCRIPT INITIALIZATION - MOVED TO TOP
+# ====================================================================
 
+# First, we must import config as it's needed for logging setup
 import config
-from galaxy.parser import parse_galaxy_event
-from notification import send_notification
-from galaxy.constants import COMMANDS, COMMAND_BYTES, EVENT_CODE_DESCRIPTIONS
 
 def setup_logging():
     """Configure logging based on config.py settings"""
@@ -50,7 +41,28 @@ def setup_logging():
     log.addHandler(handler)
     return log
 
+# We MUST call setup_logging() before importing any of our own modules that log
 log = setup_logging()
+
+# Now that logging is configured, we can import the rest of our modules
+# and they will be able to log messages correctly during the import process.
+
+# Make uvloop optional for cross-platform compatibility (e.g., Windows)
+try:
+    import uvloop
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+    log.info("Using uvloop for event loop.")
+except ImportError:
+    log.info("uvloop not found, using standard asyncio event loop.")
+    pass
+
+from galaxy.parser import parse_galaxy_event
+from notification import send_notification
+from galaxy.constants import COMMANDS, COMMAND_BYTES, EVENT_CODE_DESCRIPTIONS
+
+# ====================================================================
+# END SCRIPT INITIALIZATION
+# ====================================================================
 
 
 def validate_and_strip(data: bytes) -> tuple[int, bytes] | tuple[None, None]:
@@ -61,7 +73,6 @@ def validate_and_strip(data: bytes) -> tuple[int, bytes] | tuple[None, None]:
     if len(data) < 3:
         log.warning("Invalid block: too short. Raw: %r", data)
         return None, None
-
     # 1. Validate length
     declared_payload_length = data[0] - 0x40
     actual_payload_length = len(data) - 3
@@ -82,13 +93,11 @@ def validate_and_strip(data: bytes) -> tuple[int, bytes] | tuple[None, None]:
         log.warning("Checksum mismatch! Calculated: 0x%02x, Expected: 0x%02x. Raw: %r",
                     checksum, expected_checksum, data)
         return None, None
-
     # Block is valid. Strip and return.
     command_byte = data[1]
     payload = data[2:-1]
     
     return command_byte, payload
-
 
 async def build_and_send(writer, command: str, payload: bytes = b''):
     """
@@ -112,7 +121,6 @@ async def build_and_send(writer, command: str, payload: bytes = b''):
     await writer.drain()
     log.debug("Sent Command: %s, Raw: %r", command, final_message)
 
-
 async def handle_connection(reader, writer):
     """
     Handle incoming connection, validate blocks, and process events.
@@ -135,7 +143,6 @@ async def handle_connection(reader, writer):
                 is_encrypted_handshake = False
                 if len(data) >= 2 and data[0:2] == b'\x05\x01':
                     is_encrypted_handshake = True
-
                 if is_encrypted_handshake:
                     # --- SPECIAL HANDLING FOR ENCRYPTED HANDSHAKE ---
                     log.error("="*60)
@@ -150,24 +157,19 @@ async def handle_connection(reader, writer):
                     # Do not send anything back. Just break the loop.
                     # The 'finally' block will close the connection.
                     break 
-
                 else:
                     # --- STANDARD HANDLING FOR CORRUPTED DATA ---
                     if len(data) > 0:
                         log.error("Validation failed (length or checksum error). Raw: %r", data)
                     else:
                         log.error("Validation failed (received empty data block).")
-
                     # Send a standard unencrypted REJECT.
                     await build_and_send(writer, 'REJECT')
                     continue # Continue to listen for more data on this connection if any.
-
             command_name = COMMANDS.get(command_byte, f'UNKNOWN(0x{command_byte:02x})')
             log.info("Received Command: %s, Payload: %r", command_name, payload)
-
             if command_name != 'END_OF_DATA':
                 valid_blocks.append({'command': command_name, 'payload': payload})
-
             await build_and_send(writer, 'ACKNOWLEDGE')
             
             if command_name == 'END_OF_DATA':
@@ -192,7 +194,6 @@ async def handle_connection(reader, writer):
             event_chunks.append(current_chunk)
         
         log.info("Found %d distinct event(s) in this connection", len(event_chunks))
-
         for i, chunk in enumerate(event_chunks, 1):
             log.info("--- Processing Event %d of %d ---", i, len(event_chunks))
             
@@ -217,7 +218,6 @@ async def handle_connection(reader, writer):
             )
             
             log.info("--- Event %d complete ---", i)
-
     except Exception as e:
         log.error("Error in connection handler: %s", e, exc_info=True)
     finally:
@@ -227,7 +227,6 @@ async def handle_connection(reader, writer):
             await writer.wait_closed()
         except Exception as e:
             log.error("Error closing connection: %s", e)
-
 
 async def monitor_subprocess(process, name):
     """Monitors a subprocess, parses its log level, and logs its output."""
@@ -241,7 +240,6 @@ async def monitor_subprocess(process, name):
         'ERROR': logging.ERROR,
         'CRITICAL': logging.CRITICAL,
     }
-
     async def log_stream(stream, default_level):
         while not stream.at_eof():
             line = await stream.readline()
@@ -261,7 +259,6 @@ async def monitor_subprocess(process, name):
                     log_level = default_level
                 
                 log.log(log_level, "[%s] %s", name, msg)
-
     await asyncio.gather(
         log_stream(process.stdout, logging.INFO),
         log_stream(process.stderr, logging.ERROR)
@@ -269,9 +266,6 @@ async def monitor_subprocess(process, name):
     
     await process.wait()
     log.warning("Subprocess '%s' (PID: %d) has exited with code %d.", name, process.pid, process.returncode)
-
-
-# In sia-server.py
 
 async def start_servers():
     """Starts the main SIA server and launches the IP Check server as a subprocess."""
@@ -317,11 +311,9 @@ async def start_servers():
             await ip_check_process.wait() # Wait for it to be truly gone
             log.info("IP Check subprocess terminated.")
 
-
 def handle_shutdown(signum, frame):
     log.info("Received shutdown signal (%d), stopping server...", signum)
     sys.exit(0)
-
 
 def main():
     signal.signal(signal.SIGINT, handle_shutdown)
@@ -337,7 +329,6 @@ def main():
     except Exception as e:
         log.error("Server error: %s", e, exc_info=True)
         sys.exit(1)
-
 
 if __name__ == '__main__':
     main()
