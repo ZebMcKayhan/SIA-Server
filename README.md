@@ -188,6 +188,7 @@ This has not been officially tested but should work. The optional `uvloop` depen
     pip install requests pyopenssl cryptography ndg-httpsclient
     ```
     >**Note:** The extra packages are to update SSL to the standard ntfy.sh uses to avoid HTTPS issues. They may not be needed for your particular system.
+    >
     >**Note2:** Depending on how your windows is setup on the network (trusted/public) you may need to add an inbound firewall rule to accept incooming connection on port 10000, 10001.
 3.  Configure `config.py`: Use the same procedure as for Linux, but when selecting a log file path, you will need to use Windows-style paths with escaped backslashes.
     ```python
