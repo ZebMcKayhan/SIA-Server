@@ -271,6 +271,8 @@ async def monitor_subprocess(process, name):
     log.warning("Subprocess '%s' (PID: %d) has exited with code %d.", name, process.pid, process.returncode)
 
 
+# In sia-server.py
+
 async def start_servers():
     """Starts the main SIA server and launches the IP Check server as a subprocess."""
     
@@ -284,37 +286,36 @@ async def start_servers():
     log.info('Listening for events on: %s', sia_addrs)
     
     # --- Launch the optional IP Check Server as a Subprocess ---
-    ip_check_task = None
+    ip_check_process = None
     if config.IP_CHECK_ENABLED:
         try:
-            # Command to run the ip_check.py script using the same Python interpreter
             command = [sys.executable, 'ip_check.py']
             log.info("Launching IP Check server as a subprocess: %s", " ".join(command))
             
-            process = await asyncio.create_subprocess_exec(
+            ip_check_process = await asyncio.create_subprocess_exec(
                 *command,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
             
             # Create a task to monitor the subprocess in the background
-            ip_check_task = asyncio.create_task(monitor_subprocess(process, 'ip_check.py'))
+            asyncio.create_task(monitor_subprocess(ip_check_process, 'ip_check.py'))
             
         except Exception as e:
             log.error("Failed to launch IP Check server subprocess: %s", e)
-            log.error("IP Check feature will be disabled.")
     
     log.info('='*60)
     
-    # Now, run the main SIA server forever
+    # Run the main SIA server forever
     try:
         await sia_server.serve_forever()
     finally:
         # When the main server is shut down, also terminate the subprocess
-        if ip_check_task and process.returncode is None:
+        if ip_check_process and ip_check_process.returncode is None:
             log.info("Terminating IP Check server subprocess...")
-            process.terminate()
-            await ip_check_task # Wait for it to exit
+            ip_check_process.terminate()
+            await ip_check_process.wait() # Wait for it to be truly gone
+            log.info("IP Check subprocess terminated.")
 
 
 def handle_shutdown(signum, frame):
