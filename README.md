@@ -24,7 +24,7 @@ This was developed on a Honeywell Galaxy Flex 20 alarm system. It is quite possi
 ## Prerequisites
 
 -   A Honeywell Galaxy Flex alarm system with an Ethernet module (A083-00-10 or E080-4).
--   A Linux (or Windows) machine on the same network as the alarm system (a Raspberry Pi running OMV or Raspberry Pi OS is perfect).
+-   A Linux or Windows machine on the same network as the alarm system (a Raspberry Pi running Raspberry Pi OS is perfect).
 -   Python 3.
 -   The `python3-requests` package and the optional `python3-uvloop` package (for Linux).
 
@@ -180,7 +180,7 @@ sudo systemctl start sia-server.service
 
 ## Installation & Setup (Windows)
 
-This has not been officially tested but should work. The optional `uvloop` dependency is not available on Windows, and the server will automatically fall back to the standard `asyncio` loop.
+The optional `uvloop` dependency is not available on Windows, and the server will automatically fall back to the standard `asyncio` loop. There are some issues with SSL (HTTPS) with windows, so some additional packages are required for HTTPS to work properly.
 
 1.  Download and install the latest Python 3 from the [official Python website](https://www.python.org/). Make sure to check the box that says "Add Python to PATH" during installation.
 2.  Install Dependencies: Open a Command Prompt (`cmd`) or PowerShell and use `pip`.
