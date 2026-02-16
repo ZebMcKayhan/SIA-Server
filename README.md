@@ -11,7 +11,7 @@ This was developed on a Honeywell Galaxy Flex 20 alarm system. It is quite possi
 
 ## Features
 
--   **Self-Hosted:** Runs on any local Linux machine, like a Raspberry Pi. It should also run on Windows, but this has not been tested.
+-   **Self-Hosted:** Runs on any local Windows or Linux machine, like a Raspberry Pi.
 -   **Real-time Notifications:** Instantly forwards alarm events to your devices.
 -   **Prioritized Alerts:** Uses ntfy.sh priorities to distinguish between urgent alarms (burglary, fire) and routine events (arm/disarm, tests).
 -   **Advanced Notification Routing:** Route notifications for different accounts to different ntfy.sh topics, each with its own authentication (Bearer Token or User/Pass).
