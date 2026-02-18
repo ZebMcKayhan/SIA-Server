@@ -76,7 +76,12 @@ def load_and_validate_config() -> AppConfig:
     
     # --- Validate and load Site sections ---
     seen_accounts = {}
-    site_sections = [s for s in config.sections() if s not in ['SIA-Server', 'IP-Check', 'Logging', 'DEFAULT']]
+    # Get all sections from the config file
+    all_sections = config.sections()
+    # Define our special system sections that are not sites
+    system_sections = ['SIA-Server', 'IP-Check', 'Logging', 'Default']
+    # Filter to get only the true site sections
+    site_sections = [s for s in all_sections if s not in system_sections]
 
     for site_name in site_sections:
         if not config.has_option(site_name, 'account'):
