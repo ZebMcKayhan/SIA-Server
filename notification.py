@@ -14,14 +14,15 @@ from galaxy.parser import GalaxyEvent
 # This is a robust way to ensure the more compatible OpenSSL backend is used,
 # especially on Windows, to prevent intermittent SSLErrors in difficult
 # network environments.
+logging.basicConfig()
+log_pyopenssl = logging.getLogger(__name__)
+
 try:
     import urllib3.contrib.pyopenssl
     urllib3.contrib.pyopenssl.inject_into_urllib3()
-    # Use a basic print here, as logging might not be configured yet when this module is imported.
-    print("Successfully injected PyOpenSSL into urllib3.")
+    log_pyopenssl.info("Successfully injected PyOpenSSL into urllib3.")
 except ImportError:
-    # This is expected on Linux if pyopenssl is not installed.
-    print("PyOpenSSL not available; using default SSL context.")
+    log_pyopenssl.warning("PyOpenSSL not available; using default SSL context.")
 
 log = logging.getLogger(__name__)
 
