@@ -79,23 +79,25 @@ Log into your Galaxy Flex panel's installer menu and configure the Ethernet modu
 -   **Account Number:** Your 4 or 6-digit alarm account number.
 -   **Encryption:** Must be set to **Off**. The proprietary encryption is not supported.
 
-### 4. Configure the Server
-Create and edit the `sia-server.conf` file to match your setup. A template is provided as `sia-server.conf.example`.
+### 4. Get the notification app and subscribe to a topic
+Follow [this link](https://docs.ntfy.sh/#step-1-get-the-app) and follow the instructions for downloading the app and subscribe to a topic. The topic name you choose will be the last part of the address you put in ```sia-server.conf``` file
+
+### 5. Configure the Server
+Edit the `sia-server.conf` file to match your setup. There are several examples in the file to follow.
 ```bash
-cp sia-server.conf.example sia-server.conf
 nano sia-server.conf
 ```
 
 ## Configuration Explained
 The primary configuration is done in `sia-server.conf`. This file is designed to be user-friendly and not sensitive to Python syntax. Advanced settings can be found in `defaults.py`.
 
--   **Site Sections (`[Main House]`):** Each site is defined by a section. The name in brackets becomes the site name. Inside each section:
-    -   `ACCOUNT`: The panel's account number. **This is mandatory.**
+-   **Site Sections (`[012345]`):** Each site is defined by a section. The number in brackets links to the panel account number. Inside each section:
+    -   `SITE_NAME`: The site name to be linked to this panel.
     -   `NTFY_ENABLED`: Set to `Yes` or `No`.
     -   `NTFY_TOPIC`: The URL for the ntfy.sh topic.
     -   `NTFY_TITLE`: The title for notifications from this site.
     -   `NTFY_AUTH`: Can be `None`, `Token`, or `Userpass`. If not `None`, you must also provide the corresponding `NTFY_TOKEN` or `NTFY_USER`/`NTFY_PASS` keys.
--   **`[Default]` Section:** A special section for any events from account numbers not specifically listed.
+-   **`[Default]` Section:** A special section for any events from account numbers not specifically listed. Site name will always be the account number.
 -   **`[SIA-Server]` & `[IP-Check]` Sections:** Configure the ports and addresses for the main server and the optional heartbeat server.
 -   **`[Logging]` Section:** Control the log level and whether output goes to the `Screen` or a `File`.
 
