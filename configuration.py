@@ -125,11 +125,28 @@ def load_and_validate_config() -> AppConfig:
     # Handle the [Default] section for unknown accounts
     if config.has_section('Default'):
         if config.getboolean('Default', 'ntfy_enabled', fallback=False):
-            app_config.NTFY_TOPICS['default'] = {
-                'url': config.get('Default', 'ntfy_topic', fallback=None),
-                'title': config.get('Default', 'ntfy_title', fallback='Galaxy Alarm'),
-                'auth': None # Assuming default is always public
-            }
+            default_topic_config = {}
+            default_topic_config['enabled'] = True
+            default_topic_config['url'] = config.get('Default', 'ntfy_topic', fallback=None)
+            default_topic_config['title'] = config.get('Default', 'ntfy_title', fallback='Galaxy Alarm')
+            
+            # Add full authentication support for the default topic
+            auth_method = config.get('Default', 'ntfy_auth', fallback='None').lower()
+            if auth_method == 'token':
+                token = config.get('Default', 'ntfy_token', fallback=None)
+                if token:
+                    default_topic_config['auth'] = {'method': 'token', 'token': token}
+                else:
+                    log.warning("In section [Default], auth is 'Token' but 'ntfy_token' is missing.")
+            elif auth_method == 'userpass':
+                user = config.get('Default', 'ntfy_user', fallback=None)
+                password = config.get('Default', 'ntfy_pass', fallback=None)
+                if user and password:
+                    default_topic_config['auth'] = {'method': 'userpass', 'user': user, 'pass': password}
+                else:
+                    log.warning("In section [Default], auth is 'Userpass' but user/pass is incomplete.")
+            
+            app_config.NTFY_TOPICS['default'] = default_topic_config
 
     log.info("Configuration loaded and validated successfully.")
     return app_config
