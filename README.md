@@ -75,8 +75,8 @@ sudo apt install python3-requests python3-uvloop
 Log into your Galaxy Flex panel's installer menu and configure the Ethernet module to send SIA notifications to your server:
 -   **ARC IP Address:** The IP address of the machine running `sia-server.py` (e.g., `192.168.128.10`).
 -   **ARC Port:** The port configured in `sia-server.conf` (default is `10000`).
--   **Protocol:** SIA (Level 2 or 3 are supported).
--   **Account Number:** Your 4 or 6-digit alarm account number.
+-   **Protocol:** SIA (Level 0-3 are supported) Level 3 is recommended for best notification details.
+-   **Account Number:** Your 4 or 6-digit alarm account number (SIA level 3 requires 6-digit).
 -   **Encryption:** Must be set to **Off**. The proprietary encryption is not supported.
 
 ### 4. Get the notification app and subscribe to a topic
