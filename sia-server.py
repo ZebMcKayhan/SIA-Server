@@ -7,7 +7,7 @@ Honeywell Galaxy Flex alarm systems. It sends notifications via ntfy.sh.
 This server is configured via 'sia-server.conf' and 'defaults.py'.
 """
 # --- Application Version ---
-__version__ = "1.6.0-beta"
+__version__ = "1.5.0-beta"
 
 import asyncio
 import logging
