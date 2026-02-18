@@ -7,7 +7,7 @@ Honeywell Galaxy Flex alarm systems. It sends notifications via ntfy.sh.
 This server is configured via 'sia-server.conf' and 'defaults.py'.
 """
 # --- Application Version ---
-__version__ = "1.5.0-beta"
+__version__ = "1.6.0-beta"
 
 import asyncio
 import logging
@@ -21,7 +21,7 @@ import signal
 from configuration import load_and_validate_config
 
 # 2. Load and validate all configuration from files.
-# This single 'config' object will now hold all settings for the application.
+# This single 'config' object now holds all settings for the application.
 config = load_and_validate_config()
 
 # 3. Define the logging setup function.
@@ -119,10 +119,7 @@ async def handle_connection(reader, writer):
             command_byte, payload = validate_and_strip(data)
             
             if command_byte is None:
-                is_encrypted_handshake = False
                 if len(data) >= 2 and data[0:2] == b'\x05\x01':
-                    is_encrypted_handshake = True
-                if is_encrypted_handshake:
                     log.error("="*60)
                     log.error("ENCRYPTION DETECTED - UNSUPPORTED")
                     log.error("The panel at IP address '%s' has encryption enabled.", addr[0])
@@ -177,6 +174,7 @@ async def handle_connection(reader, writer):
             description = event.action_text or event.event_description
             log.info("Event: %s (%s)", event.event_code, description)
             
+            # This call is now simpler
             send_notification(
                 event,
                 config.NTFY_TOPICS,
@@ -197,7 +195,6 @@ async def handle_connection(reader, writer):
 
 async def monitor_subprocess(process, name):
     """Monitors a subprocess, parses its log level, and logs its output."""
-    # ... (This function is correct and doesn't need changes)
     log.info("Monitoring subprocess '%s' (PID: %d)", name, process.pid)
     LEVEL_MAP = {'DEBUG': logging.DEBUG, 'INFO': logging.INFO, 'WARNING': logging.WARNING, 'ERROR': logging.ERROR, 'CRITICAL': logging.CRITICAL}
     async def log_stream(stream, default_level):
