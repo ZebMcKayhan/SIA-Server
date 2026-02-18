@@ -63,45 +63,48 @@ def format_notification_text(event: GalaxyEvent) -> str:
     return notification
 
 def send_notification(event: GalaxyEvent, ntfy_topics: Dict, priority_map: Dict, 
-                     default_priority: int, enabled: bool, notification_title: str) -> bool:
+                     default_priority: int) -> bool:
     """Sends a formatted notification for a Galaxy event to ntfy.sh."""
-    
-    if not enabled:
-        log.debug("Notifications are disabled in config, skipping.")
-        return False
-        
+
+    # 1. Find the correct topic configuration for this event's account                         
     topic_config = ntfy_topics.get(event.account, ntfy_topics.get('default'))
     
-    if not topic_config or not topic_config.get('url') or 'your-topic-here' in topic_config.get('url'):
-        log.warning("No valid ntfy.sh URL found for account '%s' or default. Skipping.", event.account)
+    # Check if notifications are enabled for this specific topic
+    if not topic_config or not topic_config.get('enabled', False):
+        log.debug("Notifications disabled for account '%s' or default. Skipping.", event.account)
         return False
     
-    ntfy_url = topic_config['url']
-    auth_config = topic_config.get('auth') # This will be the auth dict or None
-    
+    ntfy_url = topic_config['url']                      
+    if not ntfy_url or 'your-topic-here' in ntfy_url:
+        log.warning("No valid ntfy.sh URL found for account '%s' or default. Skipping.", event.account)
+        return False
+            
     if not event.event_code:
         log.warning("Event has no event_code, cannot determine priority. Skipping notification.")
         return False
 
     message = format_notification_text(event)
     priority = get_event_priority(event.event_code, priority_map, default_priority)
-    title = f"{notification_title}: {event.site_name or 'Unknown'}"
+
+    notification_title = topic_config.get('title', 'Galaxy Alarm')
+    title = f"{notification_title}: {event.site_name or event.account}"
     
     headers = {
         "Title": title,
         "Priority": str(priority),
     }
+
+    auth_config = topic_config.get('auth')
     auth_details = None
     if auth_config:
+        # ... (your auth parsing logic here is already perfect)
         log.debug("ntfy.sh authentication is configured for this topic.")
         method = auth_config.get('method')
-        
         if method == 'token':
             token = auth_config.get('token')
             if token:
                 headers['Authorization'] = f"Bearer {token}"
                 log.debug("Using Bearer token authentication.")
-        
         elif method == 'userpass':
             user = auth_config.get('user')
             password = auth_config.get('pass')
