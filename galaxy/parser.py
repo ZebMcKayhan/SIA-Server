@@ -141,8 +141,8 @@ def parse_galaxy_event(blocks: List[Dict], account_sites: Dict,
     Args:
         blocks: A list of dicts, each with 'command' and a clean 'payload'.
         account_sites: Dict mapping account numbers to site names.
-        default_site: Default site name if account not found.
         char_map: Custom character mapping dictionary.
+        event_code_descriptions: Dict mapping event codes to descriptions.
         
     Returns:
         A populated GalaxyEvent object.
