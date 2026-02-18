@@ -101,6 +101,7 @@ def load_and_validate_config() -> AppConfig:
         # Build NTFY_TOPICS map
         if config.getboolean(site_name, 'ntfy_enabled', fallback=False):
             topic_config = {}
+            topic_config['enabled'] = True # Add the enabled flag to the dictionary
             topic_config['url'] = config.get(site_name, 'ntfy_topic', fallback=None)
             topic_config['title'] = config.get(site_name, 'ntfy_title', fallback='Galaxy Alarm')
             
