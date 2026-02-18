@@ -44,7 +44,7 @@ def load_and_validate_config() -> AppConfig:
     Reads sia-server.conf, validates its contents, and returns a final
     AppConfig object.
     """
-    config = configparser.ConfigParser()
+    config = configparser.ConfigParser(inline_comment_prefixes=('#', ';'))
     config.read('sia-server.conf')
     
     app_config = AppConfig()
