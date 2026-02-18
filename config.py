@@ -2,100 +2,17 @@
 Galaxy SIA Server Configuration
 
 User-configurable settings for the SIA server.
+
+Note: Most configuration moved to sia-server.conf.
+      Left here are more complex configs, like EC priorities, Log format details and charachter encoding.
+      This file is still in python format and very strict about formatting, indentation and such.
+      Edit the file with care.
 """
-
-# ============================================
-# SERVER CONFIGURATION
-# ============================================
-
-# Server listening address
-# Use '0.0.0.0' to listen on all interfaces
-# Use '127.0.0.1' to listen only locally
-LISTEN_ADDR = '0.0.0.0'
-
-# Server listening port
-# Default SIA port is 10000
-LISTEN_PORT = 10000
-
-# ============================================
-# IP CHECK (HEARTBEAT) SERVER CONFIGURATION
-# ============================================
-
-# Set to True to enable the optional IP Check server.
-# This responds to the proprietary Honeywell heartbeat pings.
-IP_CHECK_ENABLED = True
-
-# The IP address and port for the IP Check server to listen on.
-# This must match the secondary "IP Check" port configured in the alarm panel.
-IP_CHECK_ADDR = '0.0.0.0'
-IP_CHECK_PORT = 10001
-
-# ============================================
-# ACCOUNT MAPPING
-# ============================================
-
-# Map account numbers to site names
-# Add your alarm system account numbers here
-# If account number does not exist in the list, it will just use the account number for log and notification.
-ACCOUNT_SITES = {
-    '023456': 'Main House',
-    # Add more accounts if monitoring multiple sites:
-    # '987654': 'Cabin',
-    # '758432': 'Office',
-}
 
 # ============================================
 # NOTIFICATION CONFIGURATION
 # ============================================
 
-# ntfy.sh configuration
-NTFY_ENABLED = True #True / False
-NOTIFICATION_TITLE = 'Galaxy FLEX'
-
-# --- Notification Routing ---
-# Define how notifications are sent. Each account number can be mapped to a
-# specific ntfy.sh topic with its own authentication details.
-
-NTFY_TOPICS = {
-    # --- Example 1: A simple, public topic for a single user ---
-    'default': {
-        'url': 'https://ntfy.sh/my-public-alarm-topic',
-        'auth': None, # No authentication needed
-    },
-
-# --- Example 2: A multi-user setup with different private topics ---
-    # '027978': { # My Home (Private, using a token)
-    #     'url': 'https://ntfy.sh/my-private-home-topic',
-    #     'auth': {
-    #         'method': 'token',
-    #         'token': 'tk_secrettokenformyhome_abc123'
-    #     }
-    # },
-    # '123456': { # Friend's Cabin (Private, using user/pass)
-    #     'url': 'https://ntfy.sh/friends-private-cabin',
-    #     'auth': {
-    #         'method': 'userpass',
-    #         'user': 'friend_user',
-    #         'pass': 'friend_password'
-    #     }
-    # },
-    # '789012': { # Another friend's public topic
-    #     'url': 'https://ntfy.sh/another-friend-public',
-    #     'auth': None # Explicitly no authentication
-    # },
-    # 'default': { # For any unknown accounts
-    #     'url': 'https://ntfy.sh/unknown-alarm-logs',
-    #     'auth': None
-    # }
-}
-# Event code to notification priority mapping
-# Priority levels (ntfy.sh):
-#   1 = Min (no notification, no sound)
-#   2 = Low (no sound)
-#   3 = Default (sound)
-#   4 = High (sound + popup)
-#   5 = Urgent (sound + popup + vibration)
-#
 # Only codes listed here will have custom priority.
 # All other codes default to priority 5 (urgent - safest for unknown alarms)
 EVENT_PRIORITIES = {
@@ -135,20 +52,6 @@ DEFAULT_PRIORITY = 5  # Urgent - better safe than sorry!
 # ============================================
 # LOGGING CONFIGURATION
 # ============================================
-
-# Logging level: DEBUG, INFO, WARNING, ERROR
-# DEBUG: Detailed information for diagnosing problems
-# INFO: General informational messages
-# WARNING: Warning messages
-# ERROR: Error messages only
-LOG_LEVEL = 'INFO'
-
-# Log to file (True) or console/screen (False)
-LOG_TO_FILE = False # True / False
-
-# Log file path (only used if LOG_TO_FILE = True)
-# Note, Windows users will need to escape \ like this: 'C:\\Temp\\sia-server.log'
-LOG_FILE = '/tmp/sia-server.log'
 
 # Log file rotation settings
 # Maximum log file size in bytes (10MB default)
