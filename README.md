@@ -178,8 +178,6 @@ sudo systemctl start sia-server.service
 
 ## Installation & Setup (Windows)
 
-This has not been officially tested but should work.
-
 1.  Install Python 3 from the [official Python website](https://www.python.org/).
 2.  Install dependencies: Open PowerShell and run:
     ```powershell
