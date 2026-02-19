@@ -71,7 +71,11 @@ cd sia-server
 This server requires Python 3. The installation steps are different for Linux and Windows.
 
 #### For Linux (e.g., Raspberry Pi, Debian, Ubuntu)
-1.  **Install Python (if needed):** Most modern Linux systems come with Python 3 pre-installed. You can check with `python3 --version`.
+1.  **Install Python (if needed):** Most modern Linux systems come with Python 3 pre-installed. You can check with `python3 --version`. If you need to install it
+    ```bash
+    sudo apt update
+    sudo apt install python3
+    ```
 2.  **Install Dependencies:** Use `apt` to install the required packages. `uvloop` is an optional performance enhancement.
     ```bash
     sudo apt update
@@ -80,7 +84,7 @@ This server requires Python 3. The installation steps are different for Linux an
 
 #### For Windows
 1.  **Install Python:** Download and install the latest Python 3 from the [official Python website](https://www.python.org/). **Important:** During installation, make sure to check the box that says "Add Python to PATH".
-2.  **Install Dependencies:** Open a **PowerShell** or **Command Prompt** and use `pip`. It is strongly recommended to use `python -m pip` to ensure you are installing packages for the correct Python interpreter.
+2.  **Install Dependencies:** Open a **PowerShell** or **Command Prompt**. It is strongly recommended to use `python -m pip` to ensure you are installing packages for the correct Python interpreter.
     ```powershell
     python -m pip install requests pyopenssl cryptography ndg-httpsclient
     ```
@@ -149,7 +153,7 @@ Press `Ctrl+C` to stop.
     [Install]
     WantedBy=multi-user.target
     ```
-    > **Note:** You may need to add firewall rules (e.g., via `ExecStartPre=`). If your firewall commands require root, you may need to remove or comment out the `User=pi` directive.
+    > **Note:** You may need to add firewall rules (e.g., via `ExecStartPre=` & `ExecStopPost=`). If your firewall commands require root, you may need to remove or comment out the `User=pi` directive.
 3.  **Enable and Start:**
     ```bash
     sudo systemctl daemon-reload
@@ -175,7 +179,7 @@ Press `Ctrl+C` to stop.
 
 #### As a Service (Recommended)
 > **Note:** Set `LOG_TO = File` in `sia-server.conf` to keep a persistent log.
-1.  Download **NSSM**.
+1.  Download [**NSSM**](https://github.com/dkxce/NSSM/releases).
 2.  Open a Command Prompt **as an Administrator**.
 3.  Run the installer: `C:\path\to\nssm.exe install SIA-Server`
 4.  In the GUI that pops up:
@@ -200,12 +204,15 @@ The communication between your alarm panel and this server is **unencrypted**. R
     -   **Use a long, unguessable topic name.**
     -   **Use a private, access-controlled topic.** You can get one by subscribing to `ntfy.sh Pro` or by self-hosting your own `ntfy.sh` server. This server fully supports authentication via the `NTFY_AUTH` settings.
     -   **Consider a generic Site Name** that cannot be linked to your address.
+    -   Alternatively: **Subscribe to NTFY.sh PRO** to setup private channels with authentication.
+    -   Alternatively: **Host NTFY yourself** to be able to setup private channels free of charge (Requires a machine with public ip)
 
 **Disclaimer:** You are ultimately responsible for securing your own setup.
 
 ## Acknowledgments
 -   This project was developed through a collaborative effort with Anthropic's AI assistant, Claude.
 -   The initial socket server structure was inspired by the [nimnull/sia-server](https://github.com/nimnull/sia-server) project.
+-   Some protocol information was found in [dklemm/FlexSIA2MQTT](https://github.com/dklemm/FlexSIA2MQTT) project
 
 ## License
 This project is licensed under the MIT License.
