@@ -4,7 +4,7 @@ A lightweight, self-hosted Python server to receive proprietary SIA protocol mes
 
 This project was created to replace the discontinued free push notification service, giving users full control over their alarm notifications without ongoing costs.
 
-This was developed on a Honeywell Galaxy Flex 20 alarm system. It is quite possible that it will work for other Honeywell Galaxy alarm systems, but this has not been tested.
+This was developed on a Honeywell Galaxy Flex 20 alarm system. It is highly likely that it will work for other Honeywell Galaxy alarm systems, but this has not been tested.
 
 > **IMPORTANT SECURITY NOTICE**
 > The communication between the alarm panel and this server is **unencrypted**. This server is designed to be run on a trusted local network only. Please read the full [Security & Privacy Guidelines](#security--privacy-guidelines) before installation.
@@ -13,17 +13,17 @@ This was developed on a Honeywell Galaxy Flex 20 alarm system. It is quite possi
 
 -   **Self-Hosted:** Runs on any local Windows or Linux machine, like a Raspberry Pi.
 -   **Real-time Notifications:** Instantly forwards alarm events to your devices.
--   **Prioritized Alerts:** Uses ntfy.sh priorities to distinguish between urgent alarms (burglary, fire) and routine events (arm/disarm, tests).
+-   **Prioritized Alerts:** Uses ntfy.sh priorities to distinguish between urgent alarms and routine events.
 -   **Advanced Notification Routing:** Route notifications for different accounts to different ntfy.sh topics, each with its own authentication (Bearer Token or User/Pass).
--   **Robust Protocol Handling:** Correctly parses the multi-message protocol used by Galaxy Flex panels, including handling multiple events in a single connection.
+-   **Robust Protocol Handling:** Correctly parses the multi-message protocol used by Galaxy Flex panels.
 -   **Broad SIA Level Support:** The flexible parser can correctly handle event data from SIA Levels 0, 1, 2, and 3.
--   **Optional Heartbeat Server:** Includes a separate, optional server to correctly handle the proprietary Honeywell "IP Check" heartbeat, ensuring full panel compatibility without generating errors.
--   **Character Encoding Fixes:** Decodes the proprietary character set used by Galaxy panels to correctly display special characters (e.g., Å, Ä, Ö).
--   **Highly Configurable:** All settings, including account names, notification priorities, and logging, are in a single `config.py` file.
+-   **Optional Heartbeat Server:** Includes an optional server to handle the proprietary Honeywell "IP Check" heartbeat.
+-   **Character Encoding Fixes:** Decodes the proprietary character set used by Galaxy panels (e.g., Å, Ä, Ö).
+-   **Highly Configurable:** Most settings are in a simple `sia-server.conf` file, with advanced settings in `defaults.py`.
 
 ## Prerequisites
 
--   A Honeywell Galaxy Flex alarm system with an Ethernet module (A083-00-10 or E080-4).
+-   A Honeywell Galaxy Flex alarm system with an Ethernet module (e.g., A083-00-10 or E080-4).
 -   A Linux or Windows machine on the same network as the alarm system (a Raspberry Pi running Raspberry Pi OS is perfect).
 -   Python 3.
 -   The `python3-requests` package and the optional `python3-uvloop` package (for Linux).
@@ -34,199 +34,185 @@ The project is structured to separate the server logic, protocol parsing, and co
 ```
 .
 ├── sia-server.py           # The main server application
-├── config.py               # All user settings are here!
-├── notification.py         # Handles formatting and sending of notifications
-├── ip_check.py             # Subprocess for answering the panel IP-Checks (Heartbeats)
-├── README.md               # Installation and usage instructions.
+├── sia-server.conf         # Main user configuration file.
+├── defaults.py             # Advanced settings and constants.
+├── configuration.py        # Loads and validates all configuration.
+├── notification.py         # Handles formatting and sending of notifications.
+├── ip_check.py             # Optional subprocess for answering heartbeats.
+├── README.md               # This file.
 └── galaxy/
-    ├── README.md           # Description of the SIA over TCP protocol.  
-    ├── parser.py           # Handles parsing of the Galaxy SIA protocol
-    └── constants.py        # Constants used in the SIA protocol
+    ├── __init__.py
+    ├── README.md           # Technical description of the protocol.  
+    ├── parser.py           # Handles parsing of the Galaxy SIA protocol.
+    └── constants.py        # Constants used in the SIA protocol.
 ```
 
-## Installation & Setup (Linux)
+## Installation & Setup
 
-### 1. Clone the Repository
-You have two options for downloading the code.
+This guide will walk you through the five main steps to get your server running.
 
-**Option A: Download the Latest Stable Release (Recommended)**
-
+### Step 1: Download the Server Code
+The recommended way is to download the latest stable release.
 1.  Go to the [Releases page](https://github.com/ZebMcKayhan/SIA-Server/releases) on GitHub.
 2.  Under the latest release, download the `Source code (zip)` file.
-3.  Unzip the file on your server.
+3.  Unzip the file to your chosen directory (e.g., `/home/pi/Scripts/sia-server` on Linux or `C:\siaserver` on Windows).
 
-**Option B: Clone via Git (for developers)**
+<details>
+<summary>For Developers: Cloning with Git</summary>
 
-This will get you the very latest development version from the `main` branch.
-
+If you want the latest development code, you can clone the repository directly:
 ```bash
 git clone https://github.com/ZebMcKayhan/SIA-Server.git sia-server
 cd sia-server
 ```
+</details>
 
-### 2. Install Dependencies
-The script relies on `requests` for sending notifications and `uvloop` (optional for Linux) for high-performance networking. Install them using `apt`.
+### Step 2: Install Python and Dependencies
+This server requires Python 3. The installation steps are different for Linux and Windows.
+
+#### For Linux (e.g., Raspberry Pi, Debian, Ubuntu)
+1.  **Install Python (if needed):** Most modern Linux systems come with Python 3 pre-installed. You can check with `python3 --version`. If you need to install it
+    ```bash
+    sudo apt update
+    sudo apt install python3
+    ```
+2.  **Install Dependencies:** Use `apt` to install the required packages. `uvloop` is an optional performance enhancement.
+    ```bash
+    sudo apt update
+    sudo apt install python3-requests python3-uvloop
+    ```
+
+#### For Windows
+1.  **Install Python:** Download and install the latest Python 3 from the [official Python website](https://www.python.org/). **Important:** During installation, make sure to check the box that says "Add Python to PATH".
+2.  **Install Dependencies:** Open a **PowerShell** or **Command Prompt**. It is strongly recommended to use `python -m pip` to ensure you are installing packages for the correct Python interpreter.
+    ```powershell
+    python -m pip install requests pyopenssl cryptography ndg-httpsclient
+    ```
+    > **Note:** The extra packages (`pyopenssl`, etc.) are highly recommended to avoid potential HTTPS/SSL errors when sending notifications from Windows.
+
+### Step 3: Get the Notification App and Topic
+Before configuring the server, get the ntfy.sh app on your phone or computer.
+1.  Follow the instructions at the [ntfy.sh documentation](https://docs.ntfy.sh/subscribe/phone/) to get the app.
+2.  Inside the app, subscribe to a new topic. **Choose a long, random, unguessable name** for your topic to keep it private (e.g., `alarm-skUHvisapP2J382MDI2`).
+3.  You will use the full URL of this topic (e.g., `https://ntfy.sh/alarm-skUHvisapP2J382MDI2`) in the configuration file.
+
+### Step 4: Configure Your Alarm Panel
+Log into your Galaxy Flex panel's installer menu and configure the Ethernet module. The numbers in parentheses are the menu codes for a Galaxy Flex 20.
+-   **ARC IP Address:** The IP of the machine running `sia-server.py` (e.g., `192.168.128.10`). (Menu `56.1.1.1.4.1`)
+-   **ARC Port:** The port for the `[SIA-Server]` and optionally the `[IP-Check]` server. (Menu `56.1.1.1.4.1`)
+-   **Protocol:** SIA. Levels 0-3 are supported; Level 3 is recommended for the most detail. (Menu `56.1.1.1.4.2`)
+-   **Account Number:** Your 4 or 6-digit alarm account number. SIA Level 3 requires 6 digits. (Menu `56.1.2.1.1`)
+-   **Encryption:** Must be set to **Off**. The proprietary encryption is not supported. (Menu `56.3.3.5`)
+-   **IP-Check:** (Optional) To use the heartbeat feature, enable it by setting a time interval (e.g., 00:30 for 30 minutes). `00:00` means disabled. (Menu `56.3.3.7.1`)
+-   **Eng. Test:** Use this to send a test notification without generating a fault. (Menu `56.7.1`)
+
+### Step 5: Configure the Server
+Edit the `sia-server.conf` file to match your setup. The file is pre-populated with examples to guide you.
 ```bash
-sudo apt update
-sudo apt install python3-requests python3-uvloop
+# On Linux
+nano /path/to/your/sia-server/sia-server.conf
 ```
-> **Note:** It is recommended to use `apt` instead of `pip` on Raspberry Pi OS / Debian systems to avoid environment conflicts.
-
-### 3. Configure Your Alarm Panel
-Log into your Galaxy Flex panel's installer menu and configure the Ethernet module to send SIA notifications to your server:
--   **ARC IP Address:** The IP address of the machine running `sia-server.py` (e.g., `192.168.128.10`).
--   **ARC Port:** The port configured in `config.py` (default is `10000`).
--   **Protocol:** SIA (Level 2 or 3 are supported).
--   **Account Number:** Your 4 or 6-digit alarm account number.
--   **Encryption:** Must be set to **Off**. The proprietary encryption is not supported.
-
-### 4. Configure the Server
-Edit the `config.py` file to match your setup. This is the only file you need to modify.
-```bash
-nano config.py
-```
+On Windows, simply edit the file with a text editor like Notepad.
 
 ## Configuration Explained
--   `LISTEN_ADDR` & `LISTEN_PORT`: The IP and port the main SIA event server listens on.
--   `IP_CHECK_ENABLED`, `IP_CHECK_ADDR`, `IP_CHECK_PORT`: (Optional) Settings to enable and configure the separate heartbeat server for compatibility with the panel's "IP Check" feature.
--   `ACCOUNT_SITES`: Map your alarm's account number to a friendly site name. If an account is not mapped, the script will use the account number as the site name.
-    ```python
-    ACCOUNT_SITES = {
-        '090909': 'Main House',
-        '123456': 'Summer House', # Example for a second site
-    }
-    ```
--   `NOTIFICATION_TITLE`: The title of your push notifications (e.g., "Galaxy FLEX", "Home Alarm").
--   `NTFY_TOPICS`: Configure your ntfy.sh notification destinations. This flexible dictionary allows you to set up a simple 'default' topic for all alerts, or define specific topics for each account number. You can also configure authentication (Bearer Token or User/Pass) on a per-topic basis for private channels.
--   `EVENT_PRIORITIES`: Customize the priority for different events. Any event code not listed here will default to `DEFAULT_PRIORITY`. This is pre-configured with safe defaults.
--   `UNKNOWN_CHAR_MAP`: If your alarm uses special characters that don't display correctly, you can add their byte-to-character mappings here. The common Swedish characters are already included.
--   `LOGGING`: Configure logging level and output for the main SIA server.
-
-## Security & Privacy Guidelines
-Please read these guidelines carefully to ensure you are using this software securely.
-
-**1. Local Network Communication (Alarm Panel to Server)**
-
-The communication between your alarm panel and the `sia-server` is **unencrypted**. Therefore, it is strongly recommended to run this server on the same trusted, local network (LAN) as your alarm panel.
-
-> **Warning:** Do not expose the `sia-server`'s listening port directly to the public internet. Doing so would allow an attacker to potentially monitor when your alarm is armed or disarmed, or to send fake alarm/disarm events.
-
-If you plan on hosting this server on a cloud machine for yourself or for friends, you **must** secure the connection using a **VPN (Virtual Private Network)** like WireGuard or OpenVPN. The alarm panel should connect to the server through the secure VPN tunnel, not over the public internet.
-
-**2. Notification Privacy (Server to ntfy.sh)**
-
--   **Transport Security:** The communication from the server to ntfy.sh uses **HTTPS**, so the content of your notifications is encrypted and secure in transit.
--   **Topic Privacy:** By default, ntfy.sh topics are public. Anyone who knows your topic name can subscribe to your notifications. To secure this:
-    -   **Use a long, unguessable topic name.** Treat your ntfy.sh topic name like a password. Instead of `my-home-alarm`, use a randomly generated string like `alarm-skUHvisapP2J382MDI2`.
-    -   **Consider your Site Name.** For added privacy, you can choose a generic `site_name` in your `config.py` (e.g., "Site A") that cannot be easily linked back to your physical address.
-    -   **Alternatively, host ntfy.sh yourself** By hosting the notification server yourself you could secure your topics.
-    -   **Alternatively, purchase ntfy.sh pro** By paying a subscription you can use login or token to create and access private topics. `config.py` and `notification.py` is prepared for this already.
-
-**Disclaimer:** By following these guidelines, you can significantly improve the security and privacy of your notification system. However, you are ultimately responsible for securing your own setup.
+The primary configuration is done in `sia-server.conf`. Advanced settings (like event priorities and character maps) can be found in `defaults.py`.
+-   **Site Sections (`[012345]`):** Each site is defined by a section where the header is the panel's unique **Account Number**.
+    -   `SITE_NAME`: A friendly name for the site (e.g., "Main House"). If omitted, the account number is used.
+    -   `NTFY_ENABLED`, `NTFY_TOPIC`, `NTFY_TITLE`: Configure notification delivery for this site.
+    -   `NTFY_AUTH`: Set to `None`, `Token`, or `Userpass` for private topics and provide the corresponding `NTFY_TOKEN` or `NTFY_USER`/`NTFY_PASS` keys.
+-   **`[Default]` Section:** A special section for events from account numbers not specifically listed.
+-   **`[SIA-Server]` & `[IP-Check]` Sections:** Configure the ports and addresses for the main server and the optional heartbeat server.
+-   **`[Logging]` Section:** Control the log level (`DEBUG`, `INFO`) and whether output goes to the `Screen` or a `File`.
 
 ## Usage
+### For Linux
 
-### For Testing (Manual Start)
-You can run the server directly from your terminal to watch the logs in real-time.
+#### Manual Start (for testing)
+> **Note:** It's convenient to set `LOG_TO = Screen` in `sia-server.conf` to see live events in your terminal.
 ```bash
+cd /path/to/your/sia-server
 python3 sia-server.py
 ```
-Press `Ctrl+C` to stop the server.
+Press `Ctrl+C` to stop.
 
-### As a Service (Recommended for Production)
-Setting up a `systemd` service is the best way to ensure the server runs reliably in the background and starts automatically on boot.
-
-**1. Create the Service File:**
-```bash
-sudo nano /etc/systemd/system/sia-server.service
-```
-**2. Paste this content.** **IMPORTANT:** You must change the paths in `WorkingDirectory` and `ExecStart` to match where you cloned the repository.
-```ini
-[Unit]
-Description=Galaxy SIA Alarm Server
-After=network.target
-
-[Service]
-Type=simple
-User=pi
-
-# IMPORTANT: Change this path to where your sia-server.py is located
-WorkingDirectory=/home/pi/Scripts/sia-server
-
-# IMPORTANT: Change this path to your Python interpreter and script
-ExecStart=/usr/bin/python3 /home/pi/Scripts/sia-server/sia-server.py
-
-Restart=on-failure
-RestartSec=5s
-
-[Install]
-WantedBy=multi-user.target
-```
-> **Note:** Depending on your system, you may need to add firewall rules. This can typically be done via `ExecStartPre=`. If your firewall commands require root, you may need to remove or comment out the `User=pi` directive.
-
-**3. Enable and Start the Service:**
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable sia-server.service
-sudo systemctl start sia-server.service
-```
-
-### Managing the Service
--   **Check status & recent logs:** `sudo systemctl status sia-server.service`
--   **Stop the service:** `sudo systemctl stop sia-server.service`
--   **Start the service:** `sudo systemctl start sia-server.service`
--   **Restart the service:** `sudo systemctl restart sia-server.service`
--   **View live logs:** `journalctl -u sia-server.service -f` (if not logging to a file) or `tail -f /path/to/your/log/file.log` (if logging to a file).
-
-## Installation & Setup (Windows)
-
-The optional `uvloop` dependency is not available on Windows, and the server will automatically fall back to the standard `asyncio` loop. There are some issues with SSL (HTTPS) with windows, so some additional packages are required for HTTPS to work properly.
-
-1.  Download and install the latest Python 3 from the [official Python website](https://www.python.org/). Make sure to check the box that says "Add Python to PATH" during installation.
-2.  Install Dependencies: Open a Command Prompt (`cmd`) or PowerShell and use `pip`.
-    ```powershell
-    pip install requests pyopenssl cryptography ndg-httpsclient
+#### As a Service (Recommended)
+> **Note:** Set `LOG_TO = File` in `sia-server.conf` to keep a persistent log.
+1.  **Create the Service File:** `sudo nano /etc/systemd/system/sia-server.service`
+2.  **Paste this content**, changing the paths in `WorkingDirectory` and `ExecStart`.
+    ```ini
+    [Unit]
+    Description=Galaxy SIA Alarm Server
+    After=network.target
+    [Service]
+    Type=simple
+    User=pi
+    WorkingDirectory=/home/pi/Scripts/sia-server
+    ExecStart=/usr/bin/python3 /home/pi/Scripts/sia-server/sia-server.py
+    Restart=on-failure
+    RestartSec=5s
+    [Install]
+    WantedBy=multi-user.target
     ```
-    >**Note:** The extra packages are to update SSL to the standard ntfy.sh uses to avoid HTTPS issues. They may not be needed for your particular system.
-    >
-    >**Note2:** Depending on how your windows is setup on the network (trusted/public) you may need to add an inbound firewall rule to accept incooming connection on port 10000, 10001.
-3.  Configure `config.py`: Use the same procedure as for Linux, but when selecting a log file path, you will need to use Windows-style paths with escaped backslashes.
-    ```python
-    LOG_FILE = 'C:\\Temp\\sia-server.log'
+    > **Note:** You may need to add firewall rules (e.g., via `ExecStartPre=` & `ExecStopPost=`). If your firewall commands require root, you may need to remove or comment out the `User=pi` directive.
+3.  **Enable and Start:**
+    ```bash
+    sudo systemctl daemon-reload
+    sudo systemctl enable sia-server.service
+    sudo systemctl start sia-server.service
     ```
-4.  Running the Server on Windows: You have two main options, similar to Linux.
+4.  **Manage:**
+    -   **Check status & recent logs:** `sudo systemctl status sia-server.service`
+    -   **Stop the service:** `sudo systemctl stop sia-server.service`
+    -   **Start the service:** `sudo systemctl start sia-server.service`
+    -   **Restart the service:** `sudo systemctl restart sia-server.service`
+    -   **View live logs:** `journalctl -u sia-server.service -f` (if not logging to a file) or `tail -f /path/to/your/log/file.log` (if logging to a file).
 
-### For Testing (Manual Start)
-Just open a Command Prompt, navigate to your script's directory, and run it.
+### For Windows
+
+#### Manual Start (for testing)
+> **Note:** Set `LOG_TO = Screen` in `sia-server.conf` to see live events.
 ```powershell
 cd C:\path\to\your\sia-server
 python sia-server.py
 ```
-Pressing `Ctrl+C` will stop the server.
+Press `Ctrl+C` to stop.
 
-### As a Service (Recommended for Production)
-Windows uses "Services" instead of `systemd`. A popular tool for this is NSSM (the Non-Sucking Service Manager).
-
-1.  Download **NSSM**.
+#### As a Service (Recommended)
+> **Note:** Set `LOG_TO = File` in `sia-server.conf` to keep a persistent log.
+1.  Download [**NSSM**](https://github.com/dkxce/NSSM/releases).
 2.  Open a Command Prompt **as an Administrator**.
-3.  Run the NSSM installer:
-    ```powershell
-    C:\path\to\nssm.exe install SIA-Server
-    ```
-4.  A GUI window will pop up. Fill in the tabs:
-    -   **Application Tab:**
-        -   **Path:** Browse to your Python executable (e.g., `C:\Python312\python.exe`).
-        -   **Startup directory:** Browse to the folder containing your script (e.g., `C:\path\to\your\sia-server`).
-        -   **Arguments:** `sia-server.py`
-    -   **Details Tab:** Set a Display Name and Description.
-5.  Click **Install service**.
+3.  Run the installer: `C:\path\to\nssm.exe install SIA-Server`
+4.  In the GUI that pops up:
+    -   **Path:** Browse to your Python executable (e.g., `C:\Python312\python.exe`).
+    -   **Startup directory:** Browse to your script folder.
+    -   **Arguments:** `sia-server.py`
+5.  Click **Install service**. You can now manage it from the Windows Services app (`services.msc`).
 
-You can now manage it from the Windows Services app (`services.sc`) or via the `nssm` command line (e.g., `nssm start SIA-Server`).
+## Security & Privacy Guidelines
+Please read these guidelines carefully.
+
+**1. Local Network Communication (Panel to Server)**
+
+The communication between your alarm panel and this server is **unencrypted**. Run it on a trusted local network (LAN).
+
+> **Warning:** Do not expose the server's listening ports directly to the public internet. If you must, use a **VPN** (e.g., WireGuard).
+
+**2. Notification Privacy (Server to ntfy.sh)**
+
+-   **Transport Security:** Communication to `ntfy.sh` uses **HTTPS** and is secure.
+-   **Topic Privacy:** ntfy.sh topics are public by default. To secure them:
+    -   **Use a long, unguessable topic name.**
+    -   **Use a private, access-controlled topic.** You can get one by subscribing to `ntfy.sh Pro` or by self-hosting your own `ntfy.sh` server. This server fully supports authentication via the `NTFY_AUTH` settings.
+    -   **Consider a generic Site Name** that cannot be linked to your address.
+    -   Alternatively: **Subscribe to NTFY.sh PRO** to setup private channels with authentication.
+    -   Alternatively: **Host NTFY yourself** to be able to setup private channels free of charge (Requires a machine with public ip)
+
+**Disclaimer:** You are ultimately responsible for securing your own setup.
 
 ## Acknowledgments
 -   This project was developed through a collaborative effort with Anthropic's AI assistant, Claude.
 -   The initial socket server structure was inspired by the [nimnull/sia-server](https://github.com/nimnull/sia-server) project.
+-   Some protocol information was found in [dklemm/FlexSIA2MQTT](https://github.com/dklemm/FlexSIA2MQTT) project
 
 ## License
 This project is licensed under the MIT License.
-
