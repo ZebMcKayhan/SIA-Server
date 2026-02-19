@@ -77,11 +77,13 @@ Before configuring the server, get the ntfy.sh app on your phone or computer.
 
 Log into your Galaxy Flex panel's installer menu and configure the Ethernet module to send SIA notifications to your server:
 
--   **ARC IP Address:** The IP address of the machine running `sia-server.py` (e.g., `192.168.128.10`).
--   **ARC Port:** The port for the `[SIA-Server]` configured in `sia-server.conf` (default is `10000`).
--   **Protocol:** SIA (Levels 0-3 are supported). Level 3 is recommended for the most detailed notifications.
--   **Account Number:** Your 4 or 6-digit alarm account number.
--   **Encryption:** Must be set to **Off**. The proprietary encryption is not supported.
+-   **ARC IP Address:** The IP address of the machine running `sia-server.py` (e.g., `192.168.128.10`). (56.1.1.1.4.1)
+-   **ARC Port:** The port for the `[SIA-Server]` configured in `sia-server.conf` (default is `10000`). If you use the optional IP-Check module, add in that port as well. (same menu as IP Address)
+-   **Protocol:** SIA (Levels 0-3 are supported). Level 3 is recommended for the most detailed notifications. (56.1.1.1.4.2)
+-   **Account Number:** Your 4 or 6-digit alarm account number. SIA Level 3 requires 6 digit. (56.1.2.1.1)
+-   **Encryption:** Must be set to **Off**. The proprietary encryption is not supported. (56.3.3.5)
+-   **IP-Check:** If you want to use the IP-Check function, you enable it by entering a time interval for it, 00:00 means disabled. (56.3.3.7.1)
+-   **Eng. Test:** Whenever you are ready to test the connection to the `SIA-Server` and your `NTFY` topic, use this test to send a notification without generating a fault. (56.7.1)
 
 ### Step 5: Configure the Server
 
@@ -89,9 +91,10 @@ Change your configuration file from the provided example and edit it to match yo
 
 ```bash
 # On Linux
-nano sia-server.conf
+nano /path/to/your/sia-server/sia-server.conf
 
-# On Windows, just edit the sia-server.conf file.
+# On Windows
+edit C:\path\to\your\sia-server\sia-server.conf
 ```
 
 Refer to the **Configuration Explained** section below for details on each setting.
@@ -115,6 +118,8 @@ The primary configuration is done in `sia-server.conf`. Advanced settings can be
 ### For Linux
 
 #### Manual Start (for testing)
+>**Note:** It is convenient if you set logging to `Screen` in `sia-server.conf` as you can see the events on the screen as they come in.
+
 Run the server directly from your terminal to watch the logs in real-time.
 ```bash
 cd /path/to/your/sia-server
@@ -123,6 +128,8 @@ python3 sia-server.py
 Press `Ctrl+C` to stop.
 
 #### As a Service (Recommended)
+>**Note:** It is convenient if you set logging to `File` in `sia-server.conf` so you can look at it as needed afterwords.
+
 Using `systemd` ensures the server runs reliably in the background.
 
 1.  **Create the Service File:**
@@ -146,6 +153,9 @@ Using `systemd` ensures the server runs reliably in the background.
     [Install]
     WantedBy=multi-user.target
     ```
+    >Note: Depending on your system, you may need to add firewall rules. This can typically be done via `ExecStartPre=` and `ExecStopPost`.
+    >If your firewall commands require root, you may need to remove or comment out the User=pi directive.
+
 3.  **Enable and Start:**
     ```bash
     sudo systemctl daemon-reload
@@ -159,7 +169,9 @@ Using `systemd` ensures the server runs reliably in the background.
 ### For Windows
 
 #### Manual Start (for testing)
-Open PowerShell, navigate to your script's directory, and run it.
+>**Note:** It is convenient if you set logging to `Screen` in `sia-server.conf` as you can see the events on the screen as they come in.
+
+Open PowerShell, navigate to your script's directory, and run it. 
 ```powershell
 cd C:\path\to\your\sia-server
 python sia-server.py
@@ -167,6 +179,8 @@ python sia-server.py
 Press `Ctrl+C` to stop.
 
 #### As a Service (Recommended)
+>**Note:** It is convenient if you set logging to `File` in `sia-server.conf` so you can look at it as needed afterwords.
+
 A popular tool for this is NSSM (the Non-Sucking Service Manager).
 
 1.  Download **NSSM**.
