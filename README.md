@@ -1,10 +1,12 @@
 # Honeywell Galaxy SIA Notification Server
 
-A lightweight, self-hosted Python server to receive proprietary SIA protocol messages from Honeywell Galaxy Flex alarm systems and send rich, prioritized push notifications via [ntfy.sh](https://ntfy.sh/).
+SIA-Server is a lightweight, self-hosted Python service that receives SIA protocol messages from Honeywell Galaxy Flex alarm systems and forwards them as rich, prioritized push notifications via [ntfy.sh](https://ntfy.sh/).
 
-This project was created to replace the discontinued free push notification service, giving users full control over their alarm notifications without ongoing costs.
+It was created as a replacement for the discontinued free Honeywell push notification service, allowing users to regain full control over their alarm alerts without ongoing subscription costs.
 
 This was developed on a Honeywell Galaxy Flex 20 alarm system. It is highly likely that it will work for other Honeywell Galaxy alarm systems, but this has not been tested.
+
+If your Galaxy Flex notifications suddenly stopped working, this project provides a self-hosted alternative.
 
 > **IMPORTANT SECURITY NOTICE**
 > The communication between the alarm panel and this server is **unencrypted**. This server is designed to be run on a trusted local network only. Please read the full [Security & Privacy Guidelines](#security--privacy-guidelines) before installation.
