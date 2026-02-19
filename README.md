@@ -4,7 +4,7 @@ A lightweight, self-hosted Python server to receive proprietary SIA protocol mes
 
 This project was created to replace the discontinued free push notification service, giving users full control over their alarm notifications without ongoing costs.
 
-This was developed on a Honeywell Galaxy Flex 20 alarm system. It is quite possible that it will work for other Honeywell Galaxy alarm systems, but this has not been tested.
+This was developed on a Honeywell Galaxy Flex 20 alarm system. It is highly likely that it will work for other Honeywell Galaxy alarm systems, but this has not been tested.
 
 > **IMPORTANT SECURITY NOTICE**
 > The communication between the alarm panel and this server is **unencrypted**. This server is designed to be run on a trusted local network only. Please read the full [Security & Privacy Guidelines](#security--privacy-guidelines) before installation.
@@ -17,8 +17,8 @@ This was developed on a Honeywell Galaxy Flex 20 alarm system. It is quite possi
 -   **Advanced Notification Routing:** Route notifications for different accounts to different ntfy.sh topics, each with its own authentication (Bearer Token or User/Pass).
 -   **Robust Protocol Handling:** Correctly parses the multi-message protocol used by Galaxy Flex panels, including handling multiple events in a single connection.
 -   **Broad SIA Level Support:** The flexible parser can correctly handle event data from SIA Levels 0, 1, 2, and 3.
--   **Optional Heartbeat Server:** Includes a separate, optional server to correctly handle the proprietary Honeywell "IP Check" heartbeat, ensuring full panel compatibility.
--   **Character Encoding Fixes:** Decodes the proprietary character set used by Galaxy panels to correctly display special characters (e.g., Å, Ä, Ö).
+-   **Optional Heartbeat Server:** Includes an optional server to correctly handle the proprietary Honeywell "IP Check" heartbeat.
+-   **Character Encoding Fixes:** Decodes the proprietary character set used by Galaxy panels (e.g., Å, Ä, Ö).
 -   **Highly Configurable:** Most user settings are in a simple `sia-server.conf` file, with advanced settings in `defaults.py`.
 
 ## Prerequisites
@@ -34,13 +34,14 @@ The project is structured to separate the server logic, protocol parsing, and co
 ```
 .
 ├── sia-server.py           # The main server application
-├── sia-server.conf.example # Example user configuration file.
+├── sia-server.conf         # Main user configuration file.
 ├── defaults.py             # Advanced settings and constants.
 ├── configuration.py        # Loads and validates all configuration.
 ├── notification.py         # Handles formatting and sending of notifications.
 ├── ip_check.py             # Optional subprocess for answering heartbeats.
 ├── README.md               # This file.
 └── galaxy/
+    ├── __init__.py
     ├── README.md           # Technical description of the protocol.  
     ├── parser.py           # Handles parsing of the Galaxy SIA protocol.
     └── constants.py        # Constants used in the SIA protocol.
@@ -71,7 +72,7 @@ sudo apt install python3-requests python3-uvloop
 ```
 > **Note:** It is recommended to use `apt` instead of `pip` on Raspberry Pi OS / Debian systems to avoid environment conflicts.
 
-### 3. Get the Notification App and Subscribe to a Topic
+### 3. Get the Notification App and Topic
 Before configuring the server, get the ntfy.sh app on your phone or computer.
 1.  Follow the instructions at the [ntfy.sh documentation](https://docs.ntfy.sh/subscribe/phone/) to get the app.
 2.  Inside the app, subscribe to a new topic. **Choose a long, random, unguessable name** for your topic to keep it private (e.g., `alarm-skUHvisapP2J382MDI2`).
@@ -80,15 +81,14 @@ Before configuring the server, get the ntfy.sh app on your phone or computer.
 ### 4. Configure Your Alarm Panel
 Log into your Galaxy Flex panel's installer menu and configure the Ethernet module to send SIA notifications to your server:
 -   **ARC IP Address:** The IP address of the machine running `sia-server.py` (e.g., `192.168.128.10`).
--   **ARC Port:** The port configured in `sia-server.conf` for the `[SIA-Server]` (default is `10000`).
+-   **ARC Port:** The port for the `[SIA-Server]` configured in `sia-server.conf` (default is `10000`).
 -   **Protocol:** SIA (Levels 0-3 are supported). Level 3 is recommended for the most detailed notifications.
 -   **Account Number:** Your 4 or 6-digit alarm account number.
 -   **Encryption:** Must be set to **Off**. The proprietary encryption is not supported.
 
 ### 5. Configure the Server
-Create your configuration file from the provided example and edit it to match your setup.
+Edit the included `sia-server.conf` file to match your setup. The file contains examples and safe defaults.
 ```bash
-cp sia-server.conf.example sia-server.conf
 nano sia-server.conf
 ```
 
@@ -99,8 +99,8 @@ The primary configuration is done in `sia-server.conf`. Advanced settings can be
     -   `NTFY_ENABLED`: Set to `Yes` or `No`.
     -   `NTFY_TOPIC`: The full URL for the ntfy.sh topic for this site.
     -   `NTFY_TITLE`: The title for notifications from this site (e.g., "Galaxy FLEX").
-    -   `NTFY_AUTH`: Can be `None`, `Token`, or `Userpass` for private topics. If not `None`, you must also provide the `NTFY_TOKEN` or `NTFY_USER`/`NTFY_PASS` keys.
--   **`[Default]` Section:** A special section for any events from account numbers not specifically listed.
+    -   `NTFY_AUTH`: Can be `None`, `Token`, or `Userpass` for private topics. If not `None`, provide the corresponding `NTFY_TOKEN` or `NTFY_USER`/`NTFY_PASS` keys.
+-   **`[Default]` Section:** A special section for events from account numbers not specifically listed.
 -   **`[SIA-Server]` & `[IP-Check]` Sections:** Configure the ports and addresses for the main server and the optional heartbeat server.
 -   **`[Logging]` Section:** Control the log level and whether output goes to the `Screen` or a `File`.
 
@@ -118,9 +118,9 @@ If you host this server on a cloud machine, you **must** secure the connection u
 **2. Notification Privacy (Server to ntfy.sh)**
 
 -   **Transport Security:** Communication to `ntfy.sh` uses **HTTPS** and is secure in transit.
--   **Topic Privacy:** ntfy.sh topics are public by default. To secure them, you have several options:
-    -   **Use a long, unguessable topic name.** This is the simplest form of privacy. Treat your topic name like a password (e.g., `alarm-skUHvisapP2J382MDI2`).
-    -   **Consider a generic Site Name.** For added privacy, you can choose a `SITE_NAME` in your configuration that cannot be easily linked to your physical address.
+-   **Topic Privacy:** ntfy.sh topics are public by default. To secure them:
+    -   **Use a long, unguessable topic name.** Treat it like a password.
+    -   **Consider a generic Site Name** that cannot be linked to your address.
     -   **Use a private, access-controlled topic.** For the highest level of security, use a topic that requires authentication. You can get an access-controlled topic in two ways:
         1.  **Subscribe to `ntfy.sh Pro`** on their managed service.
         2.  **Self-host your own `ntfy.sh` server** where you can configure access control for free.
@@ -130,85 +130,76 @@ If you host this server on a cloud machine, you **must** secure the connection u
 
 ## Usage
 
-### For Testing (Manual Start)
+### For Linux
+
+#### Manual Start (for testing)
+Run the server directly from your terminal.
 ```bash
+cd /path/to/your/sia-server
 python3 sia-server.py
 ```
 Press `Ctrl+C` to stop.
 
-### As a Service (Recommended for Production)
+#### As a Service (Recommended)
 Using `systemd` ensures the server runs reliably in the background.
 
-**1. Create the Service File:**
-```bash
-sudo nano /etc/systemd/system/sia-server.service
-```
-**2. Paste this content.** **IMPORTANT:** Change the paths in `WorkingDirectory` and `ExecStart` to match your installation.
-```ini
-[Unit]
-Description=Galaxy SIA Alarm Server
-After=network.target
-
-[Service]
-Type=simple
-User=pi
-
-# IMPORTANT: Change this path
-WorkingDirectory=/home/pi/Scripts/sia-server
-
-# IMPORTANT: Change this path
-ExecStart=/usr/bin/python3 /home/pi/Scripts/sia-server/sia-server.py
-
-Restart=on-failure
-RestartSec=5s
-
-[Install]
-WantedBy=multi-user.target
-```
-> **Note:** You may need to add firewall rules (e.g., via `ExecStartPre=`). If your firewall commands require root, you may need to remove or comment out the `User=pi` directive.
-
-**3. Enable and Start the Service:**
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable sia-server.service
-sudo systemctl start sia-server.service
-```
-
-### Managing the Service
--   **Check status & logs:** `sudo systemctl status sia-server.service`
--   **Stop:** `sudo systemctl stop sia-server.service`
--   **Start:** `sudo systemctl start sia-server.service`
--   **Restart:** `sudo systemctl restart sia-server.service`
--   **View live logs:** `journalctl -u sia-server.service -f` or `tail -f /path/to/your/log/file.log`.
-
-## Installation & Setup (Windows)
-
-1.  Install Python 3 from the [official Python website](https://www.python.org/).
-2.  Install dependencies in PowerShell:
-    ```powershell
-    python -m pip install requests pyopenssl cryptography ndg-httpsclient
+1.  **Create the Service File:**
+    ```bash
+    sudo nano /etc/systemd/system/sia-server.service
     ```
-    > **Note:** The extra packages are highly recommended to avoid HTTPS issues on Windows.
-3.  Configure `sia-server.conf` using Windows paths for `LOG_FILE` (e.g., `C:\Logs\sia.log`).
-4.  You may need to add inbound firewall rules for the server ports (e.g., `10000`, `10001`).
-5.  Run manually (`python sia-server.py`) or set it up as a service using a tool like **NSSM**.
+2.  **Paste this content**, changing the paths in `WorkingDirectory` and `ExecStart`.
+    ```ini
+    [Unit]
+    Description=Galaxy SIA Alarm Server
+    After=network.target
 
-### As a Service on Windows (using NSSM)
+    [Service]
+    Type=simple
+    User=pi
+    WorkingDirectory=/home/pi/Scripts/sia-server
+    ExecStart=/usr/bin/python3 /home/pi/Scripts/sia-server/sia-server.py
+    Restart=on-failure
+    RestartSec=5s
+
+    [Install]
+    WantedBy=multi-user.target
+    ```
+    > **Note:** Depending on your system, you may need to add firewall rules. This can typically be done via `ExecStartPre=`. If your firewall commands require root, you may need to remove or comment out the `User=pi` directive.
+
+3.  **Enable and Start:**
+    ```bash
+    sudo systemctl daemon-reload
+    sudo systemctl enable sia-server.service
+    sudo systemctl start sia-server.service
+    ```
+4.  **Manage:**
+    -   Check status: `sudo systemctl status sia-server.service`
+    -   View live logs: `journalctl -u sia-server.service -f`
+
+### For Windows
+
+#### Manual Start (for testing)
+Open PowerShell, navigate to your script's directory, and run it.
+```powershell
+cd C:\path\to\your\sia-server
+python sia-server.py
+```
+Press `Ctrl+C` to stop.
+
+#### As a Service (Recommended)
+A popular tool for this is NSSM (the Non-Sucking Service Manager).
+
 1.  Download **NSSM**.
 2.  Open a Command Prompt **as an Administrator**.
 3.  Run the NSSM installer:
     ```powershell
     C:\path\to\nssm.exe install SIA-Server
     ```
-4.  A GUI window will pop up. Fill in the tabs:
-    -   **Application Tab:**
-        -   **Path:** Browse to your Python executable (e.g., `C:\Python312\python.exe`).
-        -   **Startup directory:** Browse to the folder containing your script (e.g., `C:\path\to\your\sia-server`).
-        -   **Arguments:** `sia-server.py`
-    -   **Details Tab:** Set a Display Name and Description.
-5.  Click **Install service**.
-
-You can now manage it from the Windows Services app (`services.msc`) or via the `nssm` command line (e.g., `nssm start SIA-Server`).
+4.  In the GUI that pops up:
+    -   **Path:** Browse to your Python executable (e.g., `C:\Python312\python.exe`).
+    -   **Startup directory:** Browse to your script folder.
+    -   **Arguments:** `sia-server.py`
+5.  Click **Install service**. You can now manage it from the Windows Services app (`services.msc`).
 
 ## Acknowledgments
 -   This project was developed through a collaborative effort with Anthropic's AI assistant, Claude.
