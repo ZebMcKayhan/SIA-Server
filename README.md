@@ -157,8 +157,11 @@ Press `Ctrl+C` to stop.
     sudo systemctl start sia-server.service
     ```
 4.  **Manage:**
-    -   Check status: `sudo systemctl status sia-server.service`
-    -   View live logs: `journalctl -u sia-server.service -f`
+    -   **Check status & recent logs:** `sudo systemctl status sia-server.service`
+    -   **Stop the service:** `sudo systemctl stop sia-server.service`
+    -   **Start the service:** `sudo systemctl start sia-server.service`
+    -   **Restart the service:** `sudo systemctl restart sia-server.service`
+    -   **View live logs:** `journalctl -u sia-server.service -f` (if not logging to a file) or `tail -f /path/to/your/log/file.log` (if logging to a file).
 
 ### For Windows
 
