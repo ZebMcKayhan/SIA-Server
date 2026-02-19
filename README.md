@@ -4,7 +4,7 @@ SIA-Server is a lightweight, self-hosted Python service that receives SIA protoc
 
 It was created as a replacement for the discontinued free Honeywell push notification service, allowing users to regain full control over their alarm alerts without ongoing subscription costs.
 
-This was developed on a Honeywell Galaxy Flex 20 alarm system. It is highly likely that it will work for other Honeywell Galaxy alarm systems, but this has not been tested.
+This project was developed and tested on a Honeywell Galaxy Flex 20. It is likely compatible with other Honeywell Galaxy panels, but this has not been verified.
 
 If your Galaxy Flex notifications suddenly stopped working, this project provides a self-hosted alternative.
 
