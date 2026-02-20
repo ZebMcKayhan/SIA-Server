@@ -7,7 +7,7 @@ Honeywell Galaxy Flex alarm systems. It sends notifications via ntfy.sh.
 This server is configured via 'sia-server.conf' and 'defaults.py'.
 """
 # --- Application Version ---
-__version__ = "1.5.0-beta"
+__version__ = "1.6.0-beta"
 
 import asyncio
 import logging
@@ -258,10 +258,37 @@ def main():
     
     try:
         asyncio.run(start_servers())
+                
+    except OSError as e:
+        # --- Catch specific OS errors related to network binding --
+        
+        # Case 1: Invalid IP Address
+        if (hasattr(e, 'errno') and e.errno == 99) or "Cannot assign requested address" in str(e):
+            log.critical("="*60)
+            log.critical("STARTUP FAILED: CANNOT ASSIGN REQUESTED ADDRESS")
+            log.critical("The LISTEN_ADDR in sia-server.conf is likely not a valid IP for this machine.")
+            log.critical("Please use '0.0.0.0' or a specific IP address that this server owns.")
+            log.critical("="*60)
+        
+        # Case 2: Port is already in use by another application
+        elif (hasattr(e, 'errno') and e.errno in [98, 10048]) or "Address already in use" in str(e):
+            log.critical("="*60)
+            log.critical("STARTUP FAILED: PORT ALREADY IN USE")
+            log.critical("The port %d (for SIA-Server) or %d (for IP-Check) is already being used by another program.",
+                         config.LISTEN_PORT, config.IP_CHECK_PORT)
+            log.critical("Please check for other running instances of this server or other applications using these ports.")
+            log.critical("You can change the ports in sia-server.conf if needed.")
+            log.critical("="*60)
+
+        # Handle other, unexpected OS errors during startup
+        else:
+            log.critical("A critical OS error occurred during startup: %s", e, exc_info=True)
+        sys.exit(1)
+        
     except (KeyboardInterrupt, SystemExit):
         log.info("Server stopped")
     except Exception as e:
-        log.error("Server error: %s", e, exc_info=True)
+        log.error("A critical server error occurred: %s", e, exc_info=True)
         sys.exit(1)
 
 if __name__ == '__main__':
