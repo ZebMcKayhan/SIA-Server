@@ -72,23 +72,35 @@ async def handle_ip_check(reader, writer):
         except Exception:
             pass
 
-async def main():
-    # This check is now handled by the parent process, but it's good practice
-    # to keep it here in case the script is run standalone by mistake.
+async def start_ip_check_server(): # Renamed from 'main' to be an async function
+    """The main async function to start the server."""
+    
     if not config.IP_CHECK_ENABLED:
-        log.warning("IP Check server is disabled in config.py. Exiting.")
+        if sys.stdout.isatty():
+            # This print is for when a user tries to run it directly while disabled
+            print("IP Check server is disabled in sia-server.conf. Exiting.")
         return
 
     log.info("="*50)
     log.info("Starting Galaxy IP Check (Heartbeat) Server")
     
+    # We move the try...except block here, inside the async function
     try:
         server = await asyncio.start_server(
             handle_ip_check, config.IP_CHECK_ADDR, config.IP_CHECK_PORT
         )
     except OSError as e:
-        log.error("Failed to start server on %s:%d - %s", config.IP_CHECK_ADDR, config.IP_CHECK_PORT, e)
-        return
+        # This is the same robust error handling from the main server
+        if "Address already in use" in str(e):
+            log.critical("STARTUP FAILED: The port %d is already in use.", config.IP_CHECK_PORT)
+        elif "Cannot assign requested address" in str(e) or "could not bind" in str(e):
+            log.critical("STARTUP FAILED: The IP address '%s' is not valid for this machine.", config.IP_CHECK_ADDR)
+        elif "getaddrinfo failed" in str(e):
+            log.critical("STARTUP FAILED: The address '%s' is not a valid IP address or hostname.", config.IP_CHECK_ADDR)
+        else:
+            log.critical("A critical OS error occurred starting the IP Check server: %s", e)
+        log.critical("="*50)
+        return # Gracefully exit the async function
 
     addrs = ', '.join(str(sock.getsockname()) for sock in server.sockets)
     log.info('Listening for heartbeats on: %s', addrs)
@@ -97,8 +109,10 @@ async def main():
     async with server:
         await server.serve_forever()
 
+
 if __name__ == '__main__':
+    # The main execution block is now just a simple try...except wrapper
     try:
-        asyncio.run(main())
+        asyncio.run(start_ip_check_server())
     except (KeyboardInterrupt, SystemExit):
         log.info("IP Check server stopped.")
