@@ -213,16 +213,34 @@ async def monitor_subprocess(process, name):
     await process.wait()
     log.warning("Subprocess '%s' (PID: %d) has exited with code %d.", name, process.pid, process.returncode)
 
+# In sia-server.py
+
 async def start_servers():
     """Starts the main SIA server and launches the IP Check server as a subprocess."""
-    sia_server = await asyncio.start_server(
-        handle_connection, config.LISTEN_ADDR, config.LISTEN_PORT
-    )
-    sia_addrs = ', '.join(str(sock.getsockname()) for sock in sia_server.sockets)
-    log.info('='*60)
-    log.info('Galaxy SIA Event Server Started')
-    log.info('Listening for events on: %s', sia_addrs)
     
+    # --- Start the main SIA Event Server ---
+    try:
+        sia_server = await asyncio.start_server(
+            handle_connection, config.LISTEN_ADDR, config.LISTEN_PORT
+        )
+        sia_addrs = ', '.join(str(sock.getsockname()) for sock in sia_server.sockets)
+        log.info('='*60)
+        log.info('Galaxy SIA Event Server Started')
+        log.info('Listening for events on: %s', sia_addrs)
+    except OSError as e:
+        # This block now handles startup errors for the main server gracefully.
+        if "Address already in use" in str(e):
+            log.critical("STARTUP FAILED: The port %d is already in use.", config.LISTEN_PORT)
+        elif "Cannot assign requested address" in str(e) or "could not bind" in str(e):
+            log.critical("STARTUP FAILED: Cannot use the IP address '%s'.", config.LISTEN_ADDR)
+            log.critical("Please use '0.0.0.0' or a specific IP address that belongs to this server.")
+        else:
+            log.critical("A critical OS error occurred starting the SIA server: %s", e)
+        log.critical("="*60)
+        # We must return here to stop the program from continuing.
+        return
+
+    # --- Launch the optional IP Check Server as a Subprocess ---
     ip_check_process = None
     if config.IP_CHECK_ENABLED:
         try:
@@ -237,9 +255,11 @@ async def start_servers():
     
     log.info('='*60)
     
+    # Run the main SIA server forever
     try:
         await sia_server.serve_forever()
     finally:
+        # When the main server is shut down, also terminate the subprocess
         if ip_check_process and ip_check_process.returncode is None:
             log.info("Terminating IP Check server subprocess...")
             ip_check_process.terminate()
@@ -250,6 +270,8 @@ def handle_shutdown(signum, frame):
     log.info("Received shutdown signal (%d), stopping server...", signum)
     sys.exit(0)
 
+# In sia-server.py
+
 def main():
     signal.signal(signal.SIGINT, handle_shutdown)
     signal.signal(signal.SIGTERM, handle_shutdown)
@@ -258,37 +280,11 @@ def main():
     
     try:
         asyncio.run(start_servers())
-                
-    except OSError as e:
-        # --- Catch specific OS errors related to network binding --
-        
-        # Case 1: Invalid IP Address
-        if (hasattr(e, 'errno') and e.errno == 99) or "Cannot assign requested address" in str(e):
-            log.critical("="*60)
-            log.critical("STARTUP FAILED: CANNOT ASSIGN REQUESTED ADDRESS")
-            log.critical("The LISTEN_ADDR in sia-server.conf is likely not a valid IP for this machine.")
-            log.critical("Please use '0.0.0.0' or a specific IP address that this server owns.")
-            log.critical("="*60)
-        
-        # Case 2: Port is already in use by another application
-        elif (hasattr(e, 'errno') and e.errno in [98, 10048]) or "Address already in use" in str(e):
-            log.critical("="*60)
-            log.critical("STARTUP FAILED: PORT ALREADY IN USE")
-            log.critical("The port %d (for SIA-Server) or %d (for IP-Check) is already being used by another program.",
-                         config.LISTEN_PORT, config.IP_CHECK_PORT)
-            log.critical("Please check for other running instances of this server or other applications using these ports.")
-            log.critical("You can change the ports in sia-server.conf if needed.")
-            log.critical("="*60)
-
-        # Handle other, unexpected OS errors during startup
-        else:
-            log.critical("A critical OS error occurred during startup: %s", e, exc_info=True)
-        sys.exit(1)
-        
     except (KeyboardInterrupt, SystemExit):
         log.info("Server stopped")
     except Exception as e:
-        log.error("A critical server error occurred: %s", e, exc_info=True)
+        # This will now only catch very unexpected errors.
+        log.critical("A critical server error occurred: %s", e, exc_info=True)
         sys.exit(1)
 
 if __name__ == '__main__':
