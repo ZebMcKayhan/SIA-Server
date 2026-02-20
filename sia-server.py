@@ -218,8 +218,8 @@ async def monitor_subprocess(process, name):
 async def start_servers():
     """Starts the main SIA server and launches the IP Check server as a subprocess."""
     
-    # --- Start the main SIA Event Server ---
     try:
+        # --- Start the main SIA Event Server ---
         sia_server = await asyncio.start_server(
             handle_connection, config.LISTEN_ADDR, config.LISTEN_PORT
         )
@@ -232,10 +232,14 @@ async def start_servers():
         if "Address already in use" in str(e):
             log.critical("STARTUP FAILED: The port %d is already in use.", config.LISTEN_PORT)
         elif "Cannot assign requested address" in str(e) or "could not bind" in str(e):
-            log.critical("STARTUP FAILED: Cannot use the IP address '%s'.", config.LISTEN_ADDR)
-            log.critical("Please use '0.0.0.0' or a specific IP address that belongs to this server.")
+            log.critical("STARTUP FAILED: The IP address '%s' is not valid for this machine.", config.LISTEN_ADDR)
+            log.critical("Please use '0.0.0.0' or a specific IP address that this server owns.")
+        elif "getaddrinfo failed" in str(e):
+            log.critical("STARTUP FAILED: The address '%s' is not a valid IP address or hostname.", config.LISTEN_ADDR)
+            log.critical("Please check for typos in your sia-server.conf file.")
         else:
             log.critical("A critical OS error occurred starting the SIA server: %s", e)
+        
         log.critical("="*60)
         # We must return here to stop the program from continuing.
         return
