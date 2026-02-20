@@ -7,6 +7,7 @@ to a service like ntfy.sh based on a parsed GalaxyEvent.
 
 import logging
 import requests
+import sys
 from typing import Dict
 from galaxy.parser import GalaxyEvent
 
@@ -16,13 +17,18 @@ from galaxy.parser import GalaxyEvent
 # network environments.
 logging.basicConfig()
 log_pyopenssl = logging.getLogger(__name__)
-
 try:
     import urllib3.contrib.pyopenssl
     urllib3.contrib.pyopenssl.inject_into_urllib3()
-    log_pyopenssl.info("Successfully injected PyOpenSSL into urllib3.")
+    log_pyopenssl.info("Successfully injected PyOpenSSL into urllib3 for robust HTTPS.")
 except ImportError:
-    log_pyopenssl.warning("PyOpenSSL not available; using default SSL context.")
+    # On Windows, this may be a problem:
+    if sys.platform == "win32":
+        log_pyopenssl.warning("PyOpenSSL not found. HTTPS notifications may fail on Windows without it.")
+        log_pyopenssl.warning("Please run: python -m pip install pyopenssl cryptography ndg-httpsclient")
+    # On Linux, it's normal:
+    else:
+        log_pyopenssl.info("PyOpenSSL not available; using default system SSL context.")
 
 log = logging.getLogger(__name__)
 
