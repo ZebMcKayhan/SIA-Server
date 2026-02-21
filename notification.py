@@ -6,23 +6,44 @@ to a service like ntfy.sh based on a parsed GalaxyEvent.
 """
 
 import logging
-import requests
+import sys
 from typing import Dict
 from galaxy.parser import GalaxyEvent
 
-# --- Force PyOpenSSL to be used by requests ---
-# This is a robust way to ensure the more compatible OpenSSL backend is used,
-# especially on Windows, to prevent intermittent SSLErrors in difficult
-# network environments.
+# --- Dependency and Logging Initialization ---
+
+# Apply a basic config immediately so startup messages are always captured.
+# This will be overridden by the main server's full logging setup later.
 logging.basicConfig()
 log_pyopenssl = logging.getLogger(__name__)
 
+# --- CRITICAL: Check for 'requests' library ---
+try:
+    import requests
+except ImportError:
+    log_pyopenssl.critical("="*60)
+    log_pyopenssl.critical("FATAL ERROR: The 'requests' library is not installed.")
+    log_pyopenssl.critical("This library is required to send notifications.")
+    if sys.platform == "win32":
+        log_pyopenssl.critical("Please install it by running: python -m pip install requests pyopenssl cryptography ndg-httpsclient")
+    else: # Assume Linux/macOS
+        log_pyopenssl.critical("Please install it by running: sudo apt install python3-requests")
+    log_pyopenssl.critical("="*60)
+    sys.exit(1) # Exit the entire application immediately.
+
+# --- Force PyOpenSSL to be used by requests (if available) ---
 try:
     import urllib3.contrib.pyopenssl
     urllib3.contrib.pyopenssl.inject_into_urllib3()
-    log_pyopenssl.info("Successfully injected PyOpenSSL into urllib3.")
+    log_pyopenssl.info("Successfully injected PyOpenSSL into urllib3 for robust HTTPS.")
 except ImportError:
-    log_pyopenssl.warning("PyOpenSSL not available; using default SSL context.")
+    # On Windows, this may be a problem:
+    if sys.platform == "win32":
+        log_pyopenssl.warning("PyOpenSSL not found. HTTPS notifications may fail on Windows without it.")
+        log_pyopenssl.warning("Please run: python -m pip install pyopenssl cryptography ndg-httpsclient")
+    # On Linux, it's normal:
+    else:
+        log_pyopenssl.info("PyOpenSSL not available; using default system SSL context.")
 
 log = logging.getLogger(__name__)
 

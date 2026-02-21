@@ -38,6 +38,17 @@ class AppConfig:
         self.LOG_MAX_BYTES = getattr(defaults, 'LOG_MAX_BYTES', 10 * 1024 * 1024)
         self.LOG_BACKUP_COUNT = getattr(defaults, 'LOG_BACKUP_COUNT', 5)
 
+def _validate_port(port: int, section: str, key: str) -> bool:
+    """Helper function to validate a port number."""
+    if not 1 <= port <= 65535:
+        log.critical("Configuration Error in section [%s]: %s must be between 1 and 65535, but got %d.",
+                     section, key, port)
+        return False
+    if port < 1024:
+        # It's not a fatal error, but it requires special permissions. Warn the user.
+        log.warning("Configuration Info in section [%s]: The port %d is a 'privileged' port (< 1024). "
+                    "This may require running the server as a root user.", section, port)
+    return True
 
 def _parse_topic_config(config: configparser.ConfigParser, section_name: str) -> dict | None:
     """Helper function to parse notification settings for a given section."""
@@ -86,25 +97,55 @@ def load_and_validate_config() -> AppConfig:
         sys.exit(1)
     
     app_config = AppConfig()
-    
-    # --- Load System Sections ---
-    if config.has_section('SIA-Server'):
-        app_config.LISTEN_ADDR = config.get('SIA-Server', 'listen_addr', fallback='0.0.0.0')
-        app_config.LISTEN_PORT = config.getint('SIA-Server', 'listen_port', fallback=10000)
+    is_valid = True
 
+     # --- Validate and load [SIA-Server] section ---
+    if not config.has_section('SIA-Server'):
+        log.critical("Configuration error: [SIA-Server] section is missing in sia-server.conf")
+        is_valid = False
+        
+    try:
+        app_config.LISTEN_ADDR = config.get('SIA-Server', 'listen_addr', fallback='0.0.0.0')
+        sia_port = config.getint('SIA-Server', 'listen_port', fallback=10000)
+        if _validate_port(sia_port, 'SIA-Server', 'listen_port'):
+            app_config.LISTEN_PORT = sia_port
+        else:
+            is_valid = False
+    except ValueError:
+        log.critical("Configuration Error in [SIA-Server]: listen_port must be a number.")
+        is_valid = False
+
+    # --- Validate and load [IP-Check] section ---
     if config.has_section('IP-Check'):
         if config.getboolean('IP-Check', 'enabled', fallback=False):
             app_config.IP_CHECK_ENABLED = True
             app_config.IP_CHECK_ADDR = config.get('IP-Check', 'listen_addr', fallback='0.0.0.0')
-            app_config.IP_CHECK_PORT = config.getint('IP-Check', 'listen_port', fallback=10001)
+            try:
+                ip_check_port = config.getint('IP-Check', 'listen_port', fallback=10001)
+                if _validate_port(ip_check_port, 'IP-Check', 'listen_port'):
+                    app_config.IP_CHECK_PORT = ip_check_port
+                else:
+                    is_valid = False
+            except ValueError:
+                log.critical("Configuration Error in [IP-Check]: listen_port must be a number.")
+                is_valid = False
 
+    # --- Check for port conflicts ---
+    if app_config.IP_CHECK_ENABLED and app_config.LISTEN_PORT == app_config.IP_CHECK_PORT:
+        log.critical("Configuration Error: The listen_port for [SIA-Server] and [IP-Check] cannot be the same (%d).", app_config.LISTEN_PORT)
+        is_valid = False
+
+    # --- Validate and load [Logging] section
     if config.has_section('Logging'):
         app_config.LOG_LEVEL = config.get('Logging', 'log_level', fallback='INFO').upper()
         log_to = config.get('Logging', 'log_to', fallback='Screen').lower()
         app_config.LOG_TO_FILE = (log_to == 'file')
         if app_config.LOG_TO_FILE:
             app_config.LOG_FILE = config.get('Logging', 'log_file', fallback=None)
-    
+            if not app_config.LOG_FILE:
+                log.warning("LOG_TO is set to File, but no LOG_FILE was specified. Logging to screen instead.")
+                app_config.LOG_TO_FILE = False
+                
     # --- Load Site and Default Sections ---
     system_sections = ['SIA-Server', 'IP-Check', 'Logging']
     account_sections = [s for s in config.sections() if s not in system_sections]
@@ -123,6 +164,10 @@ def load_and_validate_config() -> AppConfig:
         topic_config = _parse_topic_config(config, section_name)
         if topic_config:
             app_config.NTFY_TOPICS[account_number] = topic_config
-
+        
+    if not is_valid:
+        log.critical("Configuration validation failed. Please check the errors above. Exiting.")
+        sys.exit(1)
+        
     log.info("Configuration loaded successfully from sia-server.conf and defaults.py.")
     return app_config

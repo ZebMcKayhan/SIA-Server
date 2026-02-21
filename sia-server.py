@@ -7,7 +7,7 @@ Honeywell Galaxy Flex alarm systems. It sends notifications via ntfy.sh.
 This server is configured via 'sia-server.conf' and 'defaults.py'.
 """
 # --- Application Version ---
-__version__ = "1.5.0"
+__version__ = "1.6.0-beta"
 
 import asyncio
 import logging
@@ -213,16 +213,38 @@ async def monitor_subprocess(process, name):
     await process.wait()
     log.warning("Subprocess '%s' (PID: %d) has exited with code %d.", name, process.pid, process.returncode)
 
+# In sia-server.py
+
 async def start_servers():
     """Starts the main SIA server and launches the IP Check server as a subprocess."""
-    sia_server = await asyncio.start_server(
-        handle_connection, config.LISTEN_ADDR, config.LISTEN_PORT
-    )
-    sia_addrs = ', '.join(str(sock.getsockname()) for sock in sia_server.sockets)
-    log.info('='*60)
-    log.info('Galaxy SIA Event Server Started')
-    log.info('Listening for events on: %s', sia_addrs)
     
+    try:
+        # --- Start the main SIA Event Server ---
+        sia_server = await asyncio.start_server(
+            handle_connection, config.LISTEN_ADDR, config.LISTEN_PORT
+        )
+        sia_addrs = ', '.join(str(sock.getsockname()) for sock in sia_server.sockets)
+        log.info('='*60)
+        log.info('Galaxy SIA Event Server Started')
+        log.info('Listening for events on: %s', sia_addrs)
+    except OSError as e:
+        # This block now handles startup errors for the main server gracefully.
+        if "Address already in use" in str(e):
+            log.critical("STARTUP FAILED: The port %d is already in use.", config.LISTEN_PORT)
+        elif "Cannot assign requested address" in str(e) or "could not bind" in str(e):
+            log.critical("STARTUP FAILED: The IP address '%s' is not valid for this machine.", config.LISTEN_ADDR)
+            log.critical("Please use '0.0.0.0' or a specific IP address that this server owns.")
+        elif "getaddrinfo failed" in str(e):
+            log.critical("STARTUP FAILED: The address '%s' is not a valid IP address or hostname.", config.LISTEN_ADDR)
+            log.critical("Please check for typos in your sia-server.conf file.")
+        else:
+            log.critical("A critical OS error occurred starting the SIA server: %s", e)
+        
+        log.critical("="*60)
+        # We must return here to stop the program from continuing.
+        return
+
+    # --- Launch the optional IP Check Server as a Subprocess ---
     ip_check_process = None
     if config.IP_CHECK_ENABLED:
         try:
@@ -237,9 +259,11 @@ async def start_servers():
     
     log.info('='*60)
     
+    # Run the main SIA server forever
     try:
         await sia_server.serve_forever()
     finally:
+        # When the main server is shut down, also terminate the subprocess
         if ip_check_process and ip_check_process.returncode is None:
             log.info("Terminating IP Check server subprocess...")
             ip_check_process.terminate()
@@ -249,6 +273,8 @@ async def start_servers():
 def handle_shutdown(signum, frame):
     log.info("Received shutdown signal (%d), stopping server...", signum)
     sys.exit(0)
+
+# In sia-server.py
 
 def main():
     signal.signal(signal.SIGINT, handle_shutdown)
@@ -261,7 +287,8 @@ def main():
     except (KeyboardInterrupt, SystemExit):
         log.info("Server stopped")
     except Exception as e:
-        log.error("Server error: %s", e, exc_info=True)
+        # This will now only catch very unexpected errors.
+        log.critical("A critical server error occurred: %s", e, exc_info=True)
         sys.exit(1)
 
 if __name__ == '__main__':
