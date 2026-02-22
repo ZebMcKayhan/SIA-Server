@@ -12,7 +12,7 @@ PIDFILE="/tmp/siaserver.pid"
 PREARGS=""
 DESC="SIA Server"
 
-WATCHDOG="/jffs/scripts/check-sia.sh"
+WATCHDOG="/jffs/addons/sia-server/asuswrt-merlin/check-sia.sh"
 
 case "$1" in 
     start) 
