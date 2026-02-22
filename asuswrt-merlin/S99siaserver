@@ -1,0 +1,31 @@
+#!/bin/sh
+
+# Ensure proper PATH
+export PATH=/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin
+export TZ=$(cat /etc/TZ)
+
+ENABLED=yes
+PRECMD="cd /jffs/addons/sia-server"
+PROCS=python3
+ARGS="sia-server.py"
+PIDFILE="/tmp/siaserver.pid"
+PREARGS=""
+DESC="SIA Server"
+
+WATCHDOG="/jffs/scripts/check-sia.sh"
+
+case "$1" in 
+    start) 
+        cru a sia_monitor "*/15 * * * * $WATCHDOG"
+        logger -t S99siaserver "Starting  SIA Server..."
+        ;;
+    stop)
+        cru d sia_monitor
+        logger -t S99siaserver "Stopping SIA Server..."
+        ;;
+    restart) 
+        logger -t S99siaserver "Restarting SIA Server..."
+        ;;
+esac
+
+. /opt/etc/init.d/rc.func
