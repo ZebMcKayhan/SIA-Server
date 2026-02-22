@@ -1,14 +1,75 @@
-# Asuswrt-merlin Entware service files
+# Asuswrt-Merlin Entware Service
 
-1. Download the sia-server files and place them here
+These files provide a robust, self-healing service management solution for running the `sia-server` on a router with Asuswrt-Merlin firmware and the Entware package manager.
+
+This setup consists of two scripts:
+1.  **`S99siaserver`:** A standard `init.d` service script that handles starting and stopping the server during router boot/shutdown.
+2.  **`check-sia.sh`:** A watchdog script, run periodically by `cron`, that ensures the server is always running and restarts it if it ever crashes.
+
+## Prerequisites
+
+-   An Asus router running [Asuswrt-Merlin](https://www.asuswrt-merlin.net/).
+-   [Entware](https://github.com/RMerl/asuswrt-merlin.ng/wiki/Entware) installed on a USB drive.
+-   The `sia-server` project files.
+-   The required Python packages (`python3`, `python3-requests`, etc.) installed via `opkg`.
+
+## Installation
+
+These instructions assume you have cloned or unzipped the `sia-server` project into the recommended JFFS directory `/jffs/addons/`.
+
+### Step 1: Place the Project Files
+
+It is recommended to place the entire `sia-server` project directory on the JFFS partition to ensure it survives reboots.
+
 ```
 /jffs/addons/sia-server/
 ```
-2. put the service file in entware `init.d` directory and make it executable:
-```
+
+### Step 2: Install and Enable the Service Script
+
+Copy the `init.d` script to the Entware startup directory and make it executable. The `S99` prefix ensures it starts late in the boot sequence, after networking is fully available.
+
+```bash
+# Copy the service file
 cp /jffs/addons/sia-server/asuswrt-merlin/S99siaserver /opt/etc/init.d/
+
+# Make it executable
 chmod +x /opt/etc/init.d/S99siaserver
 ```
-3. make watchog script executable:
-```
+
+### Step 3: Prepare the Watchdog Script
+
+The watchdog script is called by `cron` to monitor the service. It also needs to be made executable.
+
+```bash
 chmod +x /jffs/addons/sia-server/asuswrt-merlin/check-sia.sh
+```
+
+### Step 4: Start the Service
+
+You can now start the service manually. This will launch the `sia-server.py` and `ip_check.py` processes and set up the monitoring cron job.
+
+```bash
+/opt/etc/init.d/S99siaserver start
+```
+
+The service will now start automatically every time your router boots.
+
+## Managing the Service
+
+You can manage the service from the command line using the `init.d` script:
+
+-   **Start the service:**
+    ```bash
+    /opt/etc/init.d/S99siaserver start
+    ```
+
+-   **Stop the service:**
+    ```bash
+    /opt/etc/init.d/S99siaserver stop
+    ```
+
+-   **Restart the service:**
+    ```bash
+    /opt/etc/init.d/S99siaserver restart
+    ```
