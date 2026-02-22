@@ -73,3 +73,17 @@ You can manage the service from the command line using the `init.d` script:
     ```bash
     /opt/etc/init.d/S99siaserver restart
     ```
+
+## Running on Other Embedded Devices (e.g., OpenWrt)
+
+While this project provides specific instructions for standard Linux (using `systemd`) and Asuswrt-Merlin (using `init.d`), it is possible to run the server on other embedded Linux systems like **OpenWrt**.
+
+This is an advanced topic that will require familiarity with your specific platform. The general requirements are:
+
+1.  **Python 3:** You must have a working Python 3 interpreter.
+2.  **Dependencies:** You must be able to install the `requests` library (and `pyopenssl` stack if needed) via your platform's package manager (e.g., `opkg` on OpenWrt).
+3.  **Service Management:** You will need to create your own service/init script that is compatible with your system's init process.
+    -   For **OpenWrt**, this means creating a `procd` init script in `/etc/init.d/`. The logic will be similar to the `systemd` or `S99siaserver` examples, but the syntax is different.
+    -   You will need to ensure the script starts the `sia-server.py` and, optionally, the `ip_check.py` processes.
+
+The `asuswrt-merlin/check-sia.sh` watchdog script is written in POSIX-compliant shell and can likely be adapted with minor changes to provide self-healing capabilities on other platforms that use `cron`.
