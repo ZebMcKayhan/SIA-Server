@@ -212,9 +212,27 @@ class NotificationDispatcher(Thread):
 
 # --- This is the NEW function that sia-server will call ---
 def enqueue_notification(event: GalaxyEvent, queue: Queue):
+    """
+    Puts a new event onto the notification queue.
+    If the queue is full, it removes the oldest item to make space.
+    """
+    if queue.full():
+        # The queue is full. We need to make space by dropping the oldest item.
+        try:
+            oldest_event, oldest_retry_count = queue.get_nowait()
+            log.warning("Notification queue is full. Dropping the oldest event to make space.")
+            log.warning("Dropped Event Details: Account %s, Retries: %d", 
+                        oldest_event.account if oldest_event else 'N/A', oldest_retry_count)
+            queue.task_done() # We must call this to balance the get()
+        except queue.Empty:
+            # This is a rare race condition, but it's safe to ignore.
+            pass
+            
     try:
+        # Now there is space. Add the new event.
         queue.put_nowait((event, 0)) # initial retry count is 0
         log.debug("Event for account %s added to notification queue.", event.account)
     except QueueFull:
-        log.error("Notification queue is full! Event for %s was lost.", event.account)
+        # This should almost never happen due to the check above, but it's a safe fallback.
+        log.error("Notification queue is still full! Failed to add event for %s. Notification lost.", event.account)
 
