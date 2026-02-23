@@ -212,7 +212,7 @@ class NotificationDispatcher(Thread):
             if not success:
                 # The notification failed. Schedule it for a future retry.
                 retry_count += 1
-                if self.max_retries == 0 or retry_count < self.max_retries:
+                if self.max_retries == 0 or retry_count <= self.max_retries:
                     delay = self.get_retry_delay(retry_count)
                     new_next_attempt_time = time.time() + delay
                     log.warning("Dispatch failed for account %s. Re-queueing for retry in %d mins (attempt %d).",
