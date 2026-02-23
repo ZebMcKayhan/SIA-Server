@@ -155,6 +155,10 @@ def _dispatch_http_notification(event: GalaxyEvent, ntfy_topics: Dict, priority_
         return False
 
 class NotificationDispatcher(Thread):
+    """
+    A non-blocking background thread that processes a queue of notifications.
+    It handles sending and retries with progressive backoff without blocking the queue.
+    """
     def __init__(self, queue: Queue, ntfy_topics: Dict, priority_map: Dict, 
                  default_priority: int, max_retries: int, max_retry_time: int):
         super().__init__(daemon=True)
@@ -175,27 +179,35 @@ class NotificationDispatcher(Thread):
     def run(self):
         log.info("NotificationDispatcher thread started.")
         while not self.shutdown_event.is_set():
-            event, retry_count = self.queue.get()
+            event, retry_count, next_attempt_time = self.queue.get()
             if not event: # This is the shutdown signal
                 self.queue.task_done()
                 break
 
+            current_time = time.time()
+
+            if current_time < next_attempt_time:
+                # It's not time to retry this item yet.
+                # Put it back at the end of the queue and immediately process the next item.
+                self.queue.put((event, retry_count, next_attempt_time))
+                self.queue.task_done()
+                # Sleep for a very short time to prevent a tight loop if all items are in a wait state.
+                time.sleep(0.1) 
+                continue
+            
             success = _dispatch_http_notification(event, self.ntfy_topics, self.priority_map, self.default_priority)
             
             if not success:
+                # The notification failed. Schedule it for a future retry.
                 retry_count += 1
                 if self.max_retries == 0 or retry_count < self.max_retries:
                     delay = self.get_retry_delay(retry_count)
-                    log.warning("Dispatch failed for account %s. Will retry in %d mins (attempt %d).",
+                    new_next_attempt_time = time.time() + delay
+                    log.warning("Dispatch failed for account %s. Re-queueing for retry in %d mins (attempt %d).",
                                 event.account, delay // 60, retry_count)
                     
-                    # Wait for the delay. Check for shutdown signal while waiting.
-                    if self.shutdown_event.wait(timeout=delay):
-                        # Shutdown was called while we were sleeping
-                        break
-                        
                     try:
-                        self.queue.put_nowait((event, retry_count))
+                        self.queue.put_nowait((event, retry_count, new_next_attempt_time))
                     except QueueFull:
                         log.error("Queue is full. Cannot re-queue failed notification for %s.", event.account)
                 else:
@@ -208,7 +220,8 @@ class NotificationDispatcher(Thread):
     def stop(self):
         log.info("Stopping NotificationDispatcher thread...")
         self.shutdown_event.set()
-        self.queue.put((None, 0)) # Unblock the .get() call
+        self.queue.put((None, 0, 0)) # Unblock the .get() call
+
 
 # --- This is the NEW function that sia-server will call ---
 def enqueue_notification(event: GalaxyEvent, queue: Queue):
@@ -217,22 +230,17 @@ def enqueue_notification(event: GalaxyEvent, queue: Queue):
     If the queue is full, it removes the oldest item to make space.
     """
     if queue.full():
-        # The queue is full. We need to make space by dropping the oldest item.
         try:
-            oldest_event, oldest_retry_count = queue.get_nowait()
-            log.warning("Notification queue is full. Dropping the oldest event to make space.")
-            log.warning("Dropped Event Details: Account %s, Retries: %d", 
-                        oldest_event.account if oldest_event else 'N/A', oldest_retry_count)
-            queue.task_done() # We must call this to balance the get()
+            oldest_event, _, _ = queue.get_nowait()
+            log.warning("Notification queue is full. Dropping the oldest event to make space for the new one.")
+            queue.task_done()
         except queue.Empty:
-            # This is a rare race condition, but it's safe to ignore.
             pass
             
     try:
-        # Now there is space. Add the new event.
-        queue.put_nowait((event, 0)) # initial retry count is 0
+        # A new event is always ready to be sent immediately (next_attempt_time = 0)
+        queue.put_nowait((event, 0, 0)) # event, retry_count, next_attempt_time
         log.debug("Event for account %s added to notification queue.", event.account)
     except QueueFull:
-        # This should almost never happen due to the check above, but it's a safe fallback.
-        log.error("Notification queue is still full! Failed to add event for %s. Notification lost.", event.account)
+        log.error("Notification queue is still full! Event for %s was lost.", event.account)
 
