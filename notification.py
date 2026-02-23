@@ -191,8 +191,8 @@ class NotificationDispatcher(Thread):
                 # Put it back at the end of the queue and immediately process the next item.
                 self.queue.put((event, retry_count, next_attempt_time))
                 self.queue.task_done()
-                # Sleep for a very short time to prevent a tight loop if all items are in a wait state.
-                time.sleep(0.1) 
+                # Sleep for a short time to prevent a tight loop if all items are in a wait state.
+                time.sleep(1.0) 
                 continue
             
             success = _dispatch_http_notification(event, self.ntfy_topics, self.priority_map, self.default_priority)
