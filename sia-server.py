@@ -14,6 +14,8 @@ import logging
 import logging.handlers
 import sys
 import signal
+import functools
+from queue import Queue
 
 # --- SCRIPT INITIALIZATION ---
 
@@ -55,8 +57,9 @@ except ImportError:
     log.info("uvloop not found, using standard asyncio event loop.")
     pass
 
+
 from galaxy.parser import parse_galaxy_event
-from notification import send_notification
+from notification import NotificationDispatcher, enqueue_notification
 from galaxy.constants import COMMANDS, COMMAND_BYTES, EVENT_CODE_DESCRIPTIONS
 
 # --- END INITIALIZATION ---
@@ -102,7 +105,7 @@ async def build_and_send(writer, command: str, payload: bytes = b''):
     log.debug("Sent Command: %s, Raw: %r", command, final_message)
 
 
-async def handle_connection(reader, writer):
+async def handle_connection(notification_queue: Queue, reader, writer):
     """Handle an incoming SIA connection."""
     addr = writer.get_extra_info('peername')
     log.info("Connection from %r", addr)
@@ -174,13 +177,8 @@ async def handle_connection(reader, writer):
             description = event.action_text or event.event_description
             log.info("Event: %s (%s)", event.event_code, description)
             
-            # This call is now simpler
-            send_notification(
-                event,
-                config.NTFY_TOPICS,
-                config.EVENT_PRIORITIES,
-                config.DEFAULT_PRIORITY
-            )
+            # Send the notification to our que:
+            enqueue_notification(event, notification_queue)
             
             log.info("--- Event %d complete ---", i)
     except Exception as e:
@@ -215,13 +213,14 @@ async def monitor_subprocess(process, name):
 
 # In sia-server.py
 
-async def start_servers():
+async def start_servers(notification_queue: Queue):
     """Starts the main SIA server and launches the IP Check server as a subprocess."""
     
     try:
+        handler_with_queue = functools.partial(handle_connection, notification_queue)
         # --- Start the main SIA Event Server ---
         sia_server = await asyncio.start_server(
-            handle_connection, config.LISTEN_ADDR, config.LISTEN_PORT
+            handler_with_queue, config.LISTEN_ADDR, config.LISTEN_PORT
         )
         sia_addrs = ', '.join(str(sock.getsockname()) for sock in sia_server.sockets)
         log.info('='*60)
@@ -281,15 +280,31 @@ def main():
     signal.signal(signal.SIGTERM, handle_shutdown)
     
     log.info("Starting Galaxy SIA Server version %s", __version__)
+
+    notification_queue = Queue(maxsize=config.MAX_QUEUE_SIZE)
+    dispatcher = NotificationDispatcher(
+        notification_queue,
+        config.NTFY_TOPICS,
+        config.EVENT_PRIORITIES,
+        config.DEFAULT_PRIORITY,
+        config.MAX_RETRIES,
+        config.MAX_RETRY_TIME
+    )
+    dispatcher.start()
     
     try:
-        asyncio.run(start_servers())
+        asyncio.run(start_servers(notification_queue))
     except (KeyboardInterrupt, SystemExit):
         log.info("Server stopped")
     except Exception as e:
         # This will now only catch very unexpected errors.
         log.critical("A critical server error occurred: %s", e, exc_info=True)
-        sys.exit(1)
+    finally:
+        # This block ensures the dispatcher is stopped when the server exits for any reason.
+        log.info("Shutting down notification dispatcher...")
+        dispatcher.stop()   # Signals the thread's loop to exit
+        dispatcher.join()   # Waits for the thread to finish cleanly
+        log.info("Notification dispatcher stopped.")
 
 if __name__ == '__main__':
     main()
