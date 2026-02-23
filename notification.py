@@ -9,7 +9,7 @@ import logging
 import sys
 import time
 from typing import Dict
-from queue import Queue, Full as QueueFull
+from queue import Queue, Full as QueueFull, Empty
 from threading import Thread, Event as ThreadEvent
 from galaxy.parser import GalaxyEvent
 
@@ -234,7 +234,7 @@ def enqueue_notification(event: GalaxyEvent, queue: Queue):
             oldest_event, _, _ = queue.get_nowait()
             log.warning("Notification queue is full. Dropping the oldest event to make space for the new one.")
             queue.task_done()
-        except queue.Empty:
+        except Empty:
             pass
             
     try:
