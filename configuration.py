@@ -28,6 +28,9 @@ class AppConfig:
         self.LOG_FILE = None
         self.ACCOUNT_SITES = {}
         self.NTFY_TOPICS = {}
+        self.MAX_QUEUE_SIZE = 50
+        self.MAX_RETRIES = 10
+        self.MAX_RETRY_TIME = 30
         
         # --- Settings from defaults.py (advanced) ---
         self.EVENT_PRIORITIES = getattr(defaults, 'EVENT_PRIORITIES', {})
@@ -145,7 +148,30 @@ def load_and_validate_config() -> AppConfig:
             if not app_config.LOG_FILE:
                 log.warning("LOG_TO is set to File, but no LOG_FILE was specified. Logging to screen instead.")
                 app_config.LOG_TO_FILE = False
+
+    # Validate and load [Notification] section ---
+    if config.has_section('Notification'):
+        try:
+            app_config.MAX_QUEUE_SIZE = config.getint('Notification', 'max_que_size', fallback=50)
+            app_config.MAX_RETRIES = config.getint('Notification', 'max_retries', fallback=10)
+            app_config.MAX_RETRY_TIME = config.getint('Notification', 'max_retry_time', fallback=30)
+
+            # Add some validation for the ranges
+            if not 1 <= app_config.MAX_QUEUE_SIZE <= 1000:
+                log.warning("Invalid MAX_QUE_SIZE '%d'. Must be between 1 and 1000. Using default 50.", app_config.MAX_QUEUE_SIZE)
+                app_config.MAX_QUEUE_SIZE = 50
+            if app_config.MAX_RETRIES < 0:
+                log.warning("Invalid MAX_RETRIES '%d'. Cannot be negative. Using default 10.", app_config.MAX_RETRIES)
+                app_config.MAX_RETRIES = 10
+            if not 1 <= app_config.MAX_RETRY_TIME <= 1000:
+                log.warning("Invalid MAX_RETRY_TIME '%d'. Must be between 1 and 1000. Using default 30.", app_config.MAX_RETRY_TIME)
+                app_config.MAX_RETRY_TIME = 30
                 
+        except ValueError:
+            log.warning("Invalid number in [Notification] section. Using default queue settings.")
+            # Defaults are already set in AppConfig, so no action needed.
+            pass
+
     # --- Load Site and Default Sections ---
     system_sections = ['SIA-Server', 'IP-Check', 'Logging']
     account_sections = [s for s in config.sections() if s not in system_sections]
