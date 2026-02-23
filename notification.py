@@ -172,9 +172,21 @@ class NotificationDispatcher(Thread):
         self.shutdown_event = ThreadEvent()
 
     def get_retry_delay(self, retry_count: int) -> int:
-        delays = [1, 5, 15] # minutes
-        delay = delays[retry_count] if retry_count < len(delays) else self.max_retry_time_minutes
-        return delay * 60 # seconds
+        """
+        Calculates the retry delay using a progressive backoff strategy (exponential backoff).
+        The delay doubles with each retry, up to the configured maximum.
+        """
+        # Start with a 1-minute base delay
+        base_delay = 1 # in minutes
+
+        # Double the delay for each previous attempt (2^0, 2^1, 2^2, ...)
+        # The 'retry_count' starts at 1 for the first retry.
+        current_delay = base_delay * (2 ** (retry_count - 1))
+
+        # Ensure the delay does not exceed the user-configured maximum
+        final_delay = min(current_delay, self.max_retry_time_minutes)
+        
+        return final_delay * 60 # Convert minutes to seconds
 
     def run(self):
         log.info("NotificationDispatcher thread started.")
