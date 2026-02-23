@@ -7,7 +7,10 @@ to a service like ntfy.sh based on a parsed GalaxyEvent.
 
 import logging
 import sys
+import time
 from typing import Dict
+from queue import Queue, Full as QueueFull
+from threading import Thread, Event as ThreadEvent
 from galaxy.parser import GalaxyEvent
 
 # --- Dependency and Logging Initialization ---
@@ -80,8 +83,8 @@ def format_notification_text(event: GalaxyEvent) -> str:
     return notification.strip()
 
 
-def send_notification(event: GalaxyEvent, ntfy_topics: Dict, priority_map: Dict, 
-                     default_priority: int) -> bool:
+def _dispatch_http_notification(event: GalaxyEvent, ntfy_topics: Dict, priority_map: Dict, 
+                               default_priority: int) -> bool:
     """Sends a formatted notification using topic-specific configuration."""
     
     # 1. Find the correct topic configuration for this event's account.
@@ -141,12 +144,77 @@ def send_notification(event: GalaxyEvent, ntfy_topics: Dict, priority_map: Dict,
             auth=auth_details
         )
         response.raise_for_status()
-        log.info("Notification sent successfully.")
+        log.info("Dispatch successful for account %s.", event.account)
         return True
             
     except requests.exceptions.Timeout:
         log.error("Notification failed: Request to ntfy.sh timed out.")
         return False
     except requests.exceptions.RequestException as e:
-        log.error("Notification failed: %s", e)
+        log.error("Dispatch failed for account %s: %s", event.account, e)
         return False
+
+class NotificationDispatcher(Thread):
+    def __init__(self, queue: Queue, ntfy_topics: Dict, priority_map: Dict, 
+                 default_priority: int, max_retries: int, max_retry_time: int):
+        super().__init__(daemon=True)
+        self.name = "NotificationDispatcher"
+        self.queue = queue
+        self.ntfy_topics = ntfy_topics
+        self.priority_map = priority_map
+        self.default_priority = default_priority
+        self.max_retries = max_retries
+        self.max_retry_time_minutes = max_retry_time
+        self.shutdown_event = ThreadEvent()
+
+    def get_retry_delay(self, retry_count: int) -> int:
+        delays = [1, 5, 15] # minutes
+        delay = delays[retry_count] if retry_count < len(delays) else self.max_retry_time_minutes
+        return delay * 60 # seconds
+
+    def run(self):
+        log.info("NotificationDispatcher thread started.")
+        while not self.shutdown_event.is_set():
+            event, retry_count = self.queue.get()
+            if not event: # This is the shutdown signal
+                self.queue.task_done()
+                break
+
+            success = _dispatch_http_notification(event, self.ntfy_topics, self.priority_map, self.default_priority)
+            
+            if not success:
+                retry_count += 1
+                if self.max_retries == 0 or retry_count < self.max_retries:
+                    delay = self.get_retry_delay(retry_count)
+                    log.warning("Dispatch failed for account %s. Will retry in %d mins (attempt %d).",
+                                event.account, delay // 60, retry_count)
+                    
+                    # Wait for the delay. Check for shutdown signal while waiting.
+                    if self.shutdown_event.wait(timeout=delay):
+                        # Shutdown was called while we were sleeping
+                        break
+                        
+                    try:
+                        self.queue.put_nowait((event, retry_count))
+                    except QueueFull:
+                        log.error("Queue is full. Cannot re-queue failed notification for %s.", event.account)
+                else:
+                    log.error("Dispatch failed for account %s after %d retries. Giving up.",
+                              event.account, self.max_retries)
+            
+            self.queue.task_done()
+        log.info("NotificationDispatcher thread stopped.")
+
+    def stop(self):
+        log.info("Stopping NotificationDispatcher thread...")
+        self.shutdown_event.set()
+        self.queue.put((None, 0)) # Unblock the .get() call
+
+# --- This is the NEW function that sia-server will call ---
+def enqueue_notification(event: GalaxyEvent, queue: Queue):
+    try:
+        queue.put_nowait((event, 0)) # initial retry count is 0
+        log.debug("Event for account %s added to notification queue.", event.account)
+    except QueueFull:
+        log.error("Notification queue is full! Event for %s was lost.", event.account)
+
