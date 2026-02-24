@@ -129,6 +129,10 @@ The primary configuration is done in `sia-server.conf`. Advanced settings (like 
 -   **`[Default]` Section:** A special section for events from account numbers not specifically listed.
 -   **`[SIA-Server]` & `[IP-Check]` Sections:** Configure the ports and addresses for the main server and the optional heartbeat server.
 -   **`[Logging]` Section:** Control the log level (`DEBUG`, `INFO`) and whether output goes to the `Screen` or a `File`.
+-   **`[Notification]` Section:** This section configures the server's resilient retry queue for handling network outages or ntfy.sh downtime.
+    -   `MAX_QUE_SIZE`: The maximum number of failed notifications to keep in the retry queue. If the queue becomes full, the **oldest** notification is discarded to make room for the newest one, ensuring the most recent events are prioritized.
+    -   `MAX_RETRIES`: The number of times the server will *retry* sending a failed notification after the initial attempt. Set to `0` for infinite retries.
+    -   `MAX_RETRY_TIME`: The maximum number of minutes to wait between retry attempts. The server uses a **progressive backoff** strategy, starting with a short delay and increasing the wait time with each subsequent failure, up to this maximum value.
 
 ## Usage
 ### For Linux
