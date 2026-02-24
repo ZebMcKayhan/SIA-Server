@@ -43,12 +43,12 @@ The project is structured to separate the server logic, protocol parsing, and co
 ├── ip_check.py             # Optional subprocess for answering heartbeats.
 ├── README.md               # This file.
 ├── galaxy/
-|   ├── __init__.py
-|   ├── README.md           # Technical description of the protocol.  
-|   ├── parser.py           # Handles parsing of the Galaxy SIA protocol.
-|   └── constants.py        # Constants used in the SIA protocol.
+│   ├── __init__.py
+│   ├── README.md           # Technical description of the protocol.  
+│   ├── parser.py           # Handles parsing of the Galaxy SIA protocol.
+│   └── constants.py        # Constants used in the SIA protocol.
 └── asuswrt-merlin/
-    ├── README.md           # Install instructions for asuswrt-merlin.
+    ├── README.md           # Install instructions for Asuswrt-Merlin.
     ├── S99siaserver        # Entware service (init.d) file.
     └── check-sia.sh        # Watchdog script for Entware service.
 ```
@@ -222,7 +222,7 @@ The communication between your alarm panel and this server is **unencrypted**. R
 ## Acknowledgments
 -   This project was developed through a collaborative effort with Anthropic's AI assistant, Claude.
 -   The initial socket server structure was inspired by the [nimnull/sia-server](https://github.com/nimnull/sia-server) project.
--   Some protocol information was found in [dklemm/FlexSIA2MQTT](https://github.com/dklemm/FlexSIA2MQTT) project
+-   Some protocol information was found in [dklemm/FlexSIA2MQTT](https://github.com/dklemm/FlexSIA2MQTT) project.
 
 ## License
 This project is licensed under the MIT License.
