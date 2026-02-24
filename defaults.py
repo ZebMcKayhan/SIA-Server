@@ -53,13 +53,6 @@ DEFAULT_PRIORITY = 5  # Urgent - better safe than sorry!
 # LOGGING CONFIGURATION
 # ============================================
 
-# Log file rotation settings
-# Maximum log file size in bytes (10MB default)
-LOG_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
-
-# Number of backup log files to keep
-LOG_BACKUP_COUNT = 5
-
 # Log format
 # Available fields: %(asctime)s, %(name)s, %(levelname)s, %(message)s
 LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'

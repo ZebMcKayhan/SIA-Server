@@ -35,8 +35,14 @@ def setup_logging():
     log.setLevel(getattr(logging, config.LOG_LEVEL, 'INFO'))
     formatter = logging.Formatter(config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT)
     if config.LOG_TO_FILE:
+        log.info("Logging configured to write to file: %s", config.LOG_FILE)
+        # Convert megabytes from config to bytes for the handler
+        max_bytes = config.LOG_MAX_MB * 1024 * 1024
+        
         handler = logging.handlers.RotatingFileHandler(
-            config.LOG_FILE, maxBytes=config.LOG_MAX_BYTES, backupCount=config.LOG_BACKUP_COUNT
+            config.LOG_FILE, 
+            maxBytes=max_bytes, 
+            backupCount=config.LOG_BACKUP_COUNT
         )
     else:
         handler = logging.StreamHandler(sys.stderr)
@@ -211,8 +217,6 @@ async def monitor_subprocess(process, name):
     await process.wait()
     log.warning("Subprocess '%s' (PID: %d) has exited with code %d.", name, process.pid, process.returncode)
 
-# In sia-server.py
-
 async def start_servers(notification_queue: Queue):
     """Starts the main SIA server and launches the IP Check server as a subprocess."""
     
@@ -227,7 +231,6 @@ async def start_servers(notification_queue: Queue):
         log.info('Galaxy SIA Event Server Started')
         log.info('Listening for events on: %s', sia_addrs)
     except OSError as e:
-        # This block now handles startup errors for the main server gracefully.
         if "Address already in use" in str(e):
             log.critical("STARTUP FAILED: The port %d is already in use.", config.LISTEN_PORT)
         elif "Cannot assign requested address" in str(e) or "could not bind" in str(e):
@@ -272,8 +275,6 @@ async def start_servers(notification_queue: Queue):
 def handle_shutdown(signum, frame):
     log.info("Received shutdown signal (%d), stopping server...", signum)
     sys.exit(0)
-
-# In sia-server.py
 
 def main():
     signal.signal(signal.SIGINT, handle_shutdown)

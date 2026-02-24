@@ -122,17 +122,27 @@ On Windows, simply edit the file with a text editor like Notepad.
 
 ## Configuration Explained
 The primary configuration is done in `sia-server.conf`. Advanced settings (like event priorities and character maps) can be found in `defaults.py`.
+
 -   **Site Sections (`[012345]`):** Each site is defined by a section where the header is the panel's unique **Account Number**.
     -   `SITE_NAME`: A friendly name for the site (e.g., "Main House"). If omitted, the account number is used.
     -   `NTFY_ENABLED`, `NTFY_TOPIC`, `NTFY_TITLE`: Configure notification delivery for this site.
-    -   `NTFY_AUTH`: Set to `None`, `Token`, or `Userpass` for private topics and provide the corresponding `NTFY_TOKEN` or `NTFY_USER`/`NTFY_PASS` keys.
+    -   `NTFY_AUTH`: Can be `None`, `Token`, or `Userpass` for private topics. Provide the corresponding `NTFY_TOKEN` or `NTFY_USER`/`NTFY_PASS` keys.
+
 -   **`[Default]` Section:** A special section for events from account numbers not specifically listed.
+
 -   **`[SIA-Server]` & `[IP-Check]` Sections:** Configure the ports and addresses for the main server and the optional heartbeat server.
--   **`[Logging]` Section:** Control the log level (`DEBUG`, `INFO`) and whether output goes to the `Screen` or a `File`.
--   **`[Notification]` Section:** This section configures the server's resilient retry queue for handling network outages or ntfy.sh downtime.
-    -   `MAX_QUE_SIZE`: The maximum number of failed notifications to keep in the retry queue. If the queue becomes full, the **oldest** notification is discarded to make room for the newest one, ensuring the most recent events are prioritized.
-    -   `MAX_RETRIES`: The number of times the server will *retry* sending a failed notification after the initial attempt. Set to `0` for infinite retries.
-    -   `MAX_RETRY_TIME`: The maximum number of minutes to wait between retry attempts. The server uses a **progressive backoff** strategy, starting with a short delay and increasing the wait time with each subsequent failure, up to this maximum value.
+
+-   **`[Logging]` Section:** Control the log level, output, and file rotation.
+    -   `LOG_LEVEL`: Set the verbosity of logs (`DEBUG`, `INFO`, `WARNING`, `ERROR`). `INFO` is recommended for normal use.
+    -   `LOG_TO`: Choose `Screen` (for testing/`systemd` journal) or `File`.
+    -   `LOG_FILE`: If `LOG_TO = File`, specify the full path to the log file.
+    -   `LOG_MAX_MB`: The maximum size in Megabytes before the log file is rotated.
+    -   `LOG_BACKUP_COUNT`: The number of old log files to keep.
+
+-   **`[Notification]` Section:** Configures the server's resilient retry queue for handling network outages.
+    -   `MAX_QUE_SIZE`: The maximum number of failed notifications to keep in the queue. If the queue becomes full, the **oldest** notification is discarded to make room for the newest one.
+    -   `MAX_RETRIES`: The number of times to *retry* sending a failed notification after the initial attempt. Set to `0` for infinite retries.
+    -   `MAX_RETRY_TIME`: The maximum number of minutes to wait between retry attempts. The server uses a **progressive backoff** strategy, increasing the wait time with each failure up to this maximum.
 
 ## Usage
 ### For Linux

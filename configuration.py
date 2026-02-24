@@ -31,6 +31,8 @@ class AppConfig:
         self.MAX_QUEUE_SIZE = 50
         self.MAX_RETRIES = 10
         self.MAX_RETRY_TIME = 30
+        self.LOG_MAX_MB = 10
+        self.LOG_BACKUP_COUNT = 5
         
         # --- Settings from defaults.py (advanced) ---
         self.EVENT_PRIORITIES = getattr(defaults, 'EVENT_PRIORITIES', {})
@@ -38,8 +40,6 @@ class AppConfig:
         self.UNKNOWN_CHAR_MAP = getattr(defaults, 'UNKNOWN_CHAR_MAP', {})
         self.LOG_FORMAT = getattr(defaults, 'LOG_FORMAT', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         self.LOG_DATE_FORMAT = getattr(defaults, 'LOG_DATE_FORMAT', '%Y-%m-%d %H:%M:%S')
-        self.LOG_MAX_BYTES = getattr(defaults, 'LOG_MAX_BYTES', 10 * 1024 * 1024)
-        self.LOG_BACKUP_COUNT = getattr(defaults, 'LOG_BACKUP_COUNT', 5)
 
 def _validate_port(port: int, section: str, key: str) -> bool:
     """Helper function to validate a port number."""
@@ -148,6 +148,21 @@ def load_and_validate_config() -> AppConfig:
             if not app_config.LOG_FILE:
                 log.warning("LOG_TO is set to File, but no LOG_FILE was specified. Logging to screen instead.")
                 app_config.LOG_TO_FILE = False
+            # Parse and validate the new log rotation settings
+            try:
+                max_mb = config.getint('Logging', 'log_max_mb', fallback=10)
+                if 1 <= max_mb <= 100:
+                    app_config.LOG_MAX_MB = max_mb
+                else:
+                    log.warning("Invalid LOG_MAX_MB '%d'. Must be between 1 and 100. Using default 10.", max_mb)
+                
+                backup_count = config.getint('Logging', 'log_backup_count', fallback=5)
+                if 1 <= backup_count <= 10:
+                    app_config.LOG_BACKUP_COUNT = backup_count
+                else:
+                    log.warning("Invalid LOG_BACKUP_COUNT '%d'. Must be between 1 and 10. Using default 5.", backup_count)
+            except ValueError:
+                log.warning("Invalid number in [Logging] for rotation settings. Using defaults.")
 
     # Validate and load [Notification] section ---
     if config.has_section('Notification'):
