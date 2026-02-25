@@ -8,9 +8,7 @@ and provides them as clean Python objects to the main application.
 import configparser
 import logging
 import sys
-
-# Import the advanced/default settings
-import defaults
+import re
 
 log = logging.getLogger(__name__)
 
@@ -92,8 +90,6 @@ def load_and_validate_config() -> AppConfig:
     Reads sia-server.conf, validates its contents, and returns a final
     AppConfig object.
     """
-    # Pre-validation for duplicate sections is no longer needed with this design.
-    
     config = configparser.ConfigParser(inline_comment_prefixes=('#', ';'))
     if not config.read('sia-server.conf'):
         log.critical("Configuration Error: The 'sia-server.conf' file was not found or is empty.")
@@ -148,7 +144,7 @@ def load_and_validate_config() -> AppConfig:
             if not app_config.LOG_FILE:
                 log.warning("LOG_TO is set to File, but no LOG_FILE was specified. Logging to screen instead.")
                 app_config.LOG_TO_FILE = False
-            # Parse and validate the new log rotation settings
+            # Parse and validate the log rotation settings
             try:
                 max_mb = config.getint('Logging', 'log_max_mb', fallback=10)
                 if 1 <= max_mb <= 100:
@@ -181,7 +177,31 @@ def load_and_validate_config() -> AppConfig:
             if not 1 <= app_config.MAX_RETRY_TIME <= 1000:
                 log.warning("Invalid MAX_RETRY_TIME '%d'. Must be between 1 and 1000. Using default 30.", app_config.MAX_RETRY_TIME)
                 app_config.MAX_RETRY_TIME = 30
+
+            # Parsing EC Codes Notification Priorities:
+            event_priorities = {}
+            for i in range(1, 6): # Check for PRIORITY_1 through PRIORITY_5
+                key = f'priority_{i}'
+                # Get the string, falling back to empty if the key is missing
+                priority_str = config.get('Notification', key, fallback='')
                 
+                # Split by commas OR spaces, and filter out any empty strings
+                codes = [code.strip().upper() for code in re.split(r'[, ]+', priority_str) if code.strip()]
+                
+                for code in codes:
+                    if len(code) == 2:
+                        event_priorities[code] = i
+                    else:
+                        log.warning("In [Notification], ignoring invalid event code '%s' in %s. Codes must be 2 characters.", code, key.upper())
+            
+            app_config.EVENT_PRIORITIES = event_priorities
+            
+            # Parse the default priority
+            app_config.DEFAULT_PRIORITY = config.getint('Notification', 'default_priority', fallback=5)
+            if not 1 <= app_config.DEFAULT_PRIORITY <= 5:
+                log.warning("Invalid DEFAULT_PRIORITY '%d'. Must be between 1 and 5. Using default 5.", app_config.DEFAULT_PRIORITY)
+                app_config.DEFAULT_PRIORITY = 5
+        
         except ValueError:
             log.warning("Invalid number in [Notification] section. Using default queue settings.")
             # Defaults are already set in AppConfig, so no action needed.
