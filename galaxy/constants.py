@@ -230,3 +230,20 @@ EVENT_CODE_DESCRIPTIONS = {
     'ZT': "Freezer Trouble",
     'ZU': "Freezer Unbypass",
 }
+
+# ============================================
+# CHARACTER ENCODING
+# ============================================
+
+# Unknown character mapping - Galaxy proprietary encoding
+# Used for mapping special language specific characters
+# These are confirmed from actual captures
+# You can add more as you discover them
+UNKNOWN_CHAR_MAP = {
+    b'\x8e': 'Ä',  # Confirmed in: ÅTERSTÄLL
+    b'\x8f': 'Å',  # Confirmed in: PÅSLAG, SYSTEMÅT
+    b'\x99': 'Ö',  # Confirmed in: FÖRDRÖJD
+    b'\x86': 'å',  # Confirmed in: username test
+    b'\x84': 'ä',  # Confirmed in: username test
+    b'\x94': 'ö',  # Confirmed in: username test
+}
