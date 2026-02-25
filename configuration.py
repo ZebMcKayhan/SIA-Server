@@ -34,14 +34,10 @@ class AppConfig:
         self.LOG_BACKUP_COUNT = 5
         self.EVENT_PRIORITIES = {}
         self.DEFAULT_PRIORITY = 5
+        # --- Advanced / Constant Defaults ---
         self.UNKNOWN_CHAR_MAP = UNKNOWN_CHAR_MAP
-        
-        # --- Settings from defaults.py (advanced) ---
-        self.EVENT_PRIORITIES = getattr(defaults, 'EVENT_PRIORITIES', {})
-        self.DEFAULT_PRIORITY = getattr(defaults, 'DEFAULT_PRIORITY', 5)
-        self.UNKNOWN_CHAR_MAP = getattr(defaults, 'UNKNOWN_CHAR_MAP', {})
-        self.LOG_FORMAT = getattr(defaults, 'LOG_FORMAT', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        self.LOG_DATE_FORMAT = getattr(defaults, 'LOG_DATE_FORMAT', '%Y-%m-%d %H:%M:%S')
+        self.LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        self.LOG_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
 
 def _validate_port(port: int, section: str, key: str) -> bool:
     """Helper function to validate a port number."""
@@ -188,7 +184,6 @@ def load_and_validate_config() -> AppConfig:
                 key = f'priority_{i}'
                 # Get the string, falling back to empty if the key is missing
                 priority_str = config.get('Notification', key, fallback='')
-                
                 # Split by commas OR spaces, and filter out any empty strings
                 codes = [code.strip().upper() for code in re.split(r'[, ]+', priority_str) if code.strip()]
                 
