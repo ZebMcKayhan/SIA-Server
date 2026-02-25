@@ -9,6 +9,7 @@ import configparser
 import logging
 import sys
 import re
+from galaxy.constants import UNKNOWN_CHAR_MAP
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +32,9 @@ class AppConfig:
         self.MAX_RETRY_TIME = 30
         self.LOG_MAX_MB = 10
         self.LOG_BACKUP_COUNT = 5
+        self.EVENT_PRIORITIES = {}
+        self.DEFAULT_PRIORITY = 5
+        self.UNKNOWN_CHAR_MAP = UNKNOWN_CHAR_MAP
         
         # --- Settings from defaults.py (advanced) ---
         self.EVENT_PRIORITIES = getattr(defaults, 'EVENT_PRIORITIES', {})
