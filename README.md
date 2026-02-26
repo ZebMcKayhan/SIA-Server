@@ -21,7 +21,7 @@ If your Galaxy Flex notifications suddenly stopped working, this project provide
 -   **Broad SIA Level Support:** The flexible parser can correctly handle event data from SIA Levels 0, 1, 2, and 3.
 -   **Optional Heartbeat Server:** Includes an optional server to handle the proprietary Honeywell "IP Check" heartbeat.
 -   **Character Encoding Fixes:** Decodes the proprietary character set used by Galaxy panels (e.g., Å, Ä, Ö).
--   **Highly Configurable:** Most settings are in a simple `sia-server.conf` file, with advanced settings in `defaults.py`.
+-   **Highly Configurable:** Most user settings are in a simple `sia-server.conf` file, with advanced protocol constants located in the `galaxy/` directory.
 
 ## Prerequisites
 
@@ -37,7 +37,6 @@ The project is structured to separate the server logic, protocol parsing, and co
 .
 ├── sia-server.py           # The main server application
 ├── sia-server.conf         # Main user configuration file.
-├── defaults.py             # Advanced settings and constants.
 ├── configuration.py        # Loads and validates all configuration.
 ├── notification.py         # Handles formatting and sending of notifications.
 ├── ip_check.py             # Optional subprocess for answering heartbeats.
@@ -121,10 +120,11 @@ nano /path/to/your/sia-server/sia-server.conf
 On Windows, simply edit the file with a text editor like Notepad.
 
 ## Configuration Explained
-The primary configuration is done in `sia-server.conf`. Advanced settings (like event priorities and character maps) can be found in `defaults.py`.
+
+The primary configuration is done in `sia-server.conf`. This file is designed to be user-friendly and not sensitive to Python syntax. More advanced, technical constants (like character maps and command codes) are located in `galaxy/constants.py`.
 
 -   **Site Sections (`[012345]`):** Each site is defined by a section where the header is the panel's unique **Account Number**.
-    -   `SITE_NAME`: A friendly name for the site (e.g., "Main House"). If omitted, the account number is used.
+    -   `SITE_NAME`: A friendly name for the site (e.g., "Main House"). If omitted, the account number itself is used.
     -   `NTFY_ENABLED`, `NTFY_TOPIC`, `NTFY_TITLE`: Configure notification delivery for this site.
     -   `NTFY_AUTH`: Can be `None`, `Token`, or `Userpass` for private topics. Provide the corresponding `NTFY_TOKEN` or `NTFY_USER`/`NTFY_PASS` keys.
 
@@ -139,10 +139,10 @@ The primary configuration is done in `sia-server.conf`. Advanced settings (like 
     -   `LOG_MAX_MB`: The maximum size in Megabytes before the log file is rotated.
     -   `LOG_BACKUP_COUNT`: The number of old log files to keep.
 
--   **`[Notification]` Section:** Configures the server's resilient retry queue for handling network outages.
-    -   `MAX_QUE_SIZE`: The maximum number of failed notifications to keep in the queue. If the queue becomes full, the **oldest** notification is discarded to make room for the newest one.
-    -   `MAX_RETRIES`: The number of times to *retry* sending a failed notification after the initial attempt. Set to `0` for infinite retries.
-    -   `MAX_RETRY_TIME`: The maximum number of minutes to wait between retry attempts. The server uses a **progressive backoff** strategy, increasing the wait time with each failure up to this maximum.
+-   **`[Notification]` Section:** Configures the server's resilient retry queue and event priorities.
+    -   **Queue Settings:** `MAX_QUE_SIZE`, `MAX_RETRIES`, `MAX_RETRY_TIME` control the behavior of the retry queue for handling network outages.
+    -   **Priority Settings:** `PRIORITY_1` through `PRIORITY_5` contain comma- or space-separated lists of the 2-character SIA Event Codes that should be assigned to that priority level.
+    -   `DEFAULT_PRIORITY`: The priority level (1-5) to use for any event code not found in the specific priority lists.
 
 ## Usage
 ### For Linux

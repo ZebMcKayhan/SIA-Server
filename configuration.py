@@ -189,6 +189,11 @@ def load_and_validate_config() -> AppConfig:
                 
                 for code in codes:
                     if len(code) == 2:
+                        if code in event_priorities:
+                            # The code already exists. Log a warning.
+                            old_priority = event_priorities[code]
+                            log.warning("Duplicate event code '%s' found in configuration. It was found in both PRIORITY_%d and in PRIORITY_%d. Using the highest priority (%d).",
+                                        code, old_priority, i, i)
                         event_priorities[code] = i
                     else:
                         log.warning("In [Notification], ignoring invalid event code '%s' in %s. Codes must be 2 characters.", code, key.upper())
