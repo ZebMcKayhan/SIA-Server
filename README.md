@@ -37,7 +37,6 @@ The project is structured to separate the server logic, protocol parsing, and co
 .
 ├── sia-server.py           # The main server application
 ├── sia-server.conf         # Main user configuration file.
-├── defaults.py             # Advanced settings and constants.
 ├── configuration.py        # Loads and validates all configuration.
 ├── notification.py         # Handles formatting and sending of notifications.
 ├── ip_check.py             # Optional subprocess for answering heartbeats.
