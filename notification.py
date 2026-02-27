@@ -29,7 +29,7 @@ except ImportError:
     # On Windows, this may be a problem:
     if sys.platform == "win32":
         log_pyopenssl.warning("PyOpenSSL not found. HTTPS notifications may fail on Windows without it.")
-        log_pyopenssl.warning("Please run: python -m pip install pyopenssl")
+        log_pyopenssl.warning("If you get HTTPS SSL problems, please run: python -m pip install pyopenssl")
     # On Linux, it's normal:
     else:
         log_pyopenssl.info("PyOpenSSL not available; using default system SSL context.")
