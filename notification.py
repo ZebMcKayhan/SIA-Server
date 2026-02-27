@@ -20,20 +20,6 @@ from galaxy.parser import GalaxyEvent
 logging.basicConfig()
 log_pyopenssl = logging.getLogger(__name__)
 
-# --- CRITICAL: Check for 'requests' library ---
-try:
-    import requests
-except ImportError:
-    log_pyopenssl.critical("="*60)
-    log_pyopenssl.critical("FATAL ERROR: The 'requests' library is not installed.")
-    log_pyopenssl.critical("This library is required to send notifications.")
-    if sys.platform == "win32":
-        log_pyopenssl.critical("Please install it by running: python -m pip install requests pyopenssl cryptography ndg-httpsclient")
-    else: # Assume Linux/macOS
-        log_pyopenssl.critical("Please install it by running: sudo apt install python3-requests")
-    log_pyopenssl.critical("="*60)
-    sys.exit(1) # Exit the entire application immediately.
-
 # --- Force PyOpenSSL to be used by requests (if available) ---
 try:
     import urllib3.contrib.pyopenssl
@@ -43,10 +29,24 @@ except ImportError:
     # On Windows, this may be a problem:
     if sys.platform == "win32":
         log_pyopenssl.warning("PyOpenSSL not found. HTTPS notifications may fail on Windows without it.")
-        log_pyopenssl.warning("Please run: python -m pip install pyopenssl cryptography ndg-httpsclient")
+        log_pyopenssl.warning("Please run: python -m pip install pyopenssl")
     # On Linux, it's normal:
     else:
         log_pyopenssl.info("PyOpenSSL not available; using default system SSL context.")
+
+# --- CRITICAL: Check for 'requests' library ---
+try:
+    import requests
+except ImportError:
+    log_pyopenssl.critical("="*60)
+    log_pyopenssl.critical("FATAL ERROR: The 'requests' library is not installed.")
+    log_pyopenssl.critical("This library is required to send notifications.")
+    if sys.platform == "win32":
+        log_pyopenssl.critical("Please install it by running: python -m pip install requests")
+    else: # Assume Linux/macOS
+        log_pyopenssl.critical("Please install it by running: sudo apt install python3-requests")
+    log_pyopenssl.critical("="*60)
+    sys.exit(1) # Exit the entire application immediately.
 
 log = logging.getLogger(__name__)
 
