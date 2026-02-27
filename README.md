@@ -93,7 +93,7 @@ This server requires Python 3. The installation steps are different for Linux an
     ```powershell
     python -m pip install requests pyopenssl
     ```
-    > **Note:** The extra package `pyopenssl` are optional but highly recommended to avoid potential HTTPS/SSL errors when sending notifications from Windows.
+    > **Note:** The extra package `pyopenssl` are optional but recommended to avoid potential HTTPS/SSL errors when sending notifications from Windows.
 
 ### Step 3: Get the Notification App and Topic
 Before configuring the server, get the ntfy.sh app on your phone or computer.
