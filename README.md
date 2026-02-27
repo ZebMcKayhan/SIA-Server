@@ -91,9 +91,9 @@ This server requires Python 3. The installation steps are different for Linux an
 1.  **Install Python:** Download and install the latest Python 3 from the [official Python website](https://www.python.org/). **Important:** During installation, make sure to check the box that says "Add Python to PATH".
 2.  **Install Dependencies:** Open a **PowerShell** or **Command Prompt**. It is strongly recommended to use `python -m pip` to ensure you are installing packages for the correct Python interpreter.
     ```powershell
-    python -m pip install requests pyopenssl cryptography ndg-httpsclient
+    python -m pip install requests pyopenssl
     ```
-    > **Note:** The extra packages (`pyopenssl`, etc.) are highly recommended to avoid potential HTTPS/SSL errors when sending notifications from Windows.
+    > **Note:** The extra package `pyopenssl` are optional but highly recommended to avoid potential HTTPS/SSL errors when sending notifications from Windows.
 
 ### Step 3: Get the Notification App and Topic
 Before configuring the server, get the ntfy.sh app on your phone or computer.
