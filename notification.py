@@ -109,7 +109,8 @@ def _dispatch_http_notification(event: GalaxyEvent, ntfy_topics: Dict, priority_
     
     # 3. Get the title from the topic's specific configuration.
     notification_title = topic_config.get('title', 'Galaxy Alarm')
-    title = f"{notification_title}: {event.site_name or event.account}"
+    account_display = event.site_name or event.account
+    title = f"{notification_title}: {account_display}"
     
     headers = {
         "Title": title,
@@ -132,8 +133,9 @@ def _dispatch_http_notification(event: GalaxyEvent, ntfy_topics: Dict, priority_
             if user and password:
                 auth_details = (user, password)
                 log.debug("Using username/password authentication.")
-                         
-    log.info("Sending notification (priority %d) to %s: %s", priority, ntfy_url, message)
+
+    log.info("Sending notification (priority %d) for account %s: %s", priority, account_display, message)
+    log.debug("Sending notification (priority %d) to %s: %s", priority, ntfy_url, message)
     
     try:
         response = requests.post(
@@ -144,7 +146,7 @@ def _dispatch_http_notification(event: GalaxyEvent, ntfy_topics: Dict, priority_
             auth=auth_details
         )
         response.raise_for_status()
-        log.info("Dispatch successful for account %s.", event.account)
+        log.debug("Dispatch successful for account %s.", event.account)
         return True
             
     except requests.exceptions.Timeout:

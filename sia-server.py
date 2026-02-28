@@ -145,13 +145,13 @@ async def handle_connection(notification_queue: Queue, reader, writer):
                     continue
             
             command_name = COMMANDS.get(command_byte, f'UNKNOWN(0x{command_byte:02x})')
-            log.info("Received Command: %s, Payload: %r", command_name, payload)
+            log.debug("Received Command: %s, Payload: %r", command_name, payload)
             if command_name != 'END_OF_DATA':
                 valid_blocks.append({'command': command_name, 'payload': payload})
             await build_and_send(writer, 'ACKNOWLEDGE')
             
             if command_name == 'END_OF_DATA':
-                log.info("End of data received, processing sequence.")
+                log.debug("End of data received, processing sequence.")
                 break
         
         if not valid_blocks:
@@ -170,7 +170,7 @@ async def handle_connection(notification_queue: Queue, reader, writer):
         
         log.info("Found %d distinct event(s) in this connection", len(event_chunks))
         for i, chunk in enumerate(event_chunks, 1):
-            log.info("--- Processing Event %d of %d ---", i, len(event_chunks))
+            log.debug("--- Processing Event %d of %d ---", i, len(event_chunks))
             
             event = parse_galaxy_event(
                 chunk,
@@ -186,11 +186,11 @@ async def handle_connection(notification_queue: Queue, reader, writer):
             # Send the notification to our que:
             enqueue_notification(event, notification_queue)
             
-            log.info("--- Event %d complete ---", i)
+            log.debug("--- Event %d complete ---", i)
     except Exception as e:
         log.error("Error in connection handler: %s", e, exc_info=True)
     finally:
-        log.info("Closing connection from %r", addr)
+        log.debug("Closing connection from %r", addr)
         try:
             writer.close()
             await writer.wait_closed()
