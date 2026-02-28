@@ -195,6 +195,8 @@ Press `Ctrl+C` to stop.
 cd C:\path\to\your\sia-server
 python sia-server.py
 ```
+> **Note:** If your network setting is set to public, instead of private, you may need to add a rule windows firewall to accept inbound connections on the port (i.e. 10000) you are using. Search online how to do this for your windows version.
+
 Press `Ctrl+C` to stop.
 
 #### As a Service (Recommended)
