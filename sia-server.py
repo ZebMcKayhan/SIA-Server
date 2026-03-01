@@ -61,10 +61,10 @@ def setup_logging():
                 print("WARNING: Falling back to screen logging.", file=sys.stderr)
                             
         else: # Linux/Unix Syslog
+            syslog_address = '/dev/log'
             try:
-                # Let the SysLogHandler try its default locations first ('/dev/log', then UDP)
                 handler = logging.handlers.SysLogHandler()
-                log.info("Logging configured to write to system log (Syslog).")
+                handler = logging.handlers.SysLogHandler(address=syslog_address)
             except Exception as e:
                 print("WARNING: Could not connect to syslog: %s. Falling back to screen logging." % e, file=sys.stderr)
 
