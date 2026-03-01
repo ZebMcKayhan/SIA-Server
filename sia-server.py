@@ -39,13 +39,18 @@ def setup_logging():
     if config.LOG_TO_SYSLOG:
         if sys.platform == "win32":
             try:
-                # The 'source' name is what appears in the Event Viewer
-                handler = logging.handlers.NTEventLogHandler("SIA-Server")
+                # This import will only succeed if pywin32 is installed.
+                from logging.handlers import NTEventLogHandler
+                handler = NTEventLogHandler("SIA-Server")
                 log.info("Logging configured to write to Windows Event Log.")
+            except ImportError:
+                print("WARNING: The 'pywin32' package is required for Windows Event Log logging but is not installed.", file=sys.stderr)
+                print("WARNING: Please run 'python -m pip install pywin32' as an Administrator to enable this feature.", file=sys.stderr)
+                print("WARNING: Falling back to screen logging.", file=sys.stderr)
             except Exception as e:
-                log.warning("Failed to initialize Windows Event Log handler: %s", e)
-                log.warning("This may require running the script as an Administrator once to register the source.")
-                log.warning("Falling back to screen logging.")
+                print("WARNING: Failed to initialize Windows Event Log handler: %s" % e, file=sys.stderr)
+                print("WARNING: This may require running the script as an Administrator once to register the source.", file=sys.stderr)
+                print("WARNING: Falling back to screen logging.", file=sys.stderr)
         else: # Linux/Unix Syslog
             try:
                 # Let the SysLogHandler try its default locations first ('/dev/log', then UDP)
