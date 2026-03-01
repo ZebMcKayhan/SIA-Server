@@ -24,6 +24,7 @@ class AppConfig:
         self.IP_CHECK_PORT = 10001
         self.LOG_LEVEL = 'INFO'
         self.LOG_TO_FILE = False
+        self.LOG_TO_SYSLOG = False
         self.LOG_FILE = None
         self.ACCOUNT_SITES = {}
         self.NTFY_TOPICS = {}
@@ -137,8 +138,12 @@ def load_and_validate_config() -> AppConfig:
     # --- Validate and load [Logging] section
     if config.has_section('Logging'):
         app_config.LOG_LEVEL = config.get('Logging', 'log_level', fallback='INFO').upper()
+        # Read the user's choice for log destination
         log_to = config.get('Logging', 'log_to', fallback='Screen').lower()
+        # Set the correct flags based on the choice
         app_config.LOG_TO_FILE = (log_to == 'file')
+        app_config.LOG_TO_SYSLOG = (log_to == 'syslog')
+        # Handle file-specific settings only if file logging is enabled
         if app_config.LOG_TO_FILE:
             app_config.LOG_FILE = config.get('Logging', 'log_file', fallback=None)
             if not app_config.LOG_FILE:
