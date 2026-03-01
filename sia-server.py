@@ -19,54 +19,54 @@ from queue import Queue
 
 # --- SCRIPT INITIALIZATION ---
 
-# 1. Import the new configuration loader FIRST.
+# Import the new configuration loader FIRST.
 from configuration import load_and_validate_config
 
-# 2. Load and validate all configuration from files.
+# Load and validate all configuration from files.
 # This single 'config' object now holds all settings for the application.
 config = load_and_validate_config()
 
-# 3. Define the logging setup function.
+# Define the logging setup function.
 def setup_logging():
     """Configure logging based on the loaded config object."""
     log = logging.getLogger()
     if log.handlers:
-        return log
+        for handler in log.handlers[:]:
+            log.removeHandler(handler)
     
     log.setLevel(getattr(logging, config.LOG_LEVEL, 'INFO'))
     
     handler = None
-    if config.LOG_TO_SYSLOG:
+    
+    if config.LOG_TO_SYSLOG: 
         if sys.platform == "win32":
-            pywin32_available = False
             try:
                 import win32evtlogutil
-                pywin32_available = True
+                import win32evtlog 
+                # Next, attempt to register the application as an event source.
+                # This is the step that requires Administrator rights and can fail.
+                # We do this explicitly to get a clear error instead of a hang.
+                win32evtlogutil.AddSourceToRegistry("SIA-Server", sys.executable)
+                # If the above succeeded, we can create the handler.
+                handler = logging.handlers.NTEventLogHandler("SIA-Server")
             except ImportError:
-                pass # The library is not installed.
-                
-            if pywin32_available:
-                # The library exists, so now we try to create the handler.
-                try:
-                    handler = logging.handlers.NTEventLogHandler("SIA-Server")
-                except Exception as e:
-                    # This will catch permission errors if not run as admin.
-                    print("WARNING: Failed to initialize Windows Event Log handler: %s" % e, file=sys.stderr)
-                    print("WARNING: This may require running the script as an Administrator once to register the source.", file=sys.stderr)
-                    print("WARNING: Falling back to screen logging.", file=sys.stderr)
-            else:
                 # The library is not installed at all.
                 print("WARNING: The 'pywin32' package is required for Windows Event Log logging but is not installed.", file=sys.stderr)
                 print("WARNING: Please run 'python -m pip install pywin32' to enable this feature.", file=sys.stderr)
                 print("WARNING: Falling back to screen logging.", file=sys.stderr)
-                
+            except Exception as e:     
+                # This will catch permission errors if not run as admin.
+                print("WARNING: Failed to initialize Windows Event Log handler: %s" % e, file=sys.stderr)
+                print("WARNING: This may require running the script as an Administrator once to register the source.", file=sys.stderr)
+                print("WARNING: Falling back to screen logging.", file=sys.stderr)
+                            
         else: # Linux/Unix Syslog
             try:
                 # Let the SysLogHandler try its default locations first ('/dev/log', then UDP)
                 handler = logging.handlers.SysLogHandler()
                 log.info("Logging configured to write to system log (Syslog).")
             except Exception as e:
-                log.warning("Could not connect to syslog: %s. Falling back to screen logging.", e)
+                print("WARNING: Could not connect to syslog: %s. Falling back to screen logging." % e, file=sys.stderr)
 
     elif config.LOG_TO_FILE:
         # --- File Logging (your existing logic) ---
@@ -93,6 +93,15 @@ def setup_logging():
     
     handler.setFormatter(formatter)
     log.addHandler(handler)
+    if isinstance(handler, logging.handlers.NTEventLogHandler):
+        log.info("Logging configured to write to Windows Event Log.")
+    elif isinstance(handler, logging.handlers.SysLogHandler):
+        log.info("Logging configured to write to system log (Syslog).")
+    elif isinstance(handler, logging.handlers.RotatingFileHandler):
+        log.info("Logging configured to write to file: %s", config.LOG_FILE)
+    else:
+        log.info("Logging configured to write to screen (console).")
+    
     return log
 
 # 4. Set up the logger.
