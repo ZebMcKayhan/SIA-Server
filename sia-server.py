@@ -32,20 +32,51 @@ def setup_logging():
     log = logging.getLogger()
     if log.handlers:
         return log
+    
     log.setLevel(getattr(logging, config.LOG_LEVEL, 'INFO'))
-    formatter = logging.Formatter(config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT)
-    if config.LOG_TO_FILE:
+    
+    handler = None
+    if config.LOG_TO_SYSLOG:
+        if sys.platform == "win32":
+            try:
+                # The 'source' name is what appears in the Event Viewer
+                handler = logging.handlers.NTEventLogHandler("SIA-Server")
+                log.info("Logging configured to write to Windows Event Log.")
+            except Exception as e:
+                log.warning("Failed to initialize Windows Event Log handler: %s", e)
+                log.warning("This may require running the script as an Administrator once to register the source.")
+                log.warning("Falling back to screen logging.")
+        else: # Linux/Unix Syslog
+            try:
+                # Let the SysLogHandler try its default locations first ('/dev/log', then UDP)
+                handler = logging.handlers.SysLogHandler()
+                log.info("Logging configured to write to system log (Syslog).")
+            except Exception as e:
+                log.warning("Could not connect to syslog: %s. Falling back to screen logging.", e)
+
+    elif config.LOG_TO_FILE:
+        # --- File Logging (your existing logic) ---
         log.info("Logging configured to write to file: %s", config.LOG_FILE)
-        # Convert megabytes from config to bytes for the handler
         max_bytes = config.LOG_MAX_MB * 1024 * 1024
-        
         handler = logging.handlers.RotatingFileHandler(
             config.LOG_FILE, 
             maxBytes=max_bytes, 
             backupCount=config.LOG_BACKUP_COUNT
         )
-    else:
+
+    # If all else fails, or if 'Screen' was chosen, use the screen handler.
+    if handler is None:
+        log.info("Logging configured to write to screen (console).")
         handler = logging.StreamHandler(sys.stderr)
+
+    # For Syslog, we want a simpler format without the timestamp, as syslog adds its own.
+    if isinstance(handler, (logging.handlers.SysLogHandler, logging.handlers.NTEventLogHandler)):
+        # Example format: SIA-Server: INFO - Starting up...
+        formatter = logging.Formatter('SIA-Server: %(levelname)s - %(message)s')
+    else:
+        # For File and Screen, use the user-configurable full format.
+        formatter = logging.Formatter(config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT)
+    
     handler.setFormatter(formatter)
     log.addHandler(handler)
     return log
