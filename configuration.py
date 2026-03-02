@@ -7,6 +7,7 @@ and provides them as clean Python objects to the main application.
 
 import configparser
 import logging
+import logging.handlers
 import sys
 import re
 from galaxy.constants import UNKNOWN_CHAR_MAP
@@ -26,6 +27,8 @@ class AppConfig:
         self.LOG_TO_FILE = False
         self.LOG_TO_SYSLOG = False
         self.LOG_FILE = None
+        self.SYSLOG_SOCKET = '/dev/log'
+        self.SYSLOG_FACILITY = logging.handlers.SysLogHandler.LOG_USER
         self.ACCOUNT_SITES = {}
         self.NTFY_TOPICS = {}
         self.MAX_QUEUE_SIZE = 50
@@ -143,6 +146,30 @@ def load_and_validate_config() -> AppConfig:
         # Set the correct flags based on the choice
         app_config.LOG_TO_FILE = (log_to == 'file')
         app_config.LOG_TO_SYSLOG = (log_to == 'syslog')
+        
+        # Parse advanced syslog settings if Syslog is enabled ---
+        if app_config.LOG_TO_SYSLOG:
+            app_config.SYSLOG_SOCKET = config.get('Logging', 'syslog_socket', fallback='/dev/log')
+            
+            facility_str = config.get('Logging', 'syslog_facility', fallback='user').lower()
+            facility_map = {
+                'user': logging.handlers.SysLogHandler.LOG_USER,
+                'daemon': logging.handlers.SysLogHandler.LOG_DAEMON,
+                'local0': logging.handlers.SysLogHandler.LOG_LOCAL0,
+                'local1': logging.handlers.SysLogHandler.LOG_LOCAL1,
+                'local2': logging.handlers.SysLogHandler.LOG_LOCAL2,
+                'local3': logging.handlers.SysLogHandler.LOG_LOCAL3,
+                'local4': logging.handlers.SysLogHandler.LOG_LOCAL4,
+                'local5': logging.handlers.SysLogHandler.LOG_LOCAL5,
+                'local6': logging.handlers.SysLogHandler.LOG_LOCAL6,
+                'local7': logging.handlers.SysLogHandler.LOG_LOCAL7,
+            }
+            if facility_str in facility_map:
+                app_config.SYSLOG_FACILITY = facility_map[facility_str]
+            else:
+                log.warning("Invalid SYSLOG_FACILITY '%s'. Using default 'user'.", facility_str)
+                # The default is already LOG_USER, so no change needed.
+        
         # Handle file-specific settings only if file logging is enabled
         if app_config.LOG_TO_FILE:
             app_config.LOG_FILE = config.get('Logging', 'log_file', fallback=None)
