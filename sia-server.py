@@ -63,10 +63,13 @@ def setup_logging():
         else: # Linux/Unix Syslog
             syslog_address = '/dev/log'
             try:
-                handler = logging.handlers.SysLogHandler()
-                handler = logging.handlers.SysLogHandler(address=syslog_address)
+                handler = logging.handlers.SysLogHandler(
+                    address=config.SYSLOG_SOCKET,
+                    facility=config.SYSLOG_FACILITY
+                )
             except Exception as e:
-                print("WARNING: Could not connect to syslog: %s. Falling back to screen logging." % e, file=sys.stderr)
+                print("WARNING: Could not connect to syslog at %s: %s." % (config.SYSLOG_SOCKET, e), file=sys.stderr)
+                print("WARNING: Falling back to screen logging.", file=sys.stderr)
 
     elif config.LOG_TO_FILE:
         # --- File Logging (your existing logic) ---
