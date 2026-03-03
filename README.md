@@ -16,7 +16,7 @@ If your Galaxy Flex notifications suddenly stopped working, this project provide
 -   **Self-Hosted:** Runs on any local Windows or Linux machine, like a Raspberry Pi.
 -   **Real-time Notifications:** Instantly forwards alarm events to your devices.
 -   **Prioritized Alerts:** Uses ntfy.sh priorities to distinguish between urgent alarms and routine events.
--   **Advanced Notification Routing:** Route notifications for different accounts to different ntfy.sh topics, each with its own authentication (Bearer Token or User/Pass).
+-   **Advanced Notification Routing:** Route notifications for different accounts to different ntfy.sh topics, each with its own optional authentication (Bearer Token or User/Pass).
 -   **Robust Protocol Handling:** Correctly parses the multi-message protocol used by Galaxy Flex panels.
 -   **Broad SIA Level Support:** The flexible parser can correctly handle event data from SIA Levels 0, 1, 2, and 3.
 -   **Optional Heartbeat Server:** Includes an optional server to handle the proprietary Honeywell "IP Check" heartbeat.
@@ -244,9 +244,8 @@ The communication between your alarm panel and this server is **unencrypted**. R
 -   **Transport Security:** Communication to `ntfy.sh` uses **HTTPS** and is secure.
 -   **Topic Privacy:** ntfy.sh topics are public by default. To secure them:
     -   **Use a long, unguessable topic name.**
-    -   **Use a private, access-controlled topic.** You can get one by subscribing to `ntfy.sh Pro` or by self-hosting your own `ntfy.sh` server. This server fully supports authentication via the `NTFY_AUTH` settings.
     -   **Consider a generic Site Name** that cannot be linked to your address.
-    -   Alternatively: **Subscribe to NTFY.sh PRO** to setup private channels with authentication.
+    -   Alternatively: **Subscribe to NTFY.sh PRO** to setup private channels with authentication. This server fully supports authentication via the `NTFY_AUTH` settings.
     -   Alternatively: **Host NTFY yourself** to be able to setup private channels free of charge (Requires a machine with public ip)
 
 **Disclaimer:** You are ultimately responsible for securing your own setup.
