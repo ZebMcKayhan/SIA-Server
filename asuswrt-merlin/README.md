@@ -24,6 +24,8 @@ It is recommended to place the entire `sia-server` project directory on the JFFS
 ```
 /jffs/addons/sia-server/
 ```
+Make the changes as you want in `sia-server.conf` according to the script documentation.
+> **Note:** Setting `LOG_TO = Syslog` integrates the server's logging with the native operating system logger. This is useful for asuswrt-merlin as they will show up in the system log in the GUI and as the GUI filters according to set log level, sia-server could be set to `LOG_LEVEL = DEBUG`.
 
 ### Step 2: Install and Enable the Service Script
 
