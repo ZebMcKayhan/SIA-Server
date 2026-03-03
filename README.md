@@ -121,28 +121,48 @@ On Windows, simply edit the file with a text editor like Notepad.
 
 ## Configuration Explained
 
-The primary configuration is done in `sia-server.conf`. This file is designed to be user-friendly and not sensitive to Python syntax. More advanced, technical constants (like character maps and command codes) are located in `galaxy/constants.py`.
+The primary configuration is done in `sia-server.conf`. This file is designed to be user-friendly and not sensitive to Python syntax. Advanced, technical constants are located in `galaxy/constants.py`.
 
 -   **Site Sections (`[012345]`):** Each site is defined by a section where the header is the panel's unique **Account Number**.
-    -   `SITE_NAME`: A friendly name for the site (e.g., "Main House"). If omitted, the account number itself is used.
+    -   `SITE_NAME`: A friendly name for the site (e.g., "Main House"). If omitted, the account number is used.
     -   `NTFY_ENABLED`, `NTFY_TOPIC`, `NTFY_TITLE`: Configure notification delivery for this site.
-    -   `NTFY_AUTH`: Can be `None`, `Token`, or `Userpass` for private topics. Provide the corresponding `NTFY_TOKEN` or `NTFY_USER`/`NTFY_PASS` keys.
+    -   `NTFY_AUTH`: Set to `None`, `Token`, or `Userpass` for private topics and provide the corresponding `NTFY_TOKEN` or `NTFY_USER`/`NTFY_PASS` keys.
 
 -   **`[Default]` Section:** A special section for events from account numbers not specifically listed.
 
 -   **`[SIA-Server]` & `[IP-Check]` Sections:** Configure the ports and addresses for the main server and the optional heartbeat server.
 
--   **`[Logging]` Section:** Control the log level, output, and file rotation.
+-   **`[Logging]` Section:** Control the log level and output destination.
     -   `LOG_LEVEL`: Set the verbosity of logs (`DEBUG`, `INFO`, `WARNING`, `ERROR`). `INFO` is recommended for normal use.
-    -   `LOG_TO`: Choose `Screen` (for testing/`systemd` journal) or `File`.
-    -   `LOG_FILE`: If `LOG_TO = File`, specify the full path to the log file.
-    -   `LOG_MAX_MB`: The maximum size in Megabytes before the log file is rotated.
-    -   `LOG_BACKUP_COUNT`: The number of old log files to keep.
+    -   `LOG_TO`: Choose `Screen`, `File`, or `Syslog`.
+        -   `Screen` is best for manual testing and standard `systemd` services.
+        -   `File` is best for creating a dedicated log file (e.g., on Windows or for `cron` jobs).
+    -   **File-Specific Settings:** `LOG_FILE`, `LOG_MAX_MB`, and `LOG_BACKUP_COUNT` are only used when `LOG_TO = File`.
 
--   **`[Notification]` Section:** Configures the server's resilient retry queue and event priorities.
-    -   **Queue Settings:** `MAX_QUE_SIZE`, `MAX_RETRIES`, `MAX_RETRY_TIME` control the behavior of the retry queue for handling network outages.
-    -   **Priority Settings:** `PRIORITY_1` through `PRIORITY_5` contain comma- or space-separated lists of the 2-character SIA Event Codes that should be assigned to that priority level.
-    -   `DEFAULT_PRIORITY`: The priority level (1-5) to use for any event code not found in the specific priority lists.
+<details>
+<summary><b>Advanced Logging: Using LOG_TO = Syslog</b></summary>
+
+Setting `LOG_TO = Syslog` integrates the server's logging with the native operating system logger. This is an advanced option recommended for embedded systems like routers.
+
+-   **Log Format:** When using `Syslog`, the server uses a simpler log format (`SIA-Server: LEVEL - Message`) because the `syslog` service adds its own timestamps and hostname.
+
+-   **On Linux/Unix Systems:**
+    -   The server will attempt to write to the standard `/dev/log` socket.
+    -   For non-standard systems, you can specify a different path with the optional `SYSLOG_SOCKET` key.
+    -   You can also change the `syslog` "facility" (which controls how the system `syslogd` categorizes the messages) using the optional `SYSLOG_FACILITY` key. Common values are `daemon` or `local0` through `local7`. This can be useful for tailoring log filtering rules on your specific system.
+
+-   **On Windows Systems:**
+    -   This will log messages to the **Windows Event Log** under the "Application" section with the source name "SIA-Server".
+    -   **Dependencies:** This feature requires the `pywin32` package. You must install it from an **Administrator** prompt: `python -m pip install pywin32`.
+    -   **Permissions:** The very first time you run the server with this option, it must be run **as an Administrator** to register the "SIA-Server" source in the Windows Registry. After that, it can be run as a normal user.
+    -   If either the dependency is missing or the registration fails due to permissions, the server will print a clear warning and automatically fall back to logging to the screen.
+
+</details>
+
+-   **`[Notification]` Section:** Configures the server's resilient retry queue for handling network outages.
+    -   `MAX_QUE_SIZE`, `MAX_RETRIES`, `MAX_RETRY_TIME` control the queue and retry behavior.
+    -   `PRIORITY_1` through `PRIORITY_5`: Assign SIA Event Codes to different priority levels.
+    -   `DEFAULT_PRIORITY`: The priority to use for any unlisted event code.
 
 ## Usage
 ### For Linux
