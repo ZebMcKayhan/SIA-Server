@@ -237,7 +237,7 @@ class NotificationDispatcher(Thread):
         self.queue.put((None, 0, 0)) # Unblock the .get() call
 
 
-# --- This is the NEW function that sia-server will call ---
+# --- This is the function that sia-server will call ---
 def enqueue_notification(event: GalaxyEvent, queue: Queue):
     """
     Puts a new event onto the notification queue.

@@ -4,10 +4,10 @@ Galaxy SIA Server
 Receives, validates, and parses proprietary SIA protocol messages from
 Honeywell Galaxy Flex alarm systems. It sends notifications via ntfy.sh.
 
-This server is configured via 'sia-server.conf' and 'defaults.py'.
+This server is configured via 'sia-server.conf' and 'configuration.py'.
 """
 # --- Application Version ---
-__version__ = "1.8.0"
+__version__ = "1.9.0-beta"
 
 import asyncio
 import logging
@@ -72,7 +72,7 @@ def setup_logging():
                 print("WARNING: Falling back to screen logging.", file=sys.stderr)
 
     elif config.LOG_TO_FILE:
-        # --- File Logging (your existing logic) ---
+        # --- File Logging ---
         log.info("Logging configured to write to file: %s", config.LOG_FILE)
         max_bytes = config.LOG_MAX_MB * 1024 * 1024
         handler = logging.handlers.RotatingFileHandler(
@@ -86,10 +86,10 @@ def setup_logging():
         log.info("Logging configured to write to screen (console).")
         handler = logging.StreamHandler(sys.stderr)
 
-    # For Syslog, we want a simpler format without the timestamp, as syslog adds its own.
+    
     if isinstance(handler, (logging.handlers.SysLogHandler, logging.handlers.NTEventLogHandler)):
-        # Example format: SIA-Server: INFO - Starting up...
-        formatter = logging.Formatter('SIA-Server: %(levelname)s - %(message)s')
+        # For Syslog, use the user-configurable SYSLOG_FORMAT:
+        formatter = logging.Formatter(config.SYSLOG_FORMAT, datefmt=config.LOG_DATE_FORMAT)
     else:
         # For File and Screen, use the user-configurable full format.
         formatter = logging.Formatter(config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT)
