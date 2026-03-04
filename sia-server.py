@@ -89,7 +89,7 @@ def setup_logging():
     # For Syslog, we want a simpler format without the timestamp, as syslog adds its own.
     if isinstance(handler, (logging.handlers.SysLogHandler, logging.handlers.NTEventLogHandler)):
         # Example format: SIA-Server: INFO - Starting up...
-        formatter = logging.Formatter('SIA-Server: %(levelname)s - %(message)s')
+        formatter = logging.Formatter(config.SYSLOG_FORMAT, datefmt=config.LOG_DATE_FORMAT)
     else:
         # For File and Screen, use the user-configurable full format.
         formatter = logging.Formatter(config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT)
