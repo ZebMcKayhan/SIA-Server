@@ -42,6 +42,7 @@ class AppConfig:
         self.UNKNOWN_CHAR_MAP = UNKNOWN_CHAR_MAP
         self.LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         self.LOG_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
+        self.SYSLOG_FORMAT = 'SIA-Server: %(levelname)s - %(message)s'
 
 def _validate_port(port: int, section: str, key: str) -> bool:
     """Helper function to validate a port number."""
