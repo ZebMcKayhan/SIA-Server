@@ -54,7 +54,7 @@
 
 `56.4.2.2 Primary IP` - `[1]IP Address` The local IP address of the computer running SIA-Server. `[2]Port No.` The port that SIA-Server is setup to listen to (10000).
 
-`56.4.2.3 Secondary IP` - Optional second server. If you are running SIA-Server on another instance it could be added here.
+`56.4.2.3 Secondary IP` - `[1]IP Address` Optional second server. If you are running SIA-Server on another instance it could be added here. `[2]Port No.` The port for the secondary server (10000).
 
 `56.4.2.4 Account No.` - An arbitrary account number that you can use for site identification in SIA-Server. Select a number of your choice.
 
