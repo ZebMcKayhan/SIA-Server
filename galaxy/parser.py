@@ -36,15 +36,23 @@ class GalaxyEvent:
     # Parsed from ASCII Payload
     action_text: Optional[str] = None
 
-def decode_unknown_text(data: bytes, char_map: Dict[bytes, str]) -> str:
-    """Decodes text from ASCII blocks using a custom character map."""
+def decode_unknown_text(data: bytes, char_map: Dict[str, str]) -> str:
+    """
+    Decodes text from ASCII blocks using a custom character map.
+    This handles the proprietary character encoding used by the Galaxy panel.
+    """
     try:
+        # 1. Decode the raw bytes into a string using a "safe" single-byte encoding.
+        # This correctly preserves all the proprietary characters like \x8e as single characters.
         text = data.decode('iso-8859-1')
-    except Exception:
+    except Exception as e:
+        log.warning("Could not decode text data: %s", e)
         return ""
-    for bad_byte, good_char in char_map.items():
-        bad_char = bad_byte.decode('iso-8859-1')
+
+    # 2. Now, perform a simple string-to-string replacement for each known character.
+    for bad_char, good_char in char_map.items():
         text = text.replace(bad_char, good_char)
+    
     return text.strip()
 
 def parse_account_payload(payload: bytes, event: GalaxyEvent):
