@@ -304,6 +304,7 @@ async def start_servers(notification_queue: Queue):
 
     # --- Launch the optional IP Check Server as a Subprocess ---
     ip_check_process = None
+    ip_check_monitor_task = None
     if config.IP_CHECK_ENABLED:
         try:
             command = [sys.executable, 'ip_check.py']
@@ -311,7 +312,7 @@ async def start_servers(notification_queue: Queue):
             ip_check_process = await asyncio.create_subprocess_exec(
                 *command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
-            asyncio.create_task(monitor_subprocess(ip_check_process, 'ip_check.py'))
+            ip_check_monitor_task = asyncio.create_task(monitor_subprocess(ip_check_process, 'ip_check.py'))
         except Exception as e:
             log.error("Failed to launch IP Check server subprocess: %s", e)
     
