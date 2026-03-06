@@ -18,37 +18,35 @@ from galaxy.parser import GalaxyEvent
 # Apply a basic config immediately so startup messages are always captured.
 # This will be overridden by the main server's full logging setup later.
 logging.basicConfig()
-log_pyopenssl = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 # --- Force PyOpenSSL to be used by requests (if available) ---
 try:
     import urllib3.contrib.pyopenssl
     urllib3.contrib.pyopenssl.inject_into_urllib3()
-    log_pyopenssl.info("Successfully injected PyOpenSSL into urllib3 for robust HTTPS.")
+    log.info("Successfully injected PyOpenSSL into urllib3 for robust HTTPS.")
 except ImportError:
     # On Windows, this may be a problem:
     if sys.platform == "win32":
-        log_pyopenssl.warning("PyOpenSSL not found. HTTPS notifications may fail on Windows without it.")
-        log_pyopenssl.warning("If you get HTTPS SSL problems, please run: python -m pip install pyopenssl")
+        log.warning("PyOpenSSL not found. HTTPS notifications may fail on Windows without it.")
+        log.warning("If you get HTTPS SSL problems, please run: python -m pip install pyopenssl")
     # On Linux, it's normal:
     else:
-        log_pyopenssl.info("PyOpenSSL not available; using default system SSL context.")
+        log.info("PyOpenSSL not available; using default system SSL context.")
 
 # --- CRITICAL: Check for 'requests' library ---
 try:
     import requests
 except ImportError:
-    log_pyopenssl.critical("="*60)
-    log_pyopenssl.critical("FATAL ERROR: The 'requests' library is not installed.")
-    log_pyopenssl.critical("This library is required to send notifications.")
+    log.critical("="*60)
+    log.critical("FATAL ERROR: The 'requests' library is not installed.")
+    log.critical("This library is required to send notifications.")
     if sys.platform == "win32":
-        log_pyopenssl.critical("Please install it by running: python -m pip install requests")
+        log.critical("Please install it by running: python -m pip install requests")
     else: # Assume Linux/macOS
-        log_pyopenssl.critical("Please install it by running: sudo apt install python3-requests")
-    log_pyopenssl.critical("="*60)
+        log.critical("Please install it by running: sudo apt install python3-requests")
+    log.critical("="*60)
     sys.exit(1) # Exit the entire application immediately.
-
-log = logging.getLogger(__name__)
 
 
 def get_event_priority(event_code: str, priority_map: Dict, default_priority: int) -> int:
@@ -62,15 +60,18 @@ def format_notification_text(event: GalaxyEvent) -> str:
     It intelligently chooses between the rich ASCII block text (if available)
     or constructs a message from the Data block fields.
     """
-    time = event.time or "??"
+    # Use a more descriptive name to avoid shadowing the 'time' module.
+    event_time = event.time or "??"
     
-    # The site name is now part of the notification title, so it is omitted from the body.
+    # If we have the rich text from the ASCII block, use it (SIA Level 3+)
     if event.action_text:
-        notification = f"{time} {event.action_text}"
+        notification = f"{event_time} {event.action_text}"
+        # Add zone info if it was parsed separately and isn't already in the text
         if event.zone and event.zone not in str(event.action_text):
             notification += f" (Zone {event.zone})"
+    # Otherwise, build a basic message from the Data block fields (SIA Level 2)
     else:
-        notification = f"{time}"
+        notification = f"{event_time}"
         if event.event_code:
             notification += f" Event: {event.event_code} ({event.event_description})"
         if event.user_id:
