@@ -61,7 +61,6 @@ def setup_logging():
                 print("WARNING: Falling back to screen logging.", file=sys.stderr)
                             
         else: # Linux/Unix Syslog
-            syslog_address = '/dev/log'
             try:
                 handler = logging.handlers.SysLogHandler(
                     address=config.SYSLOG_SOCKET,
