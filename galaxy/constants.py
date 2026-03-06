@@ -177,7 +177,6 @@ EVENT_CODE_DESCRIPTIONS = {
     'RD': "Program Denied",
     'RO': "Relay Open",
     'RP': "Automatic Test",
-
     'RR': "Power Up",
     'RS': "Program Success",
     'RX': "Manual Test",
@@ -197,7 +196,7 @@ EVENT_CODE_DESCRIPTIONS = {
     'TS': "Test Start",
 
     # V
-    'VY': "Print OC OL", # Note: Unclear code from list
+    'VY': "Print OC OL", # Note: Unclear code from Installer manual.
 
     # W - Water (Custom SIA)
     'WA': "Water Alarm",

@@ -35,3 +35,41 @@
 `56.1.2.1.3 Rx Sequence` - Select recievers and sequence this report should go to, if you have more than one, add them as a list. if you only have setup a single sia-server on reciever 1 then set this just to 1. if you have a backup sia-server, you could set this to 12 to use reciever 1 first and reciever 2 if nr 1 fails.
 
 `56.1.2.1.5 IP Check (ARC Report only)` - Enable or disable the heartbeat check.
+
+## Galaxy Dimension Panels
+
+**Setup the Ethernet module under Communications[56] -> Ethernet/GPRS [56.4] -> Module Config [56.4.1]:**
+
+`56.4.1.1 IP Address` - The panels ip address on your network.
+
+`56.4.1.2 Site Name` - This option is not used.
+
+`56.4.1.3 Gateway IP` - Your router IP, or gateway to internet.
+
+`56.4.1.4 Network Mask` - The size of your network. set to 255.255.255.0 if you dont know.
+
+**Setup the Notification Communications[56] -> Ethernet/GPRS[56.4] -> Alarm Reporting[56.4.2]:**
+
+`56.4.2.1 Format` - Set to SIA Level 3 and `Enable and Select Triggers`. Select the events you want notifications on.
+
+`56.4.2.2 Primary IP` - `[1]IP Address` The local IP address of the computer running SIA-Server. `[2]Port No.` The port that SIA-Server is setup to listen to (10000).
+
+`56.4.2.3 Secondary IP` - `[1]IP Address` Optional second server. If you are running SIA-Server on another instance it could be added here. `[2]Port No.` The port for the secondary server (10000).
+
+`56.4.2.4 Account No.` - An arbitrary account number that you can use for site identification in SIA-Server. Select a number of your choice.
+
+`56.4.2.5 Reciever` - Select if you are using a single SIA-Server or dual.
+
+`56.4.2.6 Alarm Mon.` - This option does not need to be used.
+
+`56.4.2.7 Heartbeat` - Enable this option if you want to use the optional heartbeat function. select interval.
+
+`56.4.2.8 Protocol` - Set this to `1 = TCP`.
+
+**Other settings Communications[56] -> Ethernet/GPRS[56.4]:**
+
+`56.4.5 Engineer Test` - Use this option when all is setup to send a test notification.
+
+`56.4.9 Encryption` - `[1] Alarm Reports` Needs to be set to `0 = Off`
+
+

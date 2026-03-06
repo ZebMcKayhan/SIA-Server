@@ -41,6 +41,8 @@ The project is structured to separate the server logic, protocol parsing, and co
 ├── notification.py         # Handles formatting and sending of notifications.
 ├── ip_check.py             # Optional subprocess for answering heartbeats.
 ├── README.md               # This file.
+├── PanelSetup.md           # Panel Configuration help.
+├── requirements.txt        # Required python packages.
 ├── galaxy/
 │   ├── __init__.py
 │   ├── README.md           # Technical description of the protocol.  
