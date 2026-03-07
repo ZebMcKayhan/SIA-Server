@@ -135,6 +135,10 @@ def _dispatch_http_notification(event: GalaxyEvent, ntfy_topics: Dict, priority_
                 auth_details = (user, password)
                 log.debug("Using username/password authentication.")
 
+    # Two separate log lines are intentional: INFO gives the clean operational message
+    # without the URL (privacy), DEBUG includes the URL for diagnostics.
+    # When logging to Syslog, level filtering is handled by syslogd, so both lines
+    # must be emitted by the logger regardless of configured level.
     log.debug("Sending notification (priority %d) to %s: %s", priority, ntfy_url, message)
     log.info("Sending notification (priority %d) for account %s: %s", priority, account_display, message)
     

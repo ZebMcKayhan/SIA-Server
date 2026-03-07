@@ -4,7 +4,8 @@ SERVICE="/opt/etc/init.d/S99siaserver"
 LOCKFILE="/tmp/siaserver_watch.lock"
 
 # Avoid overlapping runs
-[ -f "$LOCKFILE" ] && exit 0 touch "$LOCKFILE"
+[ -f "$LOCKFILE" ] && exit 0 
+touch "$LOCKFILE"
 # Check if SIA server is running
 
 if ! ps | grep -E "[s]ia-server.py" >/dev/null; then 
