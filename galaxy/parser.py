@@ -62,23 +62,32 @@ def parse_account_payload(payload: bytes, event: GalaxyEvent):
     log.debug("Parsed account: '%s'", event.account)
 
 def parse_data_payload(payload: bytes, event: GalaxyEvent, event_code_descriptions: Dict):
-    """Parses the clean payload of a NEW_EVENT block."""
+    """
+    Parses the clean payload of a NEW_EVENT block (Command Byte 'N').
+
+    The payload is a string of sections delimited by '/', for example:
+      - 'ti11:45/id001/pi010/CL'
+      - 'ti11:46/BA1011'
+    """
     event.data_payload = payload
     data_str = payload.decode('utf-8', errors='ignore')
-    
+
+    # The payload consists of sections separated by '/', the last one is special (ECzzzz).
     sections = data_str.split('/')
     if not sections:
         return
-        
+
+    # Process all sections before the last one for identifiers, ti, id, pi, ri, va.
+    # We loop through them one by one, but skip the last one.
     for section in sections[:-1]:
-        if section.startswith('ti'):
-            event.time = section[2:]
+        if section.startswith('ti'): # ti11:45
+            event.time = section[2:] # 11:45
             log.debug("Parsed time: '%s'", event.time)
-        elif section.startswith('id'):
-            event.user_id = section[2:]
+        elif section.startswith('id'):  # id001
+            event.user_id = section[2:] # 001
             log.debug("Parsed user_id: '%s'", event.user_id)
-        elif section.startswith('pi'):
-            event.partition = section[2:]
+        elif section.startswith('pi'):    # pi010
+            event.partition = section[2:] # 010
             log.debug("Parsed partition: '%s'", event.partition)
         elif section.startswith('ri'):
             event.group = section[2:]
@@ -88,15 +97,23 @@ def parse_data_payload(payload: bytes, event: GalaxyEvent, event_code_descriptio
             log.debug("Parsed value: '%s'", event.value)
         else:
             log.debug("Unknown data section identifier found: '%s'", section)
-            
+    
+    # Process the last section ('CL' or 'BA1011')
+    # It always contains the 2-character Event Code.
+    # It may also have a 3-4 digit Zone Number appended directly to the code.
     last_section = sections[-1]
+
+    # We use regex to extract the two parts:
+    #   - Group 1: ([A-Z]{2})   -> Exactly two uppercase letters (the Event Code)
+    #   - Group 2: (\d{3,4})?  -> An optional group of 3 or 4 digits (the Zone)
     ec_match = re.match(r'([A-Z]{2})(\d{3,4})?', last_section)
     if ec_match:
         event.event_code = ec_match.group(1)
         log.debug("Parsed event_code: '%s'", event.event_code)
+        # Look up the human-readable description for this event code.
         event.event_description = event_code_descriptions.get(event.event_code, "Unknown")
         log.debug("Mapped event description: '%s'", event.event_description)
-        
+        # Check if the optional Zone group was found.
         if ec_match.group(2):
             event.zone = ec_match.group(2)
             log.debug("Parsed zone: '%s'", event.zone)
