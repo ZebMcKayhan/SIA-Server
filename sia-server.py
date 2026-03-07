@@ -300,7 +300,7 @@ async def start_servers(notification_queue: Queue):
         
         log.critical("="*60)
         # We must return here to stop the program from continuing.
-        return
+        raise # this triggers the OSError in the main loop
 
     # --- Launch the optional IP Check Server as a Subprocess ---
     ip_check_process = None
@@ -350,19 +350,26 @@ def main():
     )
     dispatcher.start()
     
+    exit_code = 0 # Assume success
     try:
         asyncio.run(start_servers(notification_queue))
     except (KeyboardInterrupt, SystemExit):
         log.info("Server stopped")
+    except OSError as e:
+        # OSError raised by start_servers, no need for additional logging.
+        exit_code = 1
     except Exception as e:
         # This will now only catch very unexpected errors.
         log.critical("A critical server error occurred: %s", e, exc_info=True)
+        exit_code = 1
     finally:
         # This block ensures the dispatcher is stopped when the server exits for any reason.
         log.info("Shutting down notification dispatcher...")
         dispatcher.stop()   # Signals the thread's loop to exit
         dispatcher.join()   # Waits for the thread to finish cleanly
         log.info("Notification dispatcher stopped.")
-
+    
+    sys.exit(exit_code)
+    
 if __name__ == '__main__':
     main()
