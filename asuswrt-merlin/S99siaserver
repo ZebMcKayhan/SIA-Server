@@ -17,7 +17,7 @@ WATCHDOG="/jffs/addons/sia-server/asuswrt-merlin/check-sia.sh"
 case "$1" in 
     start) 
         cru a sia_monitor "*/15 * * * * $WATCHDOG"
-        logger -t S99siaserver "Starting  SIA Server..."
+        logger -t S99siaserver "Starting SIA Server..."
         ;;
     stop)
         cru d sia_monitor
