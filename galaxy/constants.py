@@ -239,10 +239,10 @@ EVENT_CODE_DESCRIPTIONS = {
 # These are confirmed from actual captures
 # You can add more as you discover them
 UNKNOWN_CHAR_MAP = {
-    b'\x8e': 'Ä',  # Confirmed in: ÅTERSTÄLL
-    b'\x8f': 'Å',  # Confirmed in: PÅSLAG, SYSTEMÅT
-    b'\x99': 'Ö',  # Confirmed in: FÖRDRÖJD
-    b'\x86': 'å',  # Confirmed in: username test
-    b'\x84': 'ä',  # Confirmed in: username test
-    b'\x94': 'ö',  # Confirmed in: username test
+    '\x8e': 'Ä',  # Confirmed in: ÅTERSTÄLL
+    '\x8f': 'Å',  # Confirmed in: PÅSLAG, SYSTEMÅT
+    '\x99': 'Ö',  # Confirmed in: FÖRDRÖJD
+    '\x86': 'å',  # Confirmed in: username test
+    '\x84': 'ä',  # Confirmed in: username test
+    '\x94': 'ö',  # Confirmed in: username test
 }

@@ -58,6 +58,7 @@ async def handle_ip_check(reader, writer):
         await writer.drain()
 
         # Wait for the panel to close the connection.
+        # Note: The panel closes the connection after 15s:
         await reader.read(-1)
         log.info("Panel at %r has closed the connection.", addr)
 
