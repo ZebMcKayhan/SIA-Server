@@ -135,8 +135,10 @@ def _dispatch_http_notification(event: GalaxyEvent, ntfy_topics: Dict, priority_
                 auth_details = (user, password)
                 log.debug("Using username/password authentication.")
 
-    log.info("Sending notification (priority %d) for account %s: %s", priority, account_display, message)
-    log.debug("Sending notification (priority %d) to %s: %s", priority, ntfy_url, message)
+    if log.isEnabledFor(logging.DEBUG):
+        log.debug("Sending notification (priority %d) to %s: %s", priority, ntfy_url, message)
+    else
+        log.info("Sending notification (priority %d) for account %s: %s", priority, account_display, message)
     
     try:
         response = requests.post(
