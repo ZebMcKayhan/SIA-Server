@@ -1,9 +1,3 @@
-# SIA DC-09 Server
-
-Python implementation of the SIA DC-09 alarm protocol for Honeywell Galaxy Flex panels.
-
-👉 https://github.com/ZebMcKayhan/SIA-Server
-
 # Honeywell Galaxy SIA Notification Server
 
 SIA-Server is a lightweight, self-hosted Python service that receives SIA protocol messages from Honeywell Galaxy Flex alarm systems and forwards them as rich, prioritized push notifications via [ntfy.sh](https://ntfy.sh/).
