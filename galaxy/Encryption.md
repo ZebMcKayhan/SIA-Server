@@ -184,7 +184,7 @@ Each decrypted AES block contains:
     │  │  │          └───────────────────── Payload (account: "027978")
     │  │  └──────────────────────────────── Command ('#' = Account ID)
     │  └─────────────────────────────────── Length: 0x46 = 6 bytes + 0x40 offset
-    └────────────────────────────────────── Overhead byte
+    └────────────────────────────────────── Overhead byte (Encrypted payload length before padding)
 
 ### Encrypted Block Sizes
 
