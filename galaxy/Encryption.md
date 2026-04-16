@@ -402,10 +402,3 @@ jurisdiction.
 
 ---
 
-## Acknowledgments
-
-Special thanks to the security research community and the collaborative effort
-in reverse engineering this protocol through network analysis, binary decompilation,
-and live validation testing.
-
-**Status**: Protocol fully reverse engineered and working (2026-04-16)
