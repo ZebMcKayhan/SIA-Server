@@ -21,7 +21,14 @@ This protocol was reverse engineered from:
 - Native library analysis (libBackendFirmware.so) using Ghidra
 - Live validation against a Honeywell Galaxy Flex panel
 
-**Status**: ✅ **Initial decoded message successfully** (April 2026)
+**Status**: ✅ **Fully working implementation validated** (April 2026)
+
+The file included here **galaxy/SIA-ENC_POC.py** implements a proof-of-concept 
+receiver that handles the encrypted handshake and decrypts the event data and
+displays it on the screen. It requires the installation of crcmod and cryptodome
+extensions to operate.
+
+implementation in SIA-Server.py is pending.
 
 ---
 
@@ -40,19 +47,19 @@ encryption scheme**:
 
 ⚠️ **The panel uses non-standard cryptography:**
 
-1. **RSA public exponent e=3** instead of the standard 65537
-2. **Little-endian multi-precision arithmetic** for RSA operations
-3. **Textbook RSA** without PKCS#1 v1.5 or OAEP padding
-4. **Raw modulus transmission** (128 bytes, not DER-encoded)
+1. **RSA public exponent e=3** instead of the standard 65537.
+2. **Little-endian multi-precision arithmetic** for RSA operations.
+3. **Textbook RSA** without PKCS#1 v1.5 or OAEP padding.
+4. **Raw modulus transmission** (128 bytes, not DER-encoded).
 
 These were discovered through analysis of the native library functions:
 
     CDataEncryption::GeneratePublicKey        // Sets e=3 explicitly
     CDataEncryption::DecodePrivateKeyMessageBlock
-    mpModExp                                   // Little-endian word order
+    mpModExp                                   // Implements little-endian word order
     MTcomms::GenerateRSAKeys
     MTcomms::SendPPKComWithKey
-    MTprot::Encrypt / Decrypt                  // AES-128-ECB
+    MTprot::Encrypt / Decrypt                  // Implements AES-128-ECB
 
 ---
 
@@ -115,8 +122,7 @@ The complete encrypted session establishment:
 - `05 01 81` — Fixed header
 - `59 68` — CRC-16/XMODEM of `05 01 81`
 
-This is a **static, fixed sequence** identical across all panels and sessions.
-It signals that the panel requires encrypted communication.
+This is a **static, fixed sequence** that signals the panel requires encrypted communication.
 
 ### ServerKey — Server → Panel (135 bytes)
 
@@ -134,18 +140,15 @@ the panel's multi-precision library format.
     88 01 | [128 bytes RSA-encrypted session data] | [2 bytes CRC]
 
 - `88 01` — Frame type header
-- 128 bytes — RSA-encrypted block containing:
-  - Protocol overhead bytes
-  - 16-byte AES-128 session key
-  - Zero padding
+- 128 bytes — RSA-encrypted block containing session data.
 - 2 bytes — CRC-16/XMODEM
 
-**Structure of encrypted 128-byte block (before RSA encryption):**
+**Structure of data block (before RSA encryption):**
 
-    [~39 bytes session data including 16-byte AES key] [89 bytes zero padding]
+    [~39 bytes session data] [89 bytes zero padding]
 
-After decryption, the AES session key is located at **bytes 2-17** of the 
-decrypted 128-byte block.
+After decryption, the **16-byte AES session key** is located at **bytes 2-17** of the 
+decrypted 128-byte block. The first two bytes (`be 01`) appear to be metadata.
 
 ### KeyAck — Server → Panel (7 bytes)
 
@@ -154,41 +157,44 @@ decrypted 128-byte block.
 - `50 01 84 01 00` — Fixed header
 - `b7 2d` — CRC-16/XMODEM of `50 01 84 01 00`
 
-This is a **static, fixed sequence** sent after successfully receiving the PanelKey.
+This is a **static, fixed sequence** sent to acknowledge a successful key exchange.
 
 ---
 
 ## Encrypted Data Phase
 
-After the handshake, all SIA blocks are encrypted with **AES-128-ECB**. Each 
-plaintext SIA block is padded to a 16-byte boundary before encryption.
+After the handshake, all SIA messages are encrypted with **AES-128-ECB**.
 
-### SIA Block Structure (Decrypted)
+### Block Structure (Decrypted)
 
-Each decrypted AES block contains:
+Each decrypted AES block (16 or 32 bytes) has a framing structure where the first byte indicates the length of the actual SIA frame that follows.
 
-    [0x09] [Length] [Command] [Payload] [Checksum] [Padding...]
-      |       |        |         |          |           |
-      |       |        |         |          |           └─ Pad to 16 bytes
-      |       |        |         |          └─ SIA: XOR checksum (starts with 0xFF)
-      |       |        |         └─ SIA: Payload (Variable length data)
-      |       |        └─ SIA: command byte
-      |       └─ SIA: Payload length + 0x40 offset
-      └─ Frame overhead (not included in SIA checksum) Message length before padding.
+    [SIA_Frame_Length] [Actual_SIA_Frame] [Padding]
 
-**Example decrypted block:**
+The `Actual_SIA_Frame` follows the standard Honeywell SIA format:
+
+    [Length] [Command] [Payload] [Checksum]
+
+**Example decrypted block (Account ID):**
 
     09 46 23 30 32 37 39 37 38 99 ae ae ae ae ae ae
-    │  │  │  └───────┬──────┘  │  └──────── Padding (to 16 bytes)
-    │  │  │          │         └─────────── Checksum (XOR)
-    │  │  │          └───────────────────── Payload (account: "027978")
-    │  │  └──────────────────────────────── Command ('#' = Account ID)
-    │  └─────────────────────────────────── Length: 0x46 = 6 bytes + 0x40 offset
-    └────────────────────────────────────── Overhead byte (Encrypted payload length before padding)
+    |  └───────────┬───────────┘ └──────┬───────┘
+    |              |                    └─ AES Padding
+    |              └─ Actual SIA Frame (9 bytes)
+    └─ Length Prefix: The SIA frame is 9 bytes long.
+
+**Parsing the `Actual_SIA_Frame`:**
+
+    46 23 30 32 37 39 37 38 99
+    |  |  └───────┬──────┘  |
+    |  |          |         └─ SIA Checksum (XOR of bytes 0-7)
+    |  |          └─ SIA Payload (account: "027978")
+    |  └─ SIA Command ('#')
+    └─ SIA Length (with +0x40 offset)
 
 ### Encrypted Block Sizes
 
-| SIA Block Type | Typical Plaintext | Encrypted Size |
+| SIA Block Type | Typical SIA Frame | Encrypted Size |
 |:---------------|:-----------------|:---------------|
 | Account ID     | ~9 bytes         | 16 bytes (1 AES block) |
 | New Event      | ~19 bytes        | 32 bytes (2 AES blocks) |
@@ -198,139 +204,81 @@ Each decrypted AES block contains:
 
 ---
 
-## Complete Working Implementation
+## Core Implementation Logic
 
-### Server-Side Handshake and Decryption
-
-    from Cryptodome.PublicKey import RSA
-    from Cryptodome.Cipher import AES
-    import crcmod
-    
-    crc16_xmodem = crcmod.predefined.mkCrcFun('xmodem')
-    
-    def calc_crc(data: bytes) -> bytes:
-        return crc16_xmodem(data).to_bytes(2, 'big')
-    
-    def handle_encrypted_session(conn):
-        """Complete encrypted SIA session handler"""
-        
-        # Step 1: Receive StartEnc
-        start_enc = conn.recv(5)
-        if start_enc != b'\x05\x01\x81\x59\x68':
-            raise ValueError("Invalid StartEnc frame")
-        
-        # Step 2: Generate RSA-1024 keypair with e=3
-        rsa_key = RSA.generate(1024, e=3)
-        
-        # Step 3: Send ServerKey with modulus in little-endian
-        modulus_le = rsa_key.n.to_bytes(128, 'little')
-        header = b'\x08\x01\x01\x01\x00'
-        payload = header + modulus_le
-        server_key_frame = payload + calc_crc(payload)
-        conn.send(server_key_frame)
-        
-        # Step 4: Receive and validate PanelKey
-        panel_key_frame = conn.recv(132)
-        if panel_key_frame[-2:] != calc_crc(panel_key_frame[:-2]):
-            raise ValueError("PanelKey CRC mismatch")
-        
-        # Step 5: Extract and decrypt the RSA-encrypted block
-        encrypted_block = panel_key_frame[2:-2]  # Strip header and CRC (128 bytes)
-        
-        # Decrypt using little-endian RSA
-        encrypted_int = int.from_bytes(encrypted_block, 'little')
-        decrypted_int = pow(encrypted_int, rsa_key.d, rsa_key.n)
-        decrypted_block = decrypted_int.to_bytes(128, 'little')
-        
-        # Step 6: Extract AES session key (bytes 2-17 of decrypted block)
-        aes_key = decrypted_block[2:18]
-        
-        # Step 7: Send KeyAck
-        conn.send(b'\x50\x01\x84\x01\x00\xb7\x2d')
-        
-        # Step 8: Handle encrypted SIA data
-        cipher_aes = AES.new(aes_key, AES.MODE_ECB)
-        
-        while True:
-            encrypted_data = conn.recv(32)  # Up to 2 AES blocks
-            if not encrypted_data:
-                break
-                
-            # Decrypt in 16-byte blocks
-            decrypted_sia = b''
-            for i in range(0, len(encrypted_data), 16):
-                block = encrypted_data[i:i+16]
-                if len(block) == 16:
-                    decrypted_sia += cipher_aes.decrypt(block)
-            
-            # Parse and handle SIA message
-            process_sia_message(decrypted_sia, conn, cipher_aes)
-    
-    def process_sia_message(decrypted: bytes, conn, cipher):
-        """Parse decrypted SIA block and send encrypted ACK"""
-        
-        # Strip overhead byte and padding
-        if decrypted[0] == 0x09:
-            sia_frame = decrypted[1:].rstrip(b'\xae\x00')  # Common padding bytes
-        else:
-            sia_frame = decrypted.rstrip(b'\xae\x00')
-        
-        # Parse SIA frame: [length] [command] [payload] [checksum]
-        if len(sia_frame) < 3:
-            return
-        
-        length = sia_frame[0] - 0x40  # Remove offset
-        command = chr(sia_frame[1])
-        payload = sia_frame[2:2+length]
-        checksum = sia_frame[2+length] if len(sia_frame) > 2+length else 0
-        
-        print(f"SIA Message: Command={command}, Payload={payload.hex()}")
-        
-        # Send encrypted ACK
-        ack = b'\x40\x38\x87' + b'\x00' * 13  # SIA ACK padded to 16 bytes
-        encrypted_ack = cipher.encrypt(ack)
-        conn.send(encrypted_ack)
-
----
-
-## RSA Cryptographic Details
-
-### Key Generation (Server-Side)
+### RSA Key Exchange
 
     from Cryptodome.PublicKey import RSA
     
-    # Generate RSA-1024 with non-standard e=3
+    # 1. Generate RSA-1024 keypair with non-standard e=3
     rsa_key = RSA.generate(1024, e=3)
     
-    # Export modulus in little-endian format (panel native)
-    modulus_bytes = rsa_key.n.to_bytes(128, 'little')
-
-### Decryption (Textbook RSA)
-
-    # The panel uses textbook RSA: plaintext = ciphertext^d mod n
-    # With little-endian integer representation
+    # 2. Export modulus in little-endian format to send to the panel
+    modulus_le = rsa_key.n.to_bytes(128, 'little')
     
+    # ... send ServerKey frame ...
+    
+    # 3. Receive PanelKey frame and extract the 128-byte encrypted block
+    encrypted_block = panel_key_frame[2:-2]
+    
+    # 4. Decrypt using textbook RSA with little-endian integer representation
     encrypted_int = int.from_bytes(encrypted_block, 'little')
-    decrypted_int = pow(encrypted_int, private_exponent, modulus)
-    decrypted_bytes = decrypted_int.to_bytes(128, 'little')
+    decrypted_int = pow(encrypted_int, rsa_key.d, rsa_key.n)
+    decrypted_block = decrypted_int.to_bytes(128, 'little')
     
-    # Extract AES key from known offset
-    aes_session_key = decrypted_bytes[2:18]  # Bytes 2-17 (16 bytes)
+    # 5. Extract AES key from the known offset (bytes 2-17)
+    aes_session_key = decrypted_block[2:18]
 
-### Why Little-Endian?
+### AES Message Processing
 
-The panel's multi-precision library (mpModExp function) stores RSA operands as
-arrays of 32-bit words in little-endian word order:
+    from Cryptodome.Cipher import AES
+    
+    def process_sia_message(decrypted_data: bytes):
+        """Parses a decrypted AES block."""
+        
+        # 1. The first byte is the length of the actual SIA frame.
+        sia_frame_length = decrypted_data[0]
+        
+        # 2. Slice out the SIA frame.
+        sia_frame = decrypted_data[1 : 1 + sia_frame_length]
+        
+        # 3. Validate the SIA checksum.
+        # Checksum is calculated over the entire SIA frame except the last byte.
+        data_to_check = sia_frame[:-1]
+        expected_checksum = sia_frame[-1]
+        
+        calculated_checksum = 0xFF
+        for byte in data_to_check:
+            calculated_checksum ^= byte
+        
+        if calculated_checksum != expected_checksum:
+            raise ValueError("SIA Checksum Mismatch!")
+            
+        # 4. The SIA frame is now valid and ready for processing.
+        # ... parse command, payload, etc. ...
 
-    Bytes:  [word0][word1][word2]...[word31]
-    Math:    LSW                      MSW
-             ↑                        ↑
-        Least significant      Most significant
-
-This means:
-- **Byte 0-3**: Least significant 32 bits
-- **Byte 124-127**: Most significant 32 bits
-- **Trailing zeros** appear at the high-order end (bytes 117-127)
+    def create_encrypted_ack(cipher_aes):
+        """Creates a correctly framed and encrypted SIA ACK."""
+        
+        # SIA ACK data: Command='@' (0x40), Payload='8' (0x38)
+        ack_data = b'\x40\x38'
+        
+        # Frame for checksum: [Length][Data]
+        frame_to_check = bytes([len(ack_data)]) + ack_data
+        
+        # Calculate checksum
+        checksum = 0xFF
+        for byte in frame_to_check:
+            checksum ^= byte
+            
+        # Full SIA frame: [Length][Data][Checksum]
+        sia_ack_frame = frame_to_check + bytes([checksum])
+        
+        # Pre-encryption block: [SIA_Frame_Length][SIA_Frame][Padding]
+        plaintext_block = bytes([len(sia_ack_frame)]) + sia_ack_frame
+        plaintext_block += b'\x00' * (16 - len(plaintext_block))
+        
+        return cipher_aes.encrypt(plaintext_block)
 
 ---
 
@@ -338,21 +286,10 @@ This means:
 
 ⚠️ **This protocol uses weak cryptography:**
 
-1. **RSA with e=3** is vulnerable to:
-   - Low-exponent attacks if the same message is encrypted to 3+ recipients
-   - Cube root attacks on short messages
-   
-2. **Textbook RSA** (no padding) is vulnerable to:
-   - Chosen ciphertext attacks
-   - Message malleability
-   
-3. **AES-ECB mode** is vulnerable to:
-   - Pattern analysis (identical plaintexts → identical ciphertexts)
-   - Block reordering attacks
-
-4. **No message authentication** (MAC):
-   - Only CRC checksums (not cryptographically secure)
-   - Susceptible to tampering
+1. **RSA with e=3** is vulnerable to low-exponent and cube root attacks.
+2. **Textbook RSA** (no padding) is vulnerable to chosen ciphertext attacks.
+3. **AES-ECB mode** is vulnerable to pattern analysis and block reordering.
+4. **No message authentication** (MAC); only non-cryptographic checksums.
 
 **This protocol should be considered obfuscation rather than strong encryption.**
 It provides protection against casual interception but not targeted attacks.
@@ -363,27 +300,26 @@ It provides protection against casual interception but not targeted attacks.
 
 This protocol implementation has been validated through:
 
-✅ Successful RSA handshake with live Galaxy Flex panel  
-✅ AES session key extraction and verification  
-✅ Decryption of SIA event messages  
-✅ SIA checksum validation  
-✅ Multi-session stability testing  
+✅ Successful RSA handshake with a live Galaxy Flex panel.  
+✅ AES session key extraction and verification.  
+✅ Full decryption of a multi-message SIA event sequence.  
+✅ Successful SIA checksum validation for all received messages.  
+✅ Successful session termination after sending ACKs.  
 
 Test equipment:
 - Honeywell Galaxy Flex 3-20 control panel
-- GX Ethernet Module (firmware unknown)
-- Network capture and analysis tools
+- GX Ethernet Module
+- `galaxy/SIA-ENC_POC.py` test script
 
 ---
 
 ## References
 
 - GX Remote Control Android APK — com.honeywell.galaxyapp.apk v4.5.0
-- Native library — libBackendFirmware.so (ARM64 from config.arm64_v8a.apk)
-- Ghidra reverse engineering tool — function analysis and decompilation
-- Network captures — encrypted and plaintext tcpdump sessions
-- Live panel testing and validation — April 2026
-- Homey community forum thread —  
+- Native library — libBackendFirmware.so (ARM64)
+- Ghidra reverse engineering tool
+- Network captures and live panel testing (April 2026)
+- Homey community forum thread:  
   https://community.homey.app/t/honeywell-galaxy-flex-alarm-with-ethernet-module/5991
 
 ---
@@ -393,12 +329,8 @@ Test equipment:
 This documentation was produced through independent security research for the purpose
 of enabling interoperability with a legally owned device. No proprietary keys or
 credentials are included. Any implementation requires the user to supply their own
-panel configuration. 
+panel configuration. This research is provided for educational and interoperability
+purposes only. The authors make no warranties and accept no liability for the use of
+this information.
 
-**This research is provided for educational and interoperability purposes only.**
-The authors make no warranties and accept no liability for the use of this information.
-Users are responsible for complying with all applicable laws and regulations in their
-jurisdiction.
-
----
-
+**Status**: Protocol fully reverse engineered and working (2026-04-16)
