@@ -23,13 +23,6 @@ This protocol was reverse engineered from:
 
 **Status**: ✅ **Fully working implementation validated** (April 2026)
 
-The file included here **galaxy/SIA-ENC_POC.py** implements a proof-of-concept 
-receiver that handles the encrypted handshake and decrypts the event data and
-displays it on the screen. It requires the installation of crcmod and cryptodome
-extensions to operate.
-
-implementation in SIA-Server.py is pending.
-
 ---
 
 ## Encryption Architecture
@@ -41,7 +34,7 @@ encryption scheme**:
 - **Number representation**: **Little-endian word order** (32-bit words)
 - **Encryption**: Textbook RSA (no PKCS#1 padding)
 - **Session encryption**: AES-128-ECB
-- **Integrity**: CRC-16/XMODEM on handshake frames
+- **Integrity**: CRC-16/XMODEM on handshake frames and within the decrypted RSA block.
 
 ### Critical Implementation Details
 
@@ -143,12 +136,25 @@ the panel's multi-precision library format.
 - 128 bytes — RSA-encrypted block containing session data.
 - 2 bytes — CRC-16/XMODEM
 
-**Structure of data block (before RSA encryption):**
+**Structure of the Decrypted 128-byte Plaintext Block:**
 
-    [~39 bytes session data] [89 bytes zero padding]
+After successful decryption, the 128-byte plaintext block reveals a highly structured message used for key validation.
 
-After decryption, the **16-byte AES session key** is located at **bytes 2-17** of the 
-decrypted 128-byte block. The first two bytes (`be 01`) appear to be metadata.
+| Offset (bytes) | Length | Field             | Description                                          |
+| :------------- | :----- | :---------------- | :--------------------------------------------------- |
+| 0-1            | 2      | Header            | Static header, observed as `be 01`.                  |
+| 2-17           | 16     | **AES Key (Copy 1)**  | The 16-byte AES session key.                       |
+| 18-19          | 2      | Identifier        | Observed as `01 00`. Purpose unknown (e.g., version). |
+| 20-35          | 16     | **AES Key (Copy 2)**  | An identical copy of the AES key for validation.   |
+| 36-37          | 2      | **CRC-16/XMODEM**     | Checksum of the preceding 36 bytes.                |
+| 38             | 1      | Terminator        | Static byte, observed as `ef`.                       |
+| 39-127         | 89     | Zero Padding      | Fills the remainder of the block.                    |
+
+A robust server implementation should perform the following validation steps after decryption:
+1.  Verify that `Key (Copy 1)` is identical to `Key (Copy 2)`.
+2.  Calculate the CRC-16/XMODEM over the first 36 bytes and verify it matches the CRC field.
+
+If either check fails, the server should silently discard the session and not send a `KeyAck`. The panel will time out and initiate a new connection. This provides an implicit NACK mechanism for the key exchange.
 
 ### KeyAck — Server → Panel (7 bytes)
 
@@ -187,10 +193,10 @@ The `Actual_SIA_Frame` follows the standard Honeywell SIA format:
 
     46 23 30 32 37 39 37 38 99
     |  |  └───────┬──────┘  |
-    |  |          |         └─ SIA Checksum (XOR of bytes 0-7)
+    |  |          |         └─ SIA Checksum (0xFF XOR of all 8 preceding bytes)
     |  |          └─ SIA Payload (account: "027978")
     |  └─ SIA Command ('#')
-    └─ SIA Length (with +0x40 offset)
+    └─ SIA Length (have +0x40 offset)
 
 ### Encrypted Block Sizes
 
@@ -206,7 +212,7 @@ The `Actual_SIA_Frame` follows the standard Honeywell SIA format:
 
 ## Core Implementation Logic
 
-### RSA Key Exchange
+### RSA Key Exchange and Validation
 
     from Cryptodome.PublicKey import RSA
     
@@ -226,8 +232,21 @@ The `Actual_SIA_Frame` follows the standard Honeywell SIA format:
     decrypted_int = pow(encrypted_int, rsa_key.d, rsa_key.n)
     decrypted_block = decrypted_int.to_bytes(128, 'little')
     
-    # 5. Extract AES key from the known offset (bytes 2-17)
-    aes_session_key = decrypted_block[2:18]
+    # 5. Validate the decrypted block's internal structure
+    key1 = decrypted_block[2:18]
+    key2 = decrypted_block[20:36]
+    received_crc = int.from_bytes(decrypted_block[36:38], 'big')
+    data_to_check = decrypted_block[0:36]
+
+    if key1 != key2:
+        raise ValueError("AES key copies do not match!")
+    
+    calculated_crc = crc16_xmodem(data_to_check)
+    if calculated_crc != received_crc:
+        raise ValueError("Decrypted block internal CRC mismatch!")
+
+    # 6. Extract the verified AES key
+    aes_session_key = key1
 
 ### AES Message Processing
 
@@ -236,7 +255,7 @@ The `Actual_SIA_Frame` follows the standard Honeywell SIA format:
     def process_sia_message(decrypted_data: bytes):
         """Parses a decrypted AES block."""
         
-        # 1. The first byte is the length of the actual SIA frame.
+        # 1. The first byte is the length of the actual SIA frame that follows.
         sia_frame_length = decrypted_data[0]
         
         # 2. Slice out the SIA frame.
@@ -260,23 +279,19 @@ The `Actual_SIA_Frame` follows the standard Honeywell SIA format:
     def create_encrypted_ack(cipher_aes):
         """Creates a correctly framed and encrypted SIA ACK."""
         
-        # SIA ACK data: Command='@' (0x40), Payload='8' (0x38)
-        ack_data = b'\x40\x38'
-        
-        # Frame for checksum: [Length][Data]
+        # The SIA ACK frame is simply [Length][Data][Checksum]
+        ack_data = b'\x40\x38' # Command='@', Payload='8'
         frame_to_check = bytes([len(ack_data)]) + ack_data
         
-        # Calculate checksum
         checksum = 0xFF
         for byte in frame_to_check:
             checksum ^= byte
             
-        # Full SIA frame: [Length][Data][Checksum]
         sia_ack_frame = frame_to_check + bytes([checksum])
         
         # Pre-encryption block: [SIA_Frame_Length][SIA_Frame][Padding]
         plaintext_block = bytes([len(sia_ack_frame)]) + sia_ack_frame
-        plaintext_block += b'\x00' * (16 - len(plaintext_block))
+        plaintext_block += b'\x00' * (16 - len(plaintext_block)) # Pad to 16
         
         return cipher_aes.encrypt(plaintext_block)
 
@@ -301,6 +316,7 @@ It provides protection against casual interception but not targeted attacks.
 This protocol implementation has been validated through:
 
 ✅ Successful RSA handshake with a live Galaxy Flex panel.  
+✅ Internal validation of decrypted RSA block (key copies and CRC).
 ✅ AES session key extraction and verification.  
 ✅ Full decryption of a multi-message SIA event sequence.  
 ✅ Successful SIA checksum validation for all received messages.  
@@ -317,7 +333,7 @@ Test equipment:
 
 - GX Remote Control Android APK — com.honeywell.galaxyapp.apk v4.5.0
 - Native library — libBackendFirmware.so (ARM64)
-- Ghidra reverse engineering tool
+- Ghidra reverse engineering tool — function analysis and decompilation
 - Network captures and live panel testing (April 2026)
 - Homey community forum thread:  
   https://community.homey.app/t/honeywell-galaxy-flex-alarm-with-ethernet-module/5991
@@ -334,3 +350,5 @@ purposes only. The authors make no warranties and accept no liability for the us
 this information.
 
 **Status**: Protocol fully reverse engineered and working (2026-04-16)
+
+---
