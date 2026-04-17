@@ -6,6 +6,10 @@ Note: This is just a proof-of-concept file that is meant to handle the key-excha
 encrypted messages to display them on the screen. 
 
 It has been tested using Engineering test messages, but nothing else. But it successfully receives the encrypted data.
+
+It requires to install the folowing python modules:
+cryptodome
+crcmod
 """
 import asyncio
 import logging
@@ -13,7 +17,6 @@ from Cryptodome.PublicKey import RSA
 from Cryptodome.Cipher import AES
 import crcmod
 
-# ... (logging setup, constants, and helper functions are the same) ...
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
 LISTEN_ADDR, LISTEN_PORT = '0.0.0.0', 10000
@@ -31,7 +34,6 @@ def print_hex(label: str, data: bytes):
     print(f"  {' ' * len(label)}  ({len(data)} bytes)")
 
 def create_encrypted_ack(cipher_aes) -> bytes:
-    # ... (this function is correct and unchanged) ...
     sia_ack = bytes([0x40, 0x38])
     checksum = 0xFF
     for byte in sia_ack: checksum ^= byte
@@ -47,7 +49,7 @@ async def handle_encrypted_session(reader, writer):
     addr = writer.get_extra_info('peername')
     log.info(f"{'='*80}\nNEW CONNECTION from {addr}\n{'='*80}")
     try:
-        # --- HANDSHAKE LOGIC (UNCHANGED) ---
+        # --- HANDSHAKE LOGIC ---
         log.info("STEP 1: Waiting for StartEnc...")
         data = await reader.read(5)
         if data != EXPECTED_START_ENC: return
@@ -112,7 +114,7 @@ async def handle_encrypted_session(reader, writer):
             
             print_hex("Full decrypted message (with length prefix)", decrypted_data)
             
-            # *** CORRECTED PARSING LOGIC ***
+            # *** PARSING LOGIC ***
             if not decrypted_data:
                 continue
 
