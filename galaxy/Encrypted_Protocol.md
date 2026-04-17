@@ -1,5 +1,5 @@
 # Honeywell Galaxy Flex — Encrypted ARC Protocol
-## Research Notes — Fully Reverse Engineered and Validated
+## Research Notes — Fully reverse engineered for ARC notification (SIA Level 3) and validated against live hardware.
 
 This document describes the encrypted variant of the proprietary TCP-based protocol
 used by the Honeywell Galaxy Flex ethernet module when communicating with an ARC
@@ -262,7 +262,7 @@ The `Actual_SIA_Frame` follows the standard Honeywell SIA format:
         sia_frame = decrypted_data[1 : 1 + sia_frame_length]
         
         # 3. Validate the SIA checksum.
-        # Checksum is calculated over the entire SIA frame except the last byte.
+        # Checksum is calculated over the entire SIA frame including the Length byte, but excluding the checksum byte itself.
         data_to_check = sia_frame[:-1]
         expected_checksum = sia_frame[-1]
         
