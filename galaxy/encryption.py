@@ -12,11 +12,12 @@ from Cryptodome.Cipher import AES
 log = logging.getLogger(__name__)
 
 # --- Public Constants (to be imported by sia-server.py) ---
-START_ENC_HDR = b'\x05\x01' # The first two bytes for quick detection
+START_ENC_HEADER = b'\x05\x01' # The first two bytes for quick detection
 
 # --- Internal Helper Constants and Functions (private to this module) ---
 _SERVER_KEY_HEADER = b'\x08\x01\x01\x01\x00'
-_KEY_ACK_FRAME = b'\x50\x01\x84\x01\x00\xb7\x2d'
+_PANEL_KEY_HEADER = b'\x88\x01'
+_KEY_ACK_HEADER = b'\x50\x01\x84\x01\x00'
 
 def _calc_crc(data: bytes) -> bytes:
     """Calculates CRC-16/XMODEM using the standard library."""
