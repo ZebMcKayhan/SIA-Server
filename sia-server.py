@@ -122,7 +122,7 @@ except ImportError:
 # --- Optional Encryption Support ---
 ENCRYPTION_AVAILABLE = False
 try:
-    from galaxy.encryption import do_handshake, CryptoContext, START_ENC_FRAME, START_ENC_HDR
+    from galaxy.encryption import do_handshake, CryptoContext, START_ENC_HDR
     # Also check for the heavy dependency to be safe
     from Cryptodome.PublicKey import RSA
     ENCRYPTION_AVAILABLE = True
@@ -132,7 +132,7 @@ except ImportError:
     # Define dummy placeholders so the server can run without the encryption feature.
     CryptoContext = None
     do_handshake = None
-    START_ENC_FRAME = b'' # Dummy value
+    START_ENC_HDR = b'' # Dummy value
     log.info("WARNING: Encryption modules not found (e.g., pycryptodome). Encrypted sessions will be rejected.")
 # ---
 
