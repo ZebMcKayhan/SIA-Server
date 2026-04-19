@@ -17,6 +17,7 @@ START_ENC_HEADER = b'\x05\x01' # The first two bytes for quick detection
 # --- Internal Helper Constants and Functions (private to this module) ---
 _SERVER_KEY_HEADER = b'\x08\x01\x01\x01\x00'
 _PANEL_KEY_HEADER = b'\x88\x01'
+_DECRYPTED_HEADER = b'\xbe\x01'
 _KEY_ACK_HEADER = b'\x50\x01\x84\x01\x00'
 
 def _calc_crc(data: bytes) -> bytes:
@@ -72,7 +73,105 @@ class CryptoContext:
         log.debug("Plaintext block to be encrypted: %r", padded_block)
         return self.cipher.encrypt(padded_block)
 
-# --- Public Function (to be defined next) ---
-async def do_handshake(reader, writer, data, log) -> CryptoContext | None:
-    # We will implement this function in the next step.
-    pass
+async def do_handshake(reader, writer, data: bytes, log) -> CryptoContext | None:
+    """
+    Performs the full RSA handshake and returns a CryptoContext on success.
+    
+    This function takes over the connection after the initial StartEnc header
+    is detected and handles the entire key exchange process.
+    
+    Args:
+        reader: The asyncio StreamReader for the connection.
+        writer: The asyncio StreamWriter for the connection.
+        data: The initial 5-byte StartEnc frame received from the panel.
+        log: The logger instance from the main server.
+
+    Returns:
+        A new CryptoContext object on successful handshake, or None on failure.
+    """
+    try:
+        # --- Step 1: Validate the incoming StartEnc frame ---
+        log.debug("ENCRYPTION: Step 1/5 - Validating StartEnc frame...")
+        if len(data) != 5:
+            log.error("Handshake Error: StartEnc frame is not 5 bytes long. Got %d bytes.", len(data))
+            return None
+        if data[2:] != _calc_crc(data[:3]):
+            log.error("Handshake Error: StartEnc frame has an invalid CRC.")
+            return None
+        log.debug("✓ StartEnc frame is valid.")
+
+        # --- Step 2: Generate and send the ServerKey ---
+        log.debug("ENCRYPTION: Step 2/5 - Generating and sending ServerKey...")
+        rsa_key = RSA.generate(1024, e=3)
+        modulus_le = rsa_key.n.to_bytes(128, 'little')
+        
+        server_key_payload = _SERVER_KEY_HEADER + modulus_le
+        server_key_frame = server_key_payload + _calc_crc(server_key_payload)
+        
+        writer.write(server_key_frame)
+        await writer.drain()
+        log.debug("✓ ServerKey sent.")
+
+        # --- Step 3: Receive and validate the PanelKey ---
+        log.debug("ENCRYPTION: Step 3/5 - Receiving and validating PanelKey...")
+        panel_key_frame = await reader.read(132)
+        
+        if len(panel_key_frame) != 132:
+            log.error("Handshake Error: Expected 132 bytes for PanelKey, got %d.", len(panel_key_frame))
+            return None
+        if not panel_key_frame.startswith(_PANEL_KEY_HEADER):
+            log.error("Handshake Error: PanelKey frame has an invalid header.")
+            return None
+        if panel_key_frame[-2:] != _calc_crc(panel_key_frame[:-2]):
+            log.error("Handshake Error: PanelKey frame has an invalid CRC.")
+            return None
+        log.debug("✓ PanelKey frame is valid.")
+
+        # --- Step 4: Decrypt the RSA block and validate its contents ---
+        log.debug("ENCRYPTION: Step 4/5 - Decrypting and validating session key...")
+        encrypted_block = panel_key_frame[2:-2]
+        
+        encrypted_int = int.from_bytes(encrypted_block, 'little')
+        decrypted_int = pow(encrypted_int, rsa_key.d, rsa_key.n)
+        decrypted_block = decrypted_int.to_bytes(128, 'little')
+        
+        # Perform all internal validation checks
+        header = decrypted_block[0:2]
+        key1 = decrypted_block[2:18]
+        key2 = decrypted_block[20:36]
+        internal_crc_bytes = decrypted_block[36:38]
+        data_to_check = decrypted_block[0:36]
+        
+        if header != _DECRYPTED_HEADER:
+            log.error("Handshake Error: Decrypted block has invalid internal header. Expected '%s', got '%s'",
+                      _DECRYPTED_HEADER.hex(), header.hex())
+            return None
+        
+        if key1 != key2:
+            log.error("Handshake Error: AES key copies in decrypted block do not match!")
+            return None
+        
+        calculated_crc = _calc_crc(data_to_check)
+        if internal_crc_bytes != calculated_crc:
+            log.error("Handshake Error: Decrypted block internal CRC mismatch. Expected '%s', got '%s'",
+                      internal_crc_bytes.hex(), calculated_crc.hex())
+            return None
+            
+        log.debug("✓ Decrypted block passed all internal validation checks.")
+        aes_session_key = key1
+        
+        # --- Step 5: Send the final KeyAck ---
+        log.debug("ENCRYPTION: Step 5/5 - Sending KeyAck...")
+        key_ack_frame = _KEY_ACK_HEADER + _calc_crc(_KEY_ACK_HEADER)
+        writer.write(key_ack_frame)
+        await writer.drain()
+        log.debug("✓ Handshake successful. Encrypted session is now active.")
+        
+        return CryptoContext(aes_session_key)
+
+    except asyncio.IncompleteReadError:
+        log.error("Handshake Error: Connection closed by panel prematurely.")
+        return None
+    except Exception as e:
+        log.error(f"Handshake Error: An unexpected error occurred: {e}", exc_info=True)
+        return None
