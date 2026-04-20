@@ -114,10 +114,19 @@ async def do_handshake(reader, writer, data: bytes, log) -> CryptoContext | None
 
         # --- Step 3: Receive and validate the PanelKey ---
         log.debug("ENCRYPTION: Step 3/5 - Receiving and validating PanelKey...")
-        panel_key_frame = await reader.read(132)
-        
-        if len(panel_key_frame) != 132:
-            log.error("Handshake Error: Expected 132 bytes for PanelKey, got %d.", len(panel_key_frame))
+        try:
+            panel_key_frame = await asyncio.wait_for(
+                reader.readexactly(132),
+                timeout=3.0  # A reasonable timeout for the panel to respond
+            )
+        except asyncio.TimeoutError:
+            log.error("Handshake Error: Timeout while waiting for PanelKey.")
+            return None
+        except asyncio.IncompleteReadError as e:
+            log.error(
+                "Handshake Error: Connection closed by panel while sending PanelKey. Expected 132 bytes, got %d.",
+                len(e.partial)
+            )
             return None
         if not panel_key_frame.startswith(_PANEL_KEY_HEADER):
             log.error("Handshake Error: PanelKey frame has an invalid header.")
