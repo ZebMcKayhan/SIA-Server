@@ -99,8 +99,12 @@ async def do_handshake(reader, writer, data: bytes, log) -> CryptoContext | None
         if len(data) != 5:
             log.error("Handshake Error: StartEnc frame is not 5 bytes long. Got %d bytes.", len(data))
             return None
-        if data[2:] != _calc_crc(data[:3]):
+        calculated_crc = _calc_crc(data[:-2])
+        if not data.endswith(calculated_crc):
             log.error("Handshake Error: StartEnc frame has an invalid CRC.")
+            log.debug("  Data checked: %s", data[:-2].hex())
+            log.debug("  Received CRC: %s", data[-2:].hex())
+            log.debug("  Calculated CRC: %s", calculated_crc.hex())
             return None
         log.debug("✓ StartEnc frame is valid.")
 
