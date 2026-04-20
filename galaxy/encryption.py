@@ -38,6 +38,10 @@ class CryptoContext:
         Decrypts one or more AES blocks and unwraps the clean SIA frame.
         Returns a byte string ready for validate_and_strip().
         """
+        if len(encrypted_data) % 16 != 0:
+            log.error("Received encrypted data with a length (%d) that is not a multiple of 16. Discarding.", len(encrypted_data))
+            return b''
+        
         decrypted_padded = b''
         # Decrypt the raw data in 16-byte chunks.
         for i in range(0, len(encrypted_data), 16):
