@@ -132,7 +132,7 @@ except ImportError:
     # Define dummy placeholders so the server can run without the encryption feature.
     CryptoContext = None
     do_handshake = None
-    START_ENC_HEADER = b'' # Dummy value
+    START_ENC_HEADER = b'\x05\x01' # Hardcooded as galaxy.encryption wasnt loaded.
     log.info("WARNING: Encryption modules not found (e.g., pycryptodome). Encrypted sessions will be rejected.")
 # ---
 
