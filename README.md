@@ -47,6 +47,7 @@ The project is structured to separate the server logic, protocol parsing, and co
 │   ├── __init__.py
 │   ├── README.md           # Technical description of the protocol.  
 │   ├── parser.py           # Handles parsing of the Galaxy SIA protocol.
+│   ├── encryption.py       # Handles encrypted handshake and encrypted packets.
 │   └── constants.py        # Constants used in the SIA protocol.
 └── asuswrt-merlin/
     ├── README.md           # Install instructions for Asuswrt-Merlin.
