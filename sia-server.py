@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 Galaxy SIA Server
 Receives, validates, and parses proprietary SIA protocol messages from
