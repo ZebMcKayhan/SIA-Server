@@ -8,8 +8,7 @@ encrypted messages to display them on the screen.
 It has been tested using Engineering test messages, but nothing else. But it successfully receives the encrypted data.
 
 It requires to install the folowing python modules:
-cryptodome
-crcmod
+pycryptodome
 """
 import asyncio
 import logging
