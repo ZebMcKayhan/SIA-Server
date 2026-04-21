@@ -125,7 +125,10 @@ ENCRYPTION_AVAILABLE = False
 try:
     from galaxy.encryption import do_handshake, CryptoContext, START_ENC_HEADER
     # Also check for the heavy dependency to be safe
-    from Cryptodome.PublicKey import RSA
+    try:
+        from Cryptodome.PublicKey import RSA
+    except ImportError:
+        from Crypto.PublicKey import RSA    
     ENCRYPTION_AVAILABLE = True
     # We will initialize the logger later, so we use print for this early message.
     log.info("INFO: Encryption modules loaded. Encrypted SIA sessions are supported.")
