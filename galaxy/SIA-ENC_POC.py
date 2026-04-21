@@ -15,7 +15,7 @@ import asyncio
 import logging
 from Cryptodome.PublicKey import RSA
 from Cryptodome.Cipher import AES
-import crcmod
+import binascii
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
@@ -25,8 +25,9 @@ SERVER_KEY_HEADER = b'\x08\x01\x01\x01\x00'
 KEY_ACK_FRAME = b'\x50\x01\x84\x01\x00\xb7\x2d'
 crc16_xmodem = crcmod.predefined.mkCrcFun('xmodem')
 
-def calc_crc(data: bytes) -> bytes:
-    return crc16_xmodem(data).to_bytes(2, 'big')
+def _calc_crc(data: bytes) -> bytes:
+    """Calculates CRC-16/XMODEM using the standard library."""
+    return binascii.crc_hqx(data, 0x0000).to_bytes(2, 'big')
 
 def print_hex(label: str, data: bytes):
     hex_str = ' '.join(f'{b:02x}' for b in data)
