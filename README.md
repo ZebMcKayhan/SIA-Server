@@ -233,24 +233,85 @@ Press `Ctrl+C` to stop.
 5.  Click **Install service**. You can now manage it from the Windows Services app (`services.msc`).
 
 ## Security & Privacy Guidelines
-Please read these guidelines carefully.
 
-**1. Local Network Communication (Panel to Server)**
+Please read these guidelines carefully before deploying this server.
 
-The communication between your alarm panel and this server is **unencrypted**. Run it on a trusted local network (LAN).
+### 1. Panel-to-Server Communication
 
-> **Warning:** Do not expose the server's listening ports directly to the public internet. If you must, use a **VPN** (e.g., WireGuard).
+This server supports two modes of communication from the alarm panel:
 
-**2. Notification Privacy (Server to ntfy.sh)**
+**Plaintext Mode (Default panel setting)**
+- All SIA event data is transmitted in **cleartext** over TCP.
+- It is readable by anyone who can observe the network traffic.
+- **Recommendation:** Only use this mode on a trusted local network (LAN).
 
--   **Transport Security:** Communication to `ntfy.sh` uses **HTTPS** and is secure.
--   **Topic Privacy:** ntfy.sh topics are public by default. To secure them:
-    -   **Use a long, unguessable topic name.**
-    -   **Consider a generic Site Name** that cannot be linked to your address.
-    -   Alternatively: **Subscribe to NTFY.sh PRO** to setup private channels with authentication. This server fully supports authentication via the `NTFY_AUTH` settings.
-    -   Alternatively: **Host NTFY yourself** to be able to setup private channels free of charge (Requires a machine with public ip)
+**Encrypted Mode (Recommended)**
+- When encryption is enabled on the panel, a proprietary RSA-1024 + AES-128
+  handshake is performed before any SIA data is exchanged.
+- All event data is encrypted and appears as random noise to an observer.
+- This provides **confidentiality** (an eavesdropper cannot read your alarm events)
+  and makes your traffic **unrecognizable** as alarm data to opportunistic scanners.
+- **This is the recommended mode for any internet-facing deployment.**
 
-**Disclaimer:** You are ultimately responsible for securing your own setup.
+**Known Limitations of the Encrypted Mode**
+The encryption scheme used by the Honeywell Galaxy panel is proprietary and does
+not meet all modern cryptographic standards:
+- It uses **RSA with e=3** and **AES-128-ECB**, which are considered weak by
+  current standards.
+- There is **no mutual authentication**. The panel cannot verify it is talking
+  to the correct server, and the server cannot verify the panel's identity.
+
+
+**Recommendation: Enable Encryption on the Panel and set `ENABLED = secure` in
+`sia-server.conf` for all accounts.** This combination:
+- Makes your traffic unrecognizable to opportunistic internet scanners.
+- Prevents false alarm injection from unauthenticated plaintext connections.
+- Provides confidentiality for your alarm events.
+
+> **Note:** If you must expose the server to the public internet and require the
+> highest level of security, wrapping the connection in a **VPN** (e.g.,
+> WireGuard) is the right way. A VPN adds the mutual authentication layer
+> that this protocol lacks.
+
+---
+
+### 2. Notification Privacy (Server to ntfy.sh)
+
+- **Transport Security:** All communication to `ntfy.sh` uses **HTTPS** and is
+  fully encrypted in transit.
+- **Topic Privacy:** ntfy.sh topics are **public by default**. Anyone who knows
+  your topic URL can subscribe to your notifications.
+
+**To secure your notifications, choose one or more of the following:**
+
+- **Use a long, unguessable topic name.** A random 20+ character string is
+  effectively a private topic. Configure this in `NTFY_TOPIC`.
+- **Use a generic `NTFY_TITLE`** that cannot be linked to your address or
+  identity (e.g., "Home Security" rather than "123 Main Street Alarm").
+- **Use ntfy.sh authentication.** This server fully supports token-based and
+  user/password authentication via the `NTFY_AUTH`, `NTFY_TOKEN`, `NTFY_USER`,
+  and `NTFY_PASS` settings. Subscribe to **ntfy.sh PRO** to enable
+  access-controlled topics.
+- **Self-host ntfy.** Running your own ntfy instance gives you full control over
+  privacy and access. This server is fully compatible with self-hosted ntfy
+  instances.
+
+---
+
+### 3. Summary of Recommendations
+
+| Scenario | Recommendation |
+| :--- | :--- |
+| **Local network only** | Plaintext or Encrypted mode, `ENABLED = yes` |
+| **Internet-facing, basic security** | Encrypted mode on panel, `ENABLED = secure` |
+| **Internet-facing, maximum security** | Encrypted mode + VPN (e.g. WireGuard) |
+| **Unknown/untrusted panels** | `ENABLED = no` in `[Default]` section |
+
+---
+
+**Disclaimer:** You are ultimately responsible for securing your own deployment.
+This server is provided as-is, for educational and interoperability purposes.
+The authors make no warranties and accept no liability for its use.
 
 ## Acknowledgments
 -   This project was developed through a collaborative effort with Anthropic's AI assistant, Claude.
