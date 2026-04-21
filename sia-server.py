@@ -240,6 +240,34 @@ async def handle_connection(notification_queue: Queue, reader, writer):
             
             command_name = COMMANDS.get(command_byte, f'UNKNOWN(0x{command_byte:02x})')
             log.debug("Received Command: %s, Payload: %r", command_name, payload)
+
+            # --- ACCOUNT POLICY ENFORCEMENT ---
+            # Validate account_id if according to policy
+            if command_name == 'ACCOUNT_ID':
+                account_number = payload.decode(errors='ignore')
+                
+                # Look up the policy. Fall back to 'default', then to 'yes'.
+                policy = config.ACCOUNT_POLICIES.get(
+                    account_number,
+                    config.ACCOUNT_POLICIES.get('default', 'yes')
+                )
+                
+                is_encrypted = crypto is not None
+                log.debug("Account '%s' has policy '%s'. Session is encrypted: %s",
+                          account_number, policy, is_encrypted)
+                # Policy: 'no' - This account is completely disabled.
+                if policy == 'no':
+                    log.warning("POLICY: Account '%s' is DISABLED. Rejecting connection.", account_number)
+                    await build_and_send(writer, 'REJECT', crypto=crypto)
+                    return
+                # Policy: 'secure' - This account requires an encrypted session.
+                if policy == 'secure' and not is_encrypted:
+                    log.warning("POLICY: Account '%s' requires ENCRYPTED connection but received PLAINTEXT. Rejecting.", account_number)
+                    await build_and_send(writer, 'REJECT', crypto=crypto)
+                    return
+                # If we reach here, the policy is satisfied.
+                log.debug("POLICY: Account '%s' policy satisfied.", account_number)
+            
             if command_name != 'END_OF_DATA':
                 valid_blocks.append({'command': command_name, 'payload': payload})
             await build_and_send(writer, 'ACKNOWLEDGE', crypto=crypto)
