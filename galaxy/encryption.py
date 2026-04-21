@@ -5,8 +5,12 @@ This is an optional dependency for the main SIA server. It requires 'pycryptodom
 import asyncio
 import logging
 import binascii
-from Cryptodome.PublicKey import RSA
-from Cryptodome.Cipher import AES
+try:
+    from Cryptodome.PublicKey import RSA
+    from Cryptodome.Cipher import AES
+except ImportError:
+    from Crypto.PublicKey import RSA
+    from Crypto.Cipher import AES
 
 # Get a logger instance that will inherit its configuration from the main server.
 log = logging.getLogger(__name__)
