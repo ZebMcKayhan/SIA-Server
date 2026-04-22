@@ -8,6 +8,7 @@ It receives alarm events and sends real-time notifications using ntfy.
 - SIA DC-09 protocol support
 - Honeywell Galaxy Flex compatibility
 - Real-time alarm notifications
+- Encrypted communication support (proprietary RSA+AES)
 - Lightweight Python server
 
 ## Repository
