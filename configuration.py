@@ -31,6 +31,7 @@ class AppConfig:
         self.SYSLOG_FACILITY = logging.handlers.SysLogHandler.LOG_USER
         self.ACCOUNT_SITES = {}
         self.NTFY_TOPICS = {}
+        self.ACCOUNT_POLICIES = {}
         self.MAX_QUEUE_SIZE = 50
         self.MAX_RETRIES = 10
         self.MAX_RETRY_TIME = 30
@@ -263,7 +264,24 @@ def load_and_validate_config() -> AppConfig:
         topic_config = _parse_topic_config(config, section_name)
         if topic_config:
             app_config.NTFY_TOPICS[account_number] = topic_config
+
+        # Parse the connection policy for this section
+        policy_str = config.get(section_name, 'enabled', fallback='yes').lower()
         
+        # Validate and normalize the policy value
+        if policy_str in ['true', 'yes']:
+            policy = 'yes'
+        elif policy_str in ['false', 'no']:
+            policy = 'no'
+        elif policy_str == 'secure':
+            policy = 'secure'
+        else:
+            log.warning("Invalid 'enabled' value '%s' in section [%s]. Defaulting to 'yes'.", 
+                        policy_str, section_name)
+            policy = 'yes'
+        
+        # Store the validated policy in our new dictionary
+        app_config.ACCOUNT_POLICIES[account_number] = policy
     if not is_valid:
         log.critical("Configuration validation failed. Please check the errors above. Exiting.")
         sys.exit(1)

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 Galaxy SIA Server
 Receives, validates, and parses proprietary SIA protocol messages from
@@ -7,7 +8,7 @@ Honeywell Galaxy Flex alarm systems. It sends notifications via ntfy.sh.
 This server is configured via 'sia-server.conf' and 'configuration.py'.
 """
 # --- Application Version ---
-__version__ = "1.9.0"
+__version__ = "2.0.0-beta"
 
 import asyncio
 import logging
@@ -119,6 +120,25 @@ except ImportError:
     log.info("uvloop not found, using standard asyncio event loop.")
     pass
 
+# --- Optional Encryption Support ---
+ENCRYPTION_AVAILABLE = False
+try:
+    from galaxy.encryption import do_handshake, CryptoContext, START_ENC_HEADER
+    # Also check for the heavy dependency to be safe
+    try:
+        from Cryptodome.PublicKey import RSA
+    except ImportError:
+        from Crypto.PublicKey import RSA    
+    ENCRYPTION_AVAILABLE = True
+    # We will initialize the logger later, so we use print for this early message.
+    log.info("INFO: Encryption modules loaded. Encrypted SIA sessions are supported.")
+except ImportError:
+    # Define dummy placeholders so the server can run without the encryption feature.
+    CryptoContext = None
+    do_handshake = None
+    START_ENC_HEADER = b'\x05\x01' # Hardcooded as galaxy.encryption wasnt loaded.
+    log.info("WARNING: Encryption modules not found (e.g., pycryptodome). Encrypted sessions will be rejected.")
+# ---
 
 from galaxy.parser import parse_galaxy_event
 from notification import NotificationDispatcher, enqueue_notification
@@ -152,7 +172,7 @@ def validate_and_strip(data: bytes) -> tuple[int, bytes] | tuple[None, None]:
     return command_byte, payload
 
 
-async def build_and_send(writer, command: str, payload: bytes = b''):
+async def build_and_send(writer, command: str, payload: bytes = b'', crypto: CryptoContext | None = None):
     """Builds and sends a valid Galaxy message block."""
     command_byte = COMMAND_BYTES[command]
     payload_length = len(payload)
@@ -162,6 +182,11 @@ async def build_and_send(writer, command: str, payload: bytes = b''):
     for byte in message_part:
         checksum ^= byte
     final_message = message_part + bytes([checksum])
+    
+    if crypto:
+        log.debug("Encrypting outgoing command: %s", command)
+        final_message = crypto.encrypt(final_message)
+    
     writer.write(final_message)
     await writer.drain()
     log.debug("Sent Command: %s, Raw: %r", command, final_message)
@@ -171,7 +196,8 @@ async def handle_connection(notification_queue: Queue, reader, writer):
     """Handle an incoming SIA connection."""
     addr = writer.get_extra_info('peername')
     log.info("Connection from %r", addr)
-    
+
+    crypto = None  # This will hold our CryptoContext object if the session is encrypted
     valid_blocks = []
     
     try:
@@ -180,31 +206,75 @@ async def handle_connection(notification_queue: Queue, reader, writer):
             if not data:
                 log.info("Connection closed by peer")
                 break
-            
-            command_byte, payload = validate_and_strip(data)
-            
-            if command_byte is None:
-                if len(data) >= 2 and data[0:2] == b'\x05\x01':
+            # --- encryption detection ---
+            if data.startswith(START_ENC_HEADER):
+                if ENCRYPTION_AVAILABLE:
+                    log.info("Encrypted session detected from %r", addr)
+                    crypto = await do_handshake(reader, writer, data, log)
+                    if crypto is None:
+                        log.warning("Handshake failed, closing connection")
+                        return
+                    # Handshake successful, now wait for the first real SIA message.
+                    data = await reader.read(1024)
+                    if not data:
+                        log.info("Connection closed after handshake")
+                        return
+                else: 
+                    # This block runs if encryption is detected but not supported.
                     log.error("="*60)
                     log.error("ENCRYPTION DETECTED - UNSUPPORTED")
                     log.error("The panel at IP address '%s' has encryption enabled.", addr[0])
-                    log.error("Closing connection to stop the panel from retrying.")
-                    log.error("Raw block received: %r", data)
+                    log.error("Required modules are missing. Please install 'pycryptodome'.")
+                    log.error("Closing connection to stop panel retries.")
                     log.error("="*60)
-                    break 
-                else:
+                    return            
+          
+            if crypto:
+                data = crypto.decrypt(data)
+
+            command_byte, payload = validate_and_strip(data)
+            
+            if command_byte is None:
                     if len(data) > 0:
                         log.error("Validation failed (length or checksum error). Raw: %r", data)
                     else:
                         log.error("Validation failed (received empty data block).")
-                    await build_and_send(writer, 'REJECT')
+                    await build_and_send(writer, 'REJECT', crypto=crypto)
                     continue
             
             command_name = COMMANDS.get(command_byte, f'UNKNOWN(0x{command_byte:02x})')
             log.debug("Received Command: %s, Payload: %r", command_name, payload)
+
+            # --- ACCOUNT POLICY ENFORCEMENT ---
+            # Validate account_id if according to policy
+            if command_name == 'ACCOUNT_ID':
+                account_number = payload.decode(errors='ignore')
+                
+                # Look up the policy. Fall back to 'default', then to 'yes'.
+                policy = config.ACCOUNT_POLICIES.get(
+                    account_number,
+                    config.ACCOUNT_POLICIES.get('default', 'yes')
+                )
+                
+                is_encrypted = crypto is not None
+                log.debug("Account '%s' has policy '%s'. Session is encrypted: %s",
+                          account_number, policy, is_encrypted)
+                # Policy: 'no' - This account is completely disabled.
+                if policy == 'no':
+                    log.warning("POLICY: Account '%s' is DISABLED. Rejecting connection.", account_number)
+                    await build_and_send(writer, 'REJECT', crypto=crypto)
+                    return
+                # Policy: 'secure' - This account requires an encrypted session.
+                if policy == 'secure' and not is_encrypted:
+                    log.warning("POLICY: Account '%s' requires ENCRYPTED connection but received PLAINTEXT. Rejecting.", account_number)
+                    await build_and_send(writer, 'REJECT', crypto=crypto)
+                    return
+                # If we reach here, the policy is satisfied.
+                log.debug("POLICY: Account '%s' policy satisfied.", account_number)
+            
             if command_name != 'END_OF_DATA':
                 valid_blocks.append({'command': command_name, 'payload': payload})
-            await build_and_send(writer, 'ACKNOWLEDGE')
+            await build_and_send(writer, 'ACKNOWLEDGE', crypto=crypto)
             
             if command_name == 'END_OF_DATA':
                 log.debug("End of data received, processing sequence.")

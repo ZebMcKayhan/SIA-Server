@@ -21,8 +21,6 @@ This protocol was reverse engineered from:
 - Native library analysis (libBackendFirmware.so) using Ghidra
 - Live validation against a Honeywell Galaxy Flex panel
 
-**Status**: ✅ **Fully working implementation validated** (April 2026)
-
 ---
 
 ## Encryption Architecture
@@ -38,7 +36,7 @@ encryption scheme**:
 
 ### Critical Implementation Details
 
-⚠️ **The panel uses non-standard cryptography:**
+**The panel uses non-standard cryptography:**
 
 1. **RSA public exponent e=3** instead of the standard 65537.
 2. **Little-endian multi-precision arithmetic** for RSA operations.
@@ -75,12 +73,11 @@ The CRC is calculated over all bytes **except** the CRC itself.
 
 Python implementation:
 
-    import crcmod
-    
-    crc16_xmodem = crcmod.predefined.mkCrcFun('xmodem')
+    import binascii
     
     def calc_crc(data: bytes) -> bytes:
-        return crc16_xmodem(data).to_bytes(2, 'big')
+        """CRC-16/XMODEM using Python standard library. No external dependencies."""
+        return binascii.crc_hqx(data, 0x0000).to_bytes(2, 'big')
 
 ---
 
@@ -125,7 +122,7 @@ This is a **static, fixed sequence** that signals the panel requires encrypted c
 - 128 bytes — RSA-1024 public key **modulus (n)** in **little-endian byte order**
 - 2 bytes — CRC-16/XMODEM of all preceding 133 bytes
 
-⚠️ **Critical**: The modulus must be sent in **little-endian byte order** to match
+**Note**: The modulus must be sent in **little-endian byte order** to match
 the panel's multi-precision library format.
 
 ### PanelKey — Panel → Server (132 bytes)
@@ -184,8 +181,8 @@ The `Actual_SIA_Frame` follows the standard Honeywell SIA format:
 **Example decrypted block (Account ID):**
 
     09 46 23 30 32 37 39 37 38 99 ae ae ae ae ae ae
-    |  └───────────┬───────────┘ └──────┬───────┘
-    |              |                    └─ AES Padding
+    |  └───────────┬────────────┘ └───────┬───────┘
+    |              |                      └─ AES Padding
     |              └─ Actual SIA Frame (9 bytes)
     └─ Length Prefix: The SIA frame is 9 bytes long.
 
@@ -196,17 +193,17 @@ The `Actual_SIA_Frame` follows the standard Honeywell SIA format:
     |  |          |         └─ SIA Checksum (0xFF XOR of all 8 preceding bytes)
     |  |          └─ SIA Payload (account: "027978")
     |  └─ SIA Command ('#')
-    └─ SIA Length (have +0x40 offset)
+    └─ SIA Length (with +0x40 offset)
 
 ### Encrypted Block Sizes
 
-| SIA Block Type | Typical SIA Frame | Encrypted Size |
-|:---------------|:-----------------|:---------------|
-| Account ID     | ~9 bytes         | 16 bytes (1 AES block) |
-| New Event      | ~19 bytes        | 32 bytes (2 AES blocks) |
-| ASCII Text     | ~20 bytes        | 32 bytes (2 AES blocks) |
-| End of Data    | 3 bytes          | 16 bytes (1 AES block) |
-| ACK            | 3 bytes          | 16 bytes (1 AES block) |
+| SIA Block Type | Typical SIA Frame | Encrypted Size          |
+|:---------------|:------------------|:------------------------|
+| Account ID     | ~9 bytes          | 16 bytes (1 AES block)  |
+| New Event      | ~19 bytes         | 32 bytes (2 AES blocks) |
+| ASCII Text     | ~20 bytes         | 32 bytes (2 AES blocks) |
+| End of Data    | 3 bytes           | 16 bytes (1 AES block)  |
+| ACK            | 3 bytes           | 16 bytes (1 AES block)  |
 
 ---
 
@@ -214,7 +211,11 @@ The `Actual_SIA_Frame` follows the standard Honeywell SIA format:
 
 ### RSA Key Exchange and Validation
 
-    from Cryptodome.PublicKey import RSA
+    # Supports both pycryptodome (pip) and python3-cryptodome (Entware/opkg)
+    try:
+        from Cryptodome.PublicKey import RSA
+    except ImportError:
+        from Crypto.PublicKey import RSA
     
     # 1. Generate RSA-1024 keypair with non-standard e=3
     rsa_key = RSA.generate(1024, e=3)
@@ -241,7 +242,7 @@ The `Actual_SIA_Frame` follows the standard Honeywell SIA format:
     if key1 != key2:
         raise ValueError("AES key copies do not match!")
     
-    calculated_crc = crc16_xmodem(data_to_check)
+    calculated_crc = int.from_bytes(calc_crc(data_to_check), 'big')
     if calculated_crc != received_crc:
         raise ValueError("Decrypted block internal CRC mismatch!")
 
@@ -250,7 +251,10 @@ The `Actual_SIA_Frame` follows the standard Honeywell SIA format:
 
 ### AES Message Processing
 
-    from Cryptodome.Cipher import AES
+    try:
+        from Cryptodome.Cipher import AES
+    except ImportError:
+        from Crypto.Cipher import AES
     
     def process_sia_message(decrypted_data: bytes):
         """Parses a decrypted AES block."""
@@ -297,9 +301,39 @@ The `Actual_SIA_Frame` follows the standard Honeywell SIA format:
 
 ---
 
+## Note on the GX App Protocol (SIA Level 4 Remote Control)
+
+During analysis of `libBackendFirmware.so`, an additional XOR obfuscation layer
+was discovered in functions named `MTprot::Encrypt` and `MTprot::Decrypt`:
+
+    // Decompiled from libBackendFirmware.so
+    void Encrypt(MTprot *this, uchar *param_1, uchar *param_2, long param_3) {
+        for (local_28 = 0; (long)local_28 < param_3; local_28++) {
+            param_1[local_28] = param_2[local_28] ^ *(byte *)((long)&encodeData + (local_28 & 7));
+        }
+    }
+
+Our successful implementation confirms this XOR layer is **NOT used** for SIA
+Level 3 ARC notifications.
+
+It is likely used for the **two-way SIA Level 4 remote control protocol** (GX App and
+RSS software). In that mode, the 8-byte `encodeData` key is derived from the
+pre-shared RSS Password, providing an authentication mechanism for control
+commands (e.g., arm/disarm).
+
+Key observations:
+- The XOR key is 8 bytes, applied as a repeating pattern: `data[i] ^ key[i % 8]`
+- This layer is only active for Level 4 connections with a configured password
+- It is completely separate from the RSA+AES encryption used for Level 3
+
+This finding is included for completeness and as a starting point for developers
+wishing to implement a FOSS alternative to the GX App.
+
+---
+
 ## Security Considerations
 
-⚠️ **This protocol uses weak cryptography:**
+**This protocol uses weak cryptography:**
 
 1. **RSA with e=3** is vulnerable to low-exponent and cube root attacks.
 2. **Textbook RSA** (no padding) is vulnerable to chosen ciphertext attacks.
@@ -315,17 +349,20 @@ It provides protection against casual interception but not targeted attacks.
 
 This protocol implementation has been validated through:
 
-✅ Successful RSA handshake with a live Galaxy Flex panel.  
-✅ Internal validation of decrypted RSA block (key copies and CRC).
-✅ AES session key extraction and verification.  
-✅ Full decryption of a multi-message SIA event sequence.  
-✅ Successful SIA checksum validation for all received messages.  
-✅ Successful session termination after sending ACKs.  
+- Successful RSA handshake with a live Galaxy Flex panel.  
+- Internal validation of decrypted RSA block (key copies and CRC).
+- AES session key extraction and verification.  
+- Full decryption of a multi-message SIA event sequence.  
+- Successful SIA checksum validation for all received messages.  
+- Successful session termination after sending ACKs.  
 
-Test equipment:
+Test equipment and platforms:
 - Honeywell Galaxy Flex 3-20 control panel
 - GX Ethernet Module
-- `galaxy/SIA-ENC_POC.py` test script
+- Raspberry Pi 4 (Raspberry Pi OS)
+- ASUS RT-AX86U Pro router (ASUSWRT-Merlin, Entware, Python 3.13)
+- `galaxy/SIA-ENC_POC.py` proof-of-concept test script
+- `galaxy/encryption.py` production implementation
 
 ---
 
@@ -349,6 +386,6 @@ panel configuration. This research is provided for educational and interoperabil
 purposes only. The authors make no warranties and accept no liability for the use of
 this information.
 
-**Status**: Protocol fully reverse engineered and working (2026-04-16)
+**Status**: Protocol fully reverse engineered, validated on multiple platforms (2026-04-21)
 
 ---

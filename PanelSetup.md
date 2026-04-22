@@ -12,7 +12,7 @@
 
 `56.3.3.4 Network Mask` - Set size of your network if not using DHCP. Typically 255.255.255.0 if you dont know.
 
-`56.3.3.5 Encrypt` - `Alarm Report[1]` - set to 0 = Disabled and `IP Check[3]` to 0 = Disabled.
+`56.3.3.5 Encrypt` - `Alarm Report[1]` - set to `1 = Enabled` (recommended) or `0 = Disabled`. `IP Check[3]` - set to `0 = Disabled`.
 
 `56.3.3.6 Line Fail` - Enable if you want the panel to monitor the network.
 
@@ -70,6 +70,6 @@
 
 `56.4.5 Engineer Test` - Use this option when all is setup to send a test notification.
 
-`56.4.9 Encryption` - `[1] Alarm Reports` Needs to be set to `0 = Off`
+`56.4.9 Encryption` - `[1] Alarm Reports` - set to `1 = On` (recommended) or `0 = Off`. Encrypted communication is fully supported by SIA-Server when `pycryptodome` is installed.
 
 

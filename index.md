@@ -8,6 +8,7 @@ It receives alarm events and sends real-time notifications using ntfy.
 - SIA DC-09 protocol support
 - Honeywell Galaxy Flex compatibility
 - Real-time alarm notifications
+- Encrypted communication support (proprietary RSA+AES)
 - Lightweight Python server
 
 ## Repository
@@ -15,4 +16,4 @@ It receives alarm events and sends real-time notifications using ntfy.
 [https://github.com/ZebMcKayhan/SIA-Server](https://github.com/ZebMcKayhan/SIA-Server)
 
 ## Keywords
-SIA DC-09, SIA protocol, alarm monitoring, Honeywell Galaxy Flex, Python server, ntfy notifications
+SIA DC-09, SIA protocol, alarm monitoring, Honeywell Galaxy Flex, Python server, ntfy notifications, encrypted ARC, RSA AES encryption
