@@ -8,8 +8,8 @@ This project was developed and tested on a Honeywell Galaxy Flex 20. It is likel
 
 If your Galaxy Flex notifications suddenly stopped working, this project provides a self-hosted alternative.
 
-> **IMPORTANT SECURITY NOTICE**
-> The communication between the alarm panel and this server is **unencrypted**. This server is designed to be run on a trusted local network only. Please read the full [Security & Privacy Guidelines](#security--privacy-guidelines) before installation.
+> **SECURITY NOTICE**
+> Please read the full [Security & Privacy Guidelines](#security--privacy-guidelines) before deployment. Both plaintext and encrypted panel communication are supported.
 
 ## Features
 
@@ -18,8 +18,9 @@ If your Galaxy Flex notifications suddenly stopped working, this project provide
 -   **Prioritized Alerts:** Uses ntfy.sh priorities to distinguish between urgent alarms and routine events.
 -   **Advanced Notification Routing:** Route notifications for different accounts to different ntfy.sh topics, each with its own optional authentication (Bearer Token or User/Pass).
 -   **Robust Protocol Handling:** Correctly parses the multi-message protocol used by Galaxy Flex panels.
--   **Broad SIA Level Support:** The flexible parser can correctly handle event data from SIA Levels 0, 1, 2, and 3.
+-   **Broad SIA Level Support:** The flexible parser can correctly handle event data from SIA Levels 0, 1, 2, and 3. Encrypted communication (proprietary RSA+AES handshake) is fully supported.
 -   **Optional Heartbeat Server:** Includes an optional server to handle the proprietary Honeywell "IP Check" heartbeat.
+-   **Encrypted Communication:** Supports the proprietary Honeywell Galaxy encrypted ARC protocol (RSA-1024 + AES-128). Requires `pycryptodome`. Falls back to plaintext-only mode if not installed.
 -   **Character Encoding Fixes:** Decodes the proprietary character set used by Galaxy panels (e.g., Å, Ä, Ö).
 -   **Highly Configurable:** Most user settings are in a simple `sia-server.conf` file, with advanced protocol constants located in the `galaxy/` directory.
 
@@ -28,7 +29,9 @@ If your Galaxy Flex notifications suddenly stopped working, this project provide
 -   A Honeywell Galaxy Flex alarm system with an Ethernet module (e.g., A083-00-10 or E080-4).
 -   A Linux or Windows machine on the same network as the alarm system (a Raspberry Pi running Raspberry Pi OS is perfect).
 -   Python 3.
--   The `python3-requests` package and the optional `python3-uvloop` package (for Linux).
+-   The `python3-requests` package (required).
+-   The `pycryptodome` package (required for encrypted panel communication).
+-   The optional `python3-uvloop` package (for Linux, performance enhancement).
 
 ## File Structure
 
@@ -87,16 +90,16 @@ This server requires Python 3. The installation steps are different for Linux an
 2.  **Install Dependencies:** Use `apt` to install the required packages. `uvloop` is an optional performance enhancement.
     ```bash
     sudo apt update
-    sudo apt install python3-requests python3-uvloop
+    sudo apt install python3-requests python3-uvloop python3-pycryptodome
     ```
 
 #### For Windows
 1.  **Install Python:** Download and install the latest Python 3 from the [official Python website](https://www.python.org/). **Important:** During installation, make sure to check the box that says "Add Python to PATH".
 2.  **Install Dependencies:** Open a **PowerShell** or **Command Prompt**. It is strongly recommended to use `python -m pip` to ensure you are installing packages for the correct Python interpreter.
     ```powershell
-    python -m pip install requests pyopenssl
+    python -m pip install requests pycryptodome pyopenssl
     ```
-    > **Note:** The extra package `pyopenssl` are optional but recommended to avoid potential HTTPS/SSL errors when sending notifications from Windows.
+    > **Note:** The extra package `pyopenssl` is optional but recommended to avoid potential HTTPS/SSL errors when sending notifications from Windows.
 
 ### Step 3: Get the Notification App and Topic
 Before configuring the server, get the ntfy.sh app on your phone or computer.
@@ -110,7 +113,7 @@ Log into your Galaxy Flex panel's installer menu and configure the Ethernet modu
 -   **ARC Port:** The port for the `[SIA-Server]` and optionally the `[IP-Check]` server. (Menu `56.1.1.1.4.1`)
 -   **Protocol:** SIA. Levels 0-3 are supported; Level 3 is recommended for the most detail. (Menu `56.1.1.1.4.2`)
 -   **Account Number:** Your 4 or 6-digit alarm account number. SIA Level 3 requires 6 digits. (Menu `56.1.2.1.1`)
--   **Encryption:** Must be set to **Off**. The proprietary encryption is not supported. (Menu `56.3.3.5`)
+-   **Encryption:** Can be set to **On** or **Off**. Encrypted communication is fully supported and recommended. If enabled, ensure `pycryptodome` is installed. (Menu `56.3.3.5`)
 -   **IP-Check:** (Optional) To use the heartbeat feature, enable it by setting a time interval (e.g., 00:30 for 30 minutes). `00:00` means disabled. (Menu `56.3.3.7.1`)
 -   **Eng. Test:** Use this to send a test notification without generating a fault. (Menu `56.7.1`)
 
@@ -128,6 +131,10 @@ The primary configuration is done in `sia-server.conf`. This file is designed to
 
 -   **Site Sections (`[012345]`):** Each site is defined by a section where the header is the panel's unique **Account Number**.
     -   `SITE_NAME`: A friendly name for the site (e.g., "Main House"). If omitted, the account number is used.
+    -   `ENABLED`: Controls the connection policy for this account. Accepts `Yes`, `No`, or `Secure`.
+        -   `Yes` — Accept both plaintext and encrypted connections (default).
+        -   `No` — Reject all connections from this account.
+        -   `Secure` — Only accept encrypted connections. Plaintext connections will be rejected.
     -   `NTFY_ENABLED`, `NTFY_TOPIC`, `NTFY_TITLE`: Configure notification delivery for this site.
     -   `NTFY_AUTH`: Set to `None`, `Token`, or `Userpass` for private topics and provide the corresponding `NTFY_TOKEN` or `NTFY_USER`/`NTFY_PASS` keys.
 
