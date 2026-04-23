@@ -8,7 +8,7 @@ Honeywell Galaxy Flex alarm systems. It sends notifications via ntfy.sh.
 This server is configured via 'sia-server.conf' and 'configuration.py'.
 """
 # --- Application Version ---
-__version__ = "2.0.0"
+__version__ = "2.1.0-beta"
 
 import asyncio
 import logging
@@ -171,7 +171,7 @@ def validate_and_strip(data: bytes) -> tuple[int, bytes] | tuple[None, None]:
     payload = data[2:-1]
     return command_byte, payload
 
-
+  
 async def build_and_send(writer, command: str, payload: bytes = b'', crypto: CryptoContext | None = None):
     """Builds and sends a valid Galaxy message block."""
     command_byte = COMMAND_BYTES[command]
@@ -191,6 +191,16 @@ async def build_and_send(writer, command: str, payload: bytes = b'', crypto: Cry
     await writer.drain()
     log.debug("Sent Command: %s, Raw: %r", command, final_message)
 
+async def policy_reject(writer, crypto=None):
+    """
+    Handles a connection rejection according to the configured REJECT_POLICY.
+    'respond' - Sends a SIA REJECT frame to the client.
+    'drop'    - Silently closes without sending anything.
+    """
+    if config.REJECT_POLICY == 'respond':
+        await build_and_send(writer, 'REJECT', crypto=crypto)
+    log.debug("Connection rejected (policy: %s)", config.REJECT_POLICY)
+    
 
 async def handle_connection(notification_queue: Queue, reader, writer):
     """Handle an incoming SIA connection."""
@@ -239,7 +249,7 @@ async def handle_connection(notification_queue: Queue, reader, writer):
                         log.error("Validation failed (length or checksum error). Raw: %r", data)
                     else:
                         log.error("Validation failed (received empty data block).")
-                    await build_and_send(writer, 'REJECT', crypto=crypto)
+                    await policy_reject(writer, crypto=crypto)
                     continue
             
             command_name = COMMANDS.get(command_byte, f'UNKNOWN(0x{command_byte:02x})')
@@ -262,12 +272,12 @@ async def handle_connection(notification_queue: Queue, reader, writer):
                 # Policy: 'no' - This account is completely disabled.
                 if policy == 'no':
                     log.warning("POLICY: Account '%s' is DISABLED. Rejecting connection.", account_number)
-                    await build_and_send(writer, 'REJECT', crypto=crypto)
+                    await policy_reject(writer, crypto=crypto)
                     return
                 # Policy: 'secure' - This account requires an encrypted session.
                 if policy == 'secure' and not is_encrypted:
                     log.warning("POLICY: Account '%s' requires ENCRYPTED connection but received PLAINTEXT. Rejecting.", account_number)
-                    await build_and_send(writer, 'REJECT', crypto=crypto)
+                    await policy_reject(writer, crypto=crypto)
                     return
                 # If we reach here, the policy is satisfied.
                 log.debug("POLICY: Account '%s' policy satisfied.", account_number)
