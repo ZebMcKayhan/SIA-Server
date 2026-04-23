@@ -208,6 +208,7 @@ async def handle_connection(notification_queue: Queue, reader, writer):
     log.info("Connection from %r", addr)
 
     crypto = None  # This will hold our CryptoContext object if the session is encrypted
+    account_validated = False
     valid_blocks = []
     
     try:
@@ -255,6 +256,12 @@ async def handle_connection(notification_queue: Queue, reader, writer):
             command_name = COMMANDS.get(command_byte, f'UNKNOWN(0x{command_byte:02x})')
             log.debug("Received Command: %s, Payload: %r", command_name, payload)
 
+            if not account_validated and command_name != 'ACCOUNT_ID':
+                log.warning("Protocol violation from %r: expected ACCOUNT_ID, got '%s'. Rejecting.",
+                            addr, command_name)
+                await policy_reject(writer, crypto=crypto)
+                return
+
             # --- ACCOUNT POLICY ENFORCEMENT ---
             # Validate account_id if according to policy
             if command_name == 'ACCOUNT_ID':
@@ -280,6 +287,7 @@ async def handle_connection(notification_queue: Queue, reader, writer):
                     await policy_reject(writer, crypto=crypto)
                     return
                 # If we reach here, the policy is satisfied.
+                account_validated = True
                 log.debug("POLICY: Account '%s' policy satisfied.", account_number)
             
             if command_name != 'END_OF_DATA':
