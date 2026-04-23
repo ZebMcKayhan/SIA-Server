@@ -21,97 +21,88 @@ from queue import Queue
 # --- SCRIPT INITIALIZATION ---
 
 # Import the new configuration loader FIRST.
-from configuration import load_and_validate_config
+from configuration import load_logging_config, load_full_config
 
 # Load and validate all configuration from files.
 # This single 'config' object now holds all settings for the application.
-config = load_and_validate_config()
+logging_config = load_logging_config()
 
 # Define the logging setup function.
-def setup_logging():
-    """Configure logging based on the loaded config object."""
+def setup_logging(logging_config):
+    """Configure logging based on the loaded logging config object."""
     log = logging.getLogger()
     if log.handlers:
         for handler in log.handlers[:]:
             log.removeHandler(handler)
-    
-    log.setLevel(getattr(logging, config.LOG_LEVEL, 'INFO'))
-    
+
+    log.setLevel(getattr(logging, logging_config.LOG_LEVEL, 'INFO'))
+
     handler = None
-    
-    if config.LOG_TO_SYSLOG: 
+
+    if logging_config.LOG_TO_SYSLOG:
         if sys.platform == "win32":
             try:
                 import win32evtlogutil
-                import win32evtlog 
-                # Next, attempt to register the application as an event source.
-                # This is the step that requires Administrator rights and can fail.
-                # We do this explicitly to get a clear error instead of a hang.
+                import win32evtlog
                 win32evtlogutil.AddSourceToRegistry("SIA-Server", sys.executable)
-                # If the above succeeded, we can create the handler.
                 handler = logging.handlers.NTEventLogHandler("SIA-Server")
             except ImportError:
-                # The library is not installed at all.
-                print("WARNING: The 'pywin32' package is required for Windows Event Log logging but is not installed.", file=sys.stderr)
-                print("WARNING: Please run 'python -m pip install pywin32' to enable this feature.", file=sys.stderr)
-                print("WARNING: Falling back to screen logging.", file=sys.stderr)
-            except Exception as e:     
-                # This will catch permission errors if not run as admin.
-                print("WARNING: Failed to initialize Windows Event Log handler: %s" % e, file=sys.stderr)
-                print("WARNING: This may require running the script as an Administrator once to register the source.", file=sys.stderr)
-                print("WARNING: Falling back to screen logging.", file=sys.stderr)
-                            
-        else: # Linux/Unix Syslog
+                print("WARNING: 'pywin32' not installed. Falling back to screen logging.",
+                      file=sys.stderr)
+            except Exception as e:
+                print("WARNING: Failed to initialize Windows Event Log: %s" % e,
+                      file=sys.stderr)
+        else:
             try:
                 handler = logging.handlers.SysLogHandler(
-                    address=config.SYSLOG_SOCKET,
-                    facility=config.SYSLOG_FACILITY
+                    address=logging_config.SYSLOG_SOCKET,
+                    facility=logging_config.SYSLOG_FACILITY
                 )
             except Exception as e:
-                print("WARNING: Could not connect to syslog at %s: %s." % (config.SYSLOG_SOCKET, e), file=sys.stderr)
-                print("WARNING: Falling back to screen logging.", file=sys.stderr)
+                print("WARNING: Could not connect to syslog at %s: %s. Falling back to screen."
+                      % (logging_config.SYSLOG_SOCKET, e), file=sys.stderr)
 
-    elif config.LOG_TO_FILE:
-        # --- File Logging ---
-        log.info("Logging configured to write to file: %s", config.LOG_FILE)
-        max_bytes = config.LOG_MAX_MB * 1024 * 1024
+    elif logging_config.LOG_TO_FILE:
+        max_bytes = logging_config.LOG_MAX_MB * 1024 * 1024
         handler = logging.handlers.RotatingFileHandler(
-            config.LOG_FILE, 
-            maxBytes=max_bytes, 
-            backupCount=config.LOG_BACKUP_COUNT
+            logging_config.LOG_FILE,
+            maxBytes=max_bytes,
+            backupCount=logging_config.LOG_BACKUP_COUNT
         )
 
-    # If all else fails, or if 'Screen' was chosen, use the screen handler.
     if handler is None:
-        log.info("Logging configured to write to screen (console).")
         handler = logging.StreamHandler(sys.stderr)
 
-    
-    if isinstance(handler, (logging.handlers.SysLogHandler, logging.handlers.NTEventLogHandler)):
-        # For Syslog, use the user-configurable SYSLOG_FORMAT:
-        formatter = logging.Formatter(config.SYSLOG_FORMAT, datefmt=config.LOG_DATE_FORMAT)
+    if isinstance(handler, (logging.handlers.SysLogHandler,
+                            logging.handlers.NTEventLogHandler)):
+        formatter = logging.Formatter(logging_config.SYSLOG_FORMAT,
+                                      datefmt=logging_config.LOG_DATE_FORMAT)
     else:
-        # For File and Screen, use the user-configurable full format.
-        formatter = logging.Formatter(config.LOG_FORMAT, datefmt=config.LOG_DATE_FORMAT)
-    
+        formatter = logging.Formatter(logging_config.LOG_FORMAT,
+                                      datefmt=logging_config.LOG_DATE_FORMAT)
+
     handler.setFormatter(formatter)
     log.addHandler(handler)
+
     if isinstance(handler, logging.handlers.NTEventLogHandler):
         log.info("Logging configured to write to Windows Event Log.")
     elif isinstance(handler, logging.handlers.SysLogHandler):
         log.info("Logging configured to write to system log (Syslog).")
     elif isinstance(handler, logging.handlers.RotatingFileHandler):
-        log.info("Logging configured to write to file: %s", config.LOG_FILE)
+        log.info("Logging configured to write to file: %s", logging_config.LOG_FILE)
     else:
         log.info("Logging configured to write to screen (console).")
-    
+
     return log
 
-# 4. Set up the logger.
-log = setup_logging()
+# Set up logging immediately after loading logging config.
+log = setup_logging(logging_config)
 log.info("Logging configured successfully.")
 
-# 5. Now, import the rest of our modules.
+# Now load the full configuration WITH logging available ---
+config = load_full_config()
+
+# Now, import the rest of our modules.
 try:
     import uvloop
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
