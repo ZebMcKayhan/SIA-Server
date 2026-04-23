@@ -20,6 +20,7 @@ class AppConfig:
         # --- Settings from sia-server.conf ---
         self.LISTEN_ADDR = '0.0.0.0'
         self.LISTEN_PORT = 10000
+        self.REJECT_POLICY = 'respond'
         self.IP_CHECK_ENABLED = False
         self.IP_CHECK_ADDR = '0.0.0.0'
         self.IP_CHECK_PORT = 10001
@@ -121,6 +122,18 @@ def load_and_validate_config() -> AppConfig:
         log.critical("Configuration Error in [SIA-Server]: listen_port must be a number.")
         is_valid = False
 
+    # --- Parse REJECT_POLICY ---
+    reject_policy = config.get('SIA-Server', 'reject_policy', fallback='respond').lower()
+    if reject_policy not in ['drop', 'respond']:
+        log.warning("Invalid REJECT_POLICY '%s' in [SIA-Server]. Must be 'drop' or 'respond'. Using default 'respond'.", reject_policy)
+        reject_policy = 'respond'
+    app_config.REJECT_POLICY = reject_policy
+
+    if reject_policy == 'drop':
+        log.info("Reject Policy: DROP - Invalid connections will be silently closed.")
+    else:
+        log.info("Reject Policy: RESPOND - Invalid connections will receive a SIA REJECT.")
+        
     # --- Validate and load [IP-Check] section ---
     if config.has_section('IP-Check'):
         if config.getboolean('IP-Check', 'enabled', fallback=False):
