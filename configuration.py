@@ -321,4 +321,22 @@ def load_full_config() -> AppConfig:
             app_config.NTFY_TOPICS[account_number] = topic_config
 
         # --- Parse Connection Policy ---
-        policy_str = config.get(section_name
+        policy_str = config.get(section_name, 'enabled', fallback='yes').lower()
+        if policy_str in ['true', 'yes']:
+            policy = 'yes'
+        elif policy_str in ['false', 'no']:
+            policy = 'no'
+        elif policy_str == 'secure':
+            policy = 'secure'
+        else:
+            log.warning("Invalid 'enabled' value '%s' in section [%s]. Defaulting to 'yes'.",
+                        policy_str, section_name)
+            policy = 'yes'
+        app_config.ACCOUNT_POLICIES[account_number] = policy
+
+    if not is_valid:
+        log.critical("Configuration validation failed. Please check the errors above. Exiting.")
+        sys.exit(1)
+
+    log.info("Configuration loaded successfully from sia-server.conf.")
+    return app_config
