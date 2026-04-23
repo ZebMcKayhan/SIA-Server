@@ -14,17 +14,18 @@ import sys
 # --- SCRIPT INITIALIZATION ---
 
 # 1. Import the new configuration loader FIRST.
-from configuration import load_and_validate_config
+from configuration import load_logging_config, load_full_config
 
 # 2. Load and validate all configuration from files.
 # This single 'config' object holds all settings.
-config = load_and_validate_config()
+logging_config = load_logging_config()
+config = load_full_config()
 
 # --- Smart Logging Setup for Subprocess ---
 # This logger is intentionally simple. It prefixes messages with the log level
 # so the parent process (sia-server.py) can parse it and apply full formatting.
 log = logging.getLogger('ip_check_server')
-log.setLevel(getattr(logging, config.LOG_LEVEL, 'INFO'))
+log.setLevel(getattr(logging, logging_config.LOG_LEVEL, 'INFO'))
 formatter = logging.Formatter('%(levelname)s:%(message)s')
 handler = logging.StreamHandler(sys.stdout)
 handler.setFormatter(formatter)
