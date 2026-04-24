@@ -21,6 +21,8 @@ If your Galaxy Flex notifications suddenly stopped working, this project provide
 -   **Broad SIA Level Support:** The flexible parser can correctly handle event data from SIA Levels 0, 1, 2, and 3. Encrypted communication (proprietary RSA+AES handshake) is fully supported.
 -   **Optional Heartbeat Server:** Includes an optional server to handle the proprietary Honeywell "IP Check" heartbeat.
 -   **Encrypted Communication:** Supports the proprietary Honeywell Galaxy encrypted ARC protocol (RSA-1024 + AES-128). Requires `pycryptodome`. Falls back to plaintext-only mode if not installed.
+-   **Connection Security Policies:** Per-account `ENABLED` policy (`Yes`/`No`/`Secure`) and a configurable `REJECT_POLICY` (`respond`/`drop`) to control how invalid connections are handled.
+-   **Protocol State Machine:** Enforces correct SIA message ordering. Any connection that does not start with a valid `ACCOUNT_ID` is immediately rejected or silently dropped.
 -   **Character Encoding Fixes:** Decodes the proprietary character set used by Galaxy panels (e.g., Å, Ä, Ö).
 -   **Highly Configurable:** Most user settings are in a simple `sia-server.conf` file, with advanced protocol constants located in the `galaxy/` directory.
 
@@ -53,6 +55,8 @@ The project is structured to separate the server logic, protocol parsing, and co
 │   ├── encryption.py       # Handles encrypted handshake and encrypted packets.
 │   ├── SIA-ENC_POC.py      # Stand-alone proof-of-concept script for encrypted SIA.
 │   └── constants.py        # Constants used in the SIA protocol.
+├── tests/
+│   └── sia-test-client.py  # Test client for validating server behaviour.
 └── asuswrt-merlin/
     ├── README.md           # Install instructions for Asuswrt-Merlin.
     ├── S99siaserver        # Entware service (init.d) file.
@@ -142,6 +146,9 @@ The primary configuration is done in `sia-server.conf`. This file is designed to
 -   **`[Default]` Section:** A special section for events from account numbers not specifically listed.
 
 -   **`[SIA-Server]` & `[IP-Check]` Sections:** Configure the ports and addresses for the main server and the optional heartbeat server.
+    -   `REJECT_POLICY`: Controls how invalid or unauthorised connections are handled. Accepts `respond` or `drop`.
+        -   `respond` — Send a SIA REJECT frame to the client (default). Useful during initial setup and testing as it gives feedback to the connecting panel.
+        -   `drop` — Silently close the connection without sending anything. Recommended for internet-facing deployments as the server becomes completely invisible to scanners.
 
 -   **`[Logging]` Section:** Control the log level and output destination.
     -   `LOG_LEVEL`: Set the verbosity of logs (`DEBUG`, `INFO`, `WARNING`, `ERROR`). `INFO` is recommended for normal use.
@@ -272,10 +279,12 @@ not meet all modern cryptographic standards:
 
 
 **Recommendation: Enable Encryption on the Panel and set `ENABLED = secure` in
-`sia-server.conf` for all accounts.** This combination:
+`sia-server.conf` for all accounts except default account where `ENABLED = No`, 
+and set `REJECT_POLICY = drop`.** This combination:
 - Makes your traffic unrecognizable to opportunistic internet scanners.
 - Prevents false alarm injection from unauthenticated plaintext connections.
 - Provides confidentiality for your alarm events.
+- Makes the server completely silent and invisible to port scanners and automated probes.
 
 > **Note:** If you must expose the server to the public internet and require the
 > highest level of security, wrapping the connection in a **VPN** (e.g.,
@@ -311,10 +320,10 @@ not meet all modern cryptographic standards:
 
 | Scenario | Recommendation |
 | :--- | :--- |
-| **Local network only** | Plaintext or Encrypted mode, `ENABLED = yes` |
-| **Internet-facing, basic security** | Encrypted mode on panel, `ENABLED = secure` |
-| **Internet-facing, maximum security** | Encrypted mode + VPN (e.g. WireGuard) |
-| **Unknown/untrusted panels** | `ENABLED = no` in `[Default]` section |
+| **Local network, testing** | Plaintext or Encrypted, `ENABLED = yes`, `REJECT_POLICY = respond`, `[Default] ENABLED = yes` |
+| **Local network, production** | Encrypted mode, `ENABLED = secure`, `REJECT_POLICY = respond`, `[Default] ENABLED = yes` |
+| **Internet-facing, basic** | Encrypted mode, `ENABLED = secure`, `REJECT_POLICY = drop`, `[Default] ENABLED = no` |
+| **Internet-facing, maximum** | Encrypted mode + VPN (e.g. WireGuard), `REJECT_POLICY = drop`, `[Default] ENABLED = no` |
 
 ---
 
