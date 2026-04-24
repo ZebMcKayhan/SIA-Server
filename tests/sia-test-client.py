@@ -5,6 +5,25 @@ Sends test SIA frames to a local sia-server instance and displays the responses.
 Used for testing connection policies, reject policies and state machine enforcement.
 
 Usage: python3 sia-test-client.py
+
+# --- Configuration Required in sia-server.conf ---
+# For these tests to work as expected, configure the following accounts:
+#
+# [123456]
+# ENABLED = Yes
+#
+# [234567]
+# ENABLED = No
+#
+# [012345]
+# ENABLED = Secure
+#
+# [Default]
+# ENABLED = No  (or Yes, depending on what you want to test)
+#
+# [SIA-Server]
+# REJECT_POLICY = respond (or drop, depending on what you want to test)
+
 """
 import socket
 import time
