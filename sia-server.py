@@ -322,8 +322,18 @@ async def handle_connection(notification_queue: Queue, reader, writer):
             enqueue_notification(event, notification_queue)
             
             log.debug("--- Event %d complete ---", i)
+
+    except (ConnectionResetError, BrokenPipeError):
+        log.info("Client disconnected abruptly (%r)", addr)
+        return
+
+    except asyncio.IncompleteReadError:
+        log.info("Client closed connection during read (%r)", addr)
+        return
+
     except Exception as e:
         log.error("Error in connection handler: %s", e, exc_info=True)
+    
     finally:
         log.debug("Closing connection from %r", addr)
         try:
