@@ -2,7 +2,7 @@
 Galaxy SIA Notification Handler
 
 This module is responsible for formatting and sending notifications
-to a service like ntfy.sh based on a parsed GalaxyEvent or WatchdogEvent.
+to a service like ntfy.sh based on a parsed GalaxyEvent or MessageEvent.
 """
 
 import logging
@@ -47,20 +47,21 @@ except ImportError:
     sys.exit(1)
 
 
-class WatchdogEvent:
+class MessageEvent:
     """
-    Represents a watchdog heartbeat monitoring event from ip_check.py.
-    Used to notify about connection loss or restoration for a monitored account.
-    Unlike GalaxyEvent, the priority is fixed and not derived from event codes.
+    Represents a generic notification message.
+    Used when any part of the system wants to send a custom notification
+    that is not tied to a specific SIA alarm event.
+    Examples: watchdog heartbeat alerts, server status messages, etc.
+    Priority is fixed by the caller rather than derived from event codes.
     """
-    def __init__(self, account: str, site_name: str, message: str, priority: int):
+    def __init__(self, account: str, site_name: str, 
+                 message: str, priority: int):
         self.account           = account
         self.site_name         = site_name
         self.action_text       = message
         self.priority          = priority
-        # The following fields are required by _dispatch_http_notification
-        # but are not applicable to watchdog events.
-        self.event_code        = 'WD'
+        self.event_code        = 'MSG'
         self.event_description = message
         self.time              = None
         self.zone              = None
@@ -73,15 +74,15 @@ def get_event_priority(event_code: str, priority_map: Dict, default_priority: in
     return priority_map.get(event_code, default_priority)
 
 
-def format_notification_text(event: Union[GalaxyEvent, WatchdogEvent]) -> str:
+def format_notification_text(event: Union[GalaxyEvent, MessageEvent]) -> str:
     """
     Formats the notification message text.
-    For WatchdogEvent, uses action_text directly.
+    For MessageEvent, uses action_text directly.
     For GalaxyEvent, intelligently chooses between the rich ASCII block text
     or constructs a message from the Data block fields.
     """
-    # WatchdogEvent always has the complete message in action_text
-    if isinstance(event, WatchdogEvent):
+    # MessageEvent always has the complete message in action_text
+    if isinstance(event, MessageEvent):
         return event.action_text
 
     # Use a more descriptive name to avoid shadowing the 'time' module.
@@ -108,7 +109,7 @@ def format_notification_text(event: Union[GalaxyEvent, WatchdogEvent]) -> str:
     return notification.strip()
 
 
-def _dispatch_http_notification(event: Union[GalaxyEvent, WatchdogEvent],
+def _dispatch_http_notification(event: Union[GalaxyEvent, MessageEvent],
                                 ntfy_topics: Dict, priority_map: Dict,
                                 default_priority: int) -> bool:
     """Sends a formatted notification using topic-specific configuration."""
@@ -126,8 +127,8 @@ def _dispatch_http_notification(event: Union[GalaxyEvent, WatchdogEvent],
         log.warning("No valid ntfy.sh URL found for account '%s' or default. Skipping.", event.account)
         return False
 
-    # 3. Determine priority - WatchdogEvent uses fixed priority, GalaxyEvent uses lookup.
-    if isinstance(event, WatchdogEvent):
+    # 3. Determine priority - MessageEvent uses fixed priority, GalaxyEvent uses lookup.
+    if isinstance(event, MessageEvent):
         priority = event.priority
     else:
         if not event.event_code:
@@ -187,7 +188,7 @@ def _dispatch_http_notification(event: Union[GalaxyEvent, WatchdogEvent],
         return False
 
 
-def _enqueue(event: Union[GalaxyEvent, WatchdogEvent], queue: Queue):
+def _enqueue(event: Union[GalaxyEvent, MessageEvent], queue: Queue):
     """
     Internal helper to add any event type to the notification queue.
     If the queue is full, removes the oldest item to make space.
@@ -212,7 +213,7 @@ class NotificationDispatcher(Thread):
     """
     A non-blocking background thread that processes a queue of notifications.
     It handles sending and retries with progressive backoff without blocking the queue.
-    Supports both GalaxyEvent (SIA events) and WatchdogEvent (heartbeat monitoring).
+    Supports both GalaxyEvent (SIA events) and MessageEvent (custom notifications).
     """
     def __init__(self, queue: Queue, ntfy_topics: Dict, priority_map: Dict,
                  default_priority: int, max_retries: int, max_retry_time: int):
@@ -289,11 +290,17 @@ def enqueue_notification(event: GalaxyEvent, queue: Queue):
     _enqueue(event, queue)
 
 
-def enqueue_watchdog_notification(account: str, site_name: str,
-                                   message: str, priority: int,
-                                   queue: Queue):
+def enqueue_message_notification(account: str, site_name: str,
+                                  message: str, priority: int,
+                                  queue: Queue):
     """
-    Puts a watchdog heartbeat notification onto the notification queue.
-    Called by ip_check.py for connection lost/restored events.
+    Puts a generic message notification onto the notification queue.
+    Can be called by any part of the system to send a custom notification.
+    Priority is explicitly set by the caller.
+    
+    Examples of use:
+    - ip_check.py: heartbeat connection lost/restored
+    - sia-server.py: server starting/stopping
+    - Any future module needing custom notifications
     """
-    _enqueue(WatchdogEvent(account, site_name, message, priority), queue)
+    _enqueue(MessageEvent(account, site_name, message, priority), queue)
