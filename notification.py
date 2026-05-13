@@ -14,10 +14,6 @@ from threading import Thread, Event as ThreadEvent
 from galaxy.parser import GalaxyEvent
 
 # --- Dependency and Logging Initialization ---
-
-# Apply a basic config immediately so startup messages are always captured.
-# This will be overridden by the main server's full logging setup later.
-logging.basicConfig()
 log = logging.getLogger(__name__)
 
 # --- Force PyOpenSSL to be used by requests (if available) ---
