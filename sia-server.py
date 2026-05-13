@@ -362,14 +362,15 @@ async def monitor_subprocess(process, name):
         while not stream.at_eof():
             line = await stream.readline()
             if line:
-                line_str = line.decode().strip()
-                parts = line_str.split(':', 1)
-                if len(parts) == 2 and parts[0] in LEVEL_MAP:
-                    level_name, msg = parts[0], parts[1].strip()
-                    log_level = LEVEL_MAP[level_name]
-                else:
-                    msg, log_level = line_str, default_level
-                log.log(log_level, "[%s] %s", name, msg)
+                line_str = line.decode(errors='replace').strip()
+                try:
+                    level_name, logger_name, msg = line_str.split(':', 2)
+                    log_level = LEVEL_MAP.get(level_name, default_level)
+                    subprocess_logger = logging.getLogger(logger_name)
+                    subprocess_logger.log(log_level, msg)
+                except ValueError:
+                    # Fallback for malformed lines
+                    log.log(default_level, "[%s] %s", name, line_str)
     await asyncio.gather(log_stream(process.stdout, logging.INFO), log_stream(process.stderr, logging.ERROR))
     await process.wait()
     log.warning("Subprocess '%s' (PID: %d) has exited with code %d.", name, process.pid, process.returncode)
