@@ -38,7 +38,7 @@ logging_config = load_logging_config(args.config)
 # Define the logging setup function.
 def setup_logging(logging_config):
     """Configure logging based on the loaded logging config object."""
-    log = logging.getLogger('sia_server') 
+    log = logging.getLogger('sia-server') 
     if log.handlers:
         for handler in log.handlers[:]:
             log.removeHandler(handler)
