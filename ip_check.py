@@ -13,6 +13,7 @@ import logging
 import sys
 
 # --- SCRIPT INITIALIZATION ---
+# 1. Parse arguments
 parser = argparse.ArgumentParser(description='Galaxy IP Check Server')
 parser.add_argument(
     '--config',
@@ -21,16 +22,14 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-# 1. Import the new configuration loader
+# 2. Import configuration loader
 from configuration import load_logging_config, load_full_config
 
-# 2. Load and validate all configuration from files.
-# This single 'config' object holds all settings.
+# 3. Load ONLY logging config first 
 logging_config = load_logging_config(args.config)
-config = load_full_config(args.config)
 
 # --- Logging Setup for Subprocess ---
-# Configure the ROOT logger so all modules (including notification.py)
+# 4. Configure the ROOT logger so all modules (including notification.py)
 # automatically inherit the same handler and format.
 # Format transports level, logger name and message to sia-server.py for formatting.
 root_logger = logging.getLogger()
@@ -42,7 +41,10 @@ root_logger.addHandler(handler)
 
 log = logging.getLogger(__name__)
 
-# 3. Now, import the rest of our modules.
+# 5. NOW load full config - logging is ready so all warnings/errors are captured
+config = load_full_config(args.config)
+
+# 6. Now, import the rest of our modules.
 try:
     import uvloop
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
