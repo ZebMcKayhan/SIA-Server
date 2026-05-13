@@ -39,7 +39,7 @@ handler = logging.StreamHandler(sys.stdout)
 handler.setFormatter(logging.Formatter('%(levelname)s:%(name)s:%(message)s'))
 root_logger.addHandler(handler)
 
-log = logging.getLogger(__name__)
+log = logging.getLogger('ip_check')
 
 # 5. NOW load full config - logging is ready so all warnings/errors are captured
 config = load_full_config(args.config)
