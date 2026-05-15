@@ -96,6 +96,10 @@ def update_watchdog(account_number: str, site_name: str,
     """
     panel_time = panel_timestamp_to_str(data)
     interval = data[20] + data[21]*256 + data[22]*65536 + data[23]*16777216
+    hours = interval // 3600
+    minutes = (interval % 3600) // 60
+    seconds = interval % 60
+    interval_str = f"{hours:02d}:{minutes:02d}:{seconds:02d} ({interval}s)"
 
     current_state = watchdog_state.get(account_number, {}).get('state', 'UNKNOWN')
 
@@ -109,8 +113,8 @@ def update_watchdog(account_number: str, site_name: str,
 
     if current_state == 'DISCONNECTED':
         # Connection restored!
-        log.info("Watchdog: Site: %s (Account: %s) - connection restored.",
-                 site_name, account_number)
+        log.info("Watchdog: Site: %s (Account: %s) - connection restored, "
+                 "interval %s.", site_name, account_number, interval_str)
         enqueue_message_notification(
             account_number,
             site_name,
@@ -121,8 +125,8 @@ def update_watchdog(account_number: str, site_name: str,
     elif current_state == 'UNKNOWN':
         # First ping ever - silent transition, just log
         log.info("Watchdog: Site: %s (Account: %s) - monitoring started, "
-                 "interval %d seconds (%d minutes).",
-                 site_name, account_number, interval, interval // 60)
+                 "interval %s.", site_name, account_number, interval_str)
+        
     # CONNECTED → CONNECTED: normal operation, no notification
 
 async def watchdog_task(notification_queue: Queue):
@@ -151,10 +155,15 @@ async def watchdog_task(notification_queue: Queue):
                 watchdog_state[account_number]['state'] = 'DISCONNECTED'
                 last_panel_time = state['last_panel_time']
                 site_name = config.ACCOUNT_SITES.get(account_number, account_number)
-
+                # Format elapsed time as hh:mm:ss
+                elapsed_int = int(elapsed)
+                e_hours = elapsed_int // 3600
+                e_minutes = (elapsed_int % 3600) // 60
+                e_seconds = elapsed_int % 60
+                
                 log.warning("Watchdog: Site: %s (Account: %s) - heartbeat lost! "
-                           "Last seen: %s",
-                           site_name, account_number, last_panel_time)
+                           "No ping received for %02d:%02d:%02d.",
+                           site_name, account_number, e_hours, e_minutes, e_seconds)
 
                 enqueue_message_notification(
                     account_number,
