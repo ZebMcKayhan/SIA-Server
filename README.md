@@ -19,7 +19,7 @@ If your Galaxy Flex notifications suddenly stopped working, this project provide
 -   **Advanced Notification Routing:** Route notifications for different accounts to different ntfy.sh topics, each with its own optional authentication (Bearer Token or User/Pass).
 -   **Robust Protocol Handling:** Correctly parses the multi-message protocol used by Galaxy Flex panels.
 -   **Broad SIA Level Support:** The flexible parser can correctly handle event data from SIA Levels 0, 1, 2, and 3.
--   **Optional Heartbeat Server:** Includes an optional server to handle the proprietary Honeywell "IP Check" heartbeat, with connection watchdog monitoring that sends notifications when a panel stops responding.
+-   **Optional Heartbeat Server:** Includes an optional server to handle the proprietary Honeywell "IP Check" heartbeat, with connection watchdog monitoring that sends notifications when a panel stops sending heartbeats.
 -   **Connection Security Policies:** Per-account `ENABLED` policy (`Yes`/`No`/`Secure`) and a configurable `REJECT_POLICY` (`respond`/`drop`) to control how invalid connections are handled.
 -   **Protocol State Machine:** Enforces correct SIA message ordering. Any connection that does not start with a valid `ACCOUNT_ID` is immediately rejected or silently dropped.
 -   **Character Encoding Fixes:** Decodes the proprietary character set used by Galaxy panels (e.g., Å, Ä, Ö).
