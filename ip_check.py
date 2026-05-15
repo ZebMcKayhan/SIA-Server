@@ -11,6 +11,13 @@ import argparse
 import asyncio
 import logging
 import sys
+import time
+import datetime
+from queue import Queue
+
+# --- Watchdog Configuration ---
+PANEL_EPOCH_OFFSET = 54000  # 15 hours - converts panel timestamp to local time
+WATCHDOG_THRESHOLD = 2.1    # Allow 1 missed ping + buffer
 
 # --- SCRIPT INITIALIZATION ---
 # 1. Parse arguments
@@ -45,6 +52,7 @@ log = logging.getLogger('ip_check')
 config = load_full_config(args.config)
 
 # 6. Now, import the rest of our modules.
+from notification import NotificationDispatcher, enqueue_message_notification
 try:
     import uvloop
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
@@ -64,6 +72,97 @@ except (ImportError, ModuleNotFoundError):
     pass
     
 # --- END INITIALIZATION ---
+
+# Watchdog state per account
+# { account: { 'state': 'UNKNOWN'|'CONNECTED'|'DISCONNECTED',
+#              'last_seen': float,      # server time (time.time())
+#              'last_panel_time': str,  # formatted panel local time
+#              'interval': int } }      # seconds
+watchdog_state = {}
+
+def panel_timestamp_to_str(data: bytes) -> str:
+    """Extract and format panel timestamp from IP Check packet bytes 15-18."""
+    ts = data[15] + data[16]*256 + data[17]*65536 + data[18]*16777216
+    unix_ts = ts + PANEL_EPOCH_OFFSET
+    return datetime.datetime.fromtimestamp(
+        unix_ts, datetime.timezone.utc
+    ).strftime('%Y-%m-%d %H:%M')
+
+def update_watchdog(account_number: str, site_name: str,
+                    data: bytes, notification_queue: Queue):
+    """
+    Update watchdog state when a valid ping is received.
+    Called from handle_ip_check() after successful validation.
+    """
+    panel_time = panel_timestamp_to_str(data)
+    interval = data[20] + data[21]*256 + data[22]*65536 + data[23]*16777216
+
+    current_state = watchdog_state.get(account_number, {}).get('state', 'UNKNOWN')
+
+    # Always update state to CONNECTED with latest values
+    watchdog_state[account_number] = {
+        'state': 'CONNECTED',
+        'last_seen': time.time(),
+        'last_panel_time': panel_time,
+        'interval': interval,
+    }
+
+    if current_state == 'DISCONNECTED':
+        # Connection restored!
+        log.info("Watchdog: Site: %s (Account: %s) - connection restored.",
+                 site_name, account_number)
+        enqueue_message_notification(
+            account_number,
+            site_name,
+            f"Heartbeat received at {panel_time}, connection restored",
+            priority=2,
+            queue=notification_queue
+        )
+    elif current_state == 'UNKNOWN':
+        # First ping ever - silent transition, just log
+        log.info("Watchdog: Site: %s (Account: %s) - monitoring started, "
+                 "interval %d seconds (%d minutes).",
+                 site_name, account_number, interval, interval // 60)
+    # CONNECTED → CONNECTED: normal operation, no notification
+
+async def watchdog_task(notification_queue: Queue):
+    """
+    Async task that checks for missed heartbeats every minute.
+    Started alongside the ip_check server.
+    """
+    log.debug("Watchdog task started.")
+    while True:
+        await asyncio.sleep(60)
+
+        now = time.time()
+        for account_number, state in list(watchdog_state.items()):
+            if state['state'] != 'CONNECTED':
+                continue
+
+            interval = state['interval']
+            if not interval:
+                continue
+
+            elapsed = now - state['last_seen']
+            threshold = interval * WATCHDOG_THRESHOLD
+
+            if elapsed > threshold:
+                # Connection lost!
+                watchdog_state[account_number]['state'] = 'DISCONNECTED'
+                last_panel_time = state['last_panel_time']
+                site_name = config.ACCOUNT_SITES.get(account_number, account_number)
+
+                log.warning("Watchdog: Site: %s (Account: %s) - heartbeat lost! "
+                           "Last seen: %s",
+                           site_name, account_number, last_panel_time)
+
+                enqueue_message_notification(
+                    account_number,
+                    site_name,
+                    f"Heartbeat lost, last heartbeat received was {last_panel_time}",
+                    priority=4,
+                    queue=notification_queue
+                )
 
 def validate_ip_check_packet(data: bytes) -> bool:
     """
@@ -95,7 +194,7 @@ def extract_account(data: bytes) -> str:
     """Extract account number from IP Check packet bytes 1-8."""
     return data[1:9].decode('ascii', errors='ignore').lstrip('0')
     
-async def handle_ip_check(reader, writer):
+async def handle_ip_check(reader, writer, notification_queue: Queue):
     """Handles an incoming IP Check connection by echoing the received data."""
     addr = writer.get_extra_info('peername')
     crypto = None
@@ -111,7 +210,7 @@ async def handle_ip_check(reader, writer):
                 log.debug("Encrypted header detected from %s", addr[0])
                 crypto = await do_handshake(reader, writer, data, log)
                 if crypto is None:
-                    #log.warning("IP Check handshake failed from %s - ignored.", addr[0])
+                    log.debug("IP Check handshake failed from %s - ignored.", addr[0])
                     return
                 # Read the actual ping after handshake
                 log.info("Encrypted session established from %r", addr)
@@ -150,6 +249,8 @@ async def handle_ip_check(reader, writer):
 
         log.debug("IP Check account '%s' policy satisfied.", account_number)
         site_name = config.ACCOUNT_SITES.get(account_number, account_number)
+        update_watchdog(account_number, site_name, data, notification_queue)
+        
         log.info("Received ping from site: %s (Account: %s) from %s. Echoing response.",
                  site_name, account_number, addr[0])
 
@@ -187,13 +288,27 @@ async def start_ip_check_server(): # Renamed from 'main' to be an async function
             print("IP Check server is disabled in sia-server.conf. Exiting.")
         return
 
+    # --- Start notification dispatcher ---
+    notification_queue = Queue(maxsize=config.MAX_QUEUE_SIZE)
+    dispatcher = NotificationDispatcher(
+        notification_queue,
+        config.NTFY_TOPICS,
+        config.EVENT_PRIORITIES,
+        config.DEFAULT_PRIORITY,
+        config.MAX_RETRIES,
+        config.MAX_RETRY_TIME
+    )
+    dispatcher.start()
+    
     log.info("="*50)
     log.info("Starting Galaxy IP Check (Heartbeat) Server")
     
     # We move the try...except block here, inside the async function
     try:
         server = await asyncio.start_server(
-            handle_ip_check, config.IP_CHECK_ADDR, config.IP_CHECK_PORT
+            lambda r, w: handle_ip_check(r, w, notification_queue),
+            config.IP_CHECK_ADDR,
+            config.IP_CHECK_PORT
         )
     except OSError as e:
         # This is the same robust error handling from the main server
@@ -206,6 +321,8 @@ async def start_ip_check_server(): # Renamed from 'main' to be an async function
         else:
             log.critical("A critical OS error occurred starting the IP Check server: %s", e)
         log.critical("="*50)
+        dispatcher.stop()
+        dispatcher.join()        
         return # Gracefully exit the async function
 
     addrs = ', '.join(str(sock.getsockname()) for sock in server.sockets)
@@ -213,6 +330,7 @@ async def start_ip_check_server(): # Renamed from 'main' to be an async function
     log.info("="*50)
 
     async with server:
+        asyncio.create_task(watchdog_task(notification_queue))
         await server.serve_forever()
 
 
