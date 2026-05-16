@@ -142,7 +142,11 @@ The primary configuration is done in `sia-server.conf`. This file is designed to
         -   `drop` — Silently close the connection without sending anything.
 -   **`[IP-Check]` Section:** Configure the ports and addresses for the optional heartbeat server.
     > **Note:** The IP Check server validates all incoming heartbeat packets before responding.
-    > It verifies the packet length, and header. Invalid packets are dropped.
+    > It verifies the packet length and header. Invalid packets are dropped.
+    -   `WATCHDOG_THRESHOLD`: Controls how many missed pings trigger a lost-connection notification. 
+        `2.1` means 2 missed pings + 10% buffer. Set to `0` to disable watchdog alerts entirely.
+    -   `WATCHDOG_LOST_PRIO` / `WATCHDOG_RESTORE_PRIO`: The ntfy.sh priority (1-5) for lost and 
+        restored connection notifications respectively.
 
 -   **`[Logging]` Section:** Control the log level and output destination.
     -   `LOG_LEVEL`: Set the verbosity of logs (`DEBUG`, `INFO`, `WARNING`, `ERROR`). `INFO` is recommended for normal use.
