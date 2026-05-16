@@ -119,20 +119,23 @@ class AppConfig:
     """Holds the complete, validated application configuration."""
     def __init__(self):
         # --- Settings from sia-server.conf ---
-        self.LISTEN_ADDR      = '0.0.0.0'
-        self.LISTEN_PORT      = 10000
-        self.REJECT_POLICY    = 'respond'
-        self.IP_CHECK_ENABLED = False
-        self.IP_CHECK_ADDR    = '0.0.0.0'
-        self.IP_CHECK_PORT    = 10001
-        self.ACCOUNT_SITES    = {}
-        self.NTFY_TOPICS      = {}
-        self.ACCOUNT_POLICIES = {}
-        self.MAX_QUEUE_SIZE   = 50
-        self.MAX_RETRIES      = 10
-        self.MAX_RETRY_TIME   = 30
-        self.EVENT_PRIORITIES = {}
-        self.DEFAULT_PRIORITY = 5
+        self.LISTEN_ADDR           = '0.0.0.0'
+        self.LISTEN_PORT           = 10000
+        self.REJECT_POLICY         = 'respond'
+        self.IP_CHECK_ENABLED      = False
+        self.IP_CHECK_ADDR         = '0.0.0.0'
+        self.IP_CHECK_PORT         = 10001
+        self.IP_CHECK_WATCHDOG     = 2.1 
+        self.IP_CHECK_LOST_PRIO    = 4
+        self.IP_CHECK_RESTORE_PRIO = 2
+        self.ACCOUNT_SITES         = {}
+        self.NTFY_TOPICS           = {}
+        self.ACCOUNT_POLICIES      = {}
+        self.MAX_QUEUE_SIZE        = 50
+        self.MAX_RETRIES           = 10
+        self.MAX_RETRY_TIME        = 30
+        self.EVENT_PRIORITIES      = {}
+        self.DEFAULT_PRIORITY      = 5
         # --- Advanced / Constant Defaults ---
         self.UNKNOWN_CHAR_MAP = UNKNOWN_CHAR_MAP
 
@@ -246,6 +249,50 @@ def load_full_config(config_file: str = 'sia-server.conf') -> AppConfig:
             except ValueError:
                 log.critical("Configuration Error in [IP-Check]: listen_port must be a number.")
                 is_valid = False
+
+            # --- Watchdog threshold ---
+            try:
+                threshold = config.getfloat('IP-Check', 'watchdog_threshold',
+                                            fallback=app_config.IP_CHECK_WATCHDOG)
+                if threshold <= 1.0:
+                    log.info("Watchdog is DISABLED (watchdog_threshold = %.1f).", threshold)
+                    app_config.IP_CHECK_WATCHDOG = threshold
+                elif threshold > 10.0:
+                    log.warning("Invalid WATCHDOG_THRESHOLD '%.1f' in [IP-Check]. "
+                                "Must be 1.1 - 10.0 or <= 1.0 to disable. Using default %.1f.",
+                                threshold, app_config.IP_CHECK_WATCHDOG)
+                else:
+                    app_config.IP_CHECK_WATCHDOG = threshold
+            except ValueError:
+                log.warning("Invalid WATCHDOG_THRESHOLD in [IP-Check]. Must be a number. "
+                            "Using default %.1f.", app_config.IP_CHECK_WATCHDOG)
+
+            # --- Watchdog notification priorities ---
+            try:
+                lost_prio = config.getint('IP-Check', 'watchdog_lost_prio',
+                                          fallback=app_config.IP_CHECK_LOST_PRIO)
+                if not 1 <= lost_prio <= 5:
+                    log.warning("Invalid WATCHDOG_LOST_PRIO '%d' in [IP-Check]. "
+                                "Must be 1-5. Using default %d.",
+                                lost_prio, app_config.IP_CHECK_LOST_PRIO)
+                else:
+                    app_config.IP_CHECK_LOST_PRIO = lost_prio
+            except ValueError:
+                log.warning("Invalid WATCHDOG_LOST_PRIO in [IP-Check]. Must be a number. "
+                            "Using default %d.", app_config.IP_CHECK_LOST_PRIO)
+
+            try:
+                restore_prio = config.getint('IP-Check', 'watchdog_restore_prio',
+                                             fallback=app_config.IP_CHECK_RESTORE_PRIO)
+                if not 1 <= restore_prio <= 5:
+                    log.warning("Invalid WATCHDOG_RESTORE_PRIO '%d' in [IP-Check]. "
+                                "Must be 1-5. Using default %d.",
+                                restore_prio, app_config.IP_CHECK_RESTORE_PRIO)
+                else:
+                    app_config.IP_CHECK_RESTORE_PRIO = restore_prio
+            except ValueError:
+                log.warning("Invalid WATCHDOG_RESTORE_PRIO in [IP-Check]. Must be a number. "
+                            "Using default %d.", app_config.IP_CHECK_RESTORE_PRIO)
 
     # --- Check for port conflicts ---
     if app_config.IP_CHECK_ENABLED and app_config.LISTEN_PORT == app_config.IP_CHECK_PORT:

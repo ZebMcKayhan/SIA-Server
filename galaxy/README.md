@@ -117,7 +117,18 @@ The content of this payload is what is used to generate the final notification m
 
 ### Character Encoding
 
-The panel uses a proprietary character set for the ASCII block, where some non-standard characters in the `0x80`-`0x9F` range are used to represent Swedish letters (Å, Ä, Ö, etc.). This server's parser includes a mapping to translate these bytes into correct UTF-8 characters.
+The panel uses the **IBM Code Page 437 (CP437)** character encoding for text in the ASCII block. This is the original IBM PC character set, which includes support for accented characters used in many European languages.
+
+Python's built-in `cp437` codec handles the vast majority of characters correctly. However, the panel deviates from standard CP437 for a small number of characters, most notably the Nordic letters Ø and ø:
+
+| Byte | Standard CP437 | Panel displays |
+| :--- | :------------- | :------------- |
+| `0xe9` | Θ (Greek Theta) | Ø |
+| `0xed` | φ (Greek Phi) | ø |
+
+These overrides are defined in `galaxy/constants.py` in the `UNKNOWN_CHAR_MAP` dictionary. If you encounter incorrectly decoded characters, identify the byte value from the debug log and add an entry to this map.
+
+The panel's character set appears to be related to **IBM Code Page 865 (Nordic)**, which is a variant of CP437 designed for Scandinavian languages. The exact variant may depend on the country/language setting selected during initial panel setup.
 
 ### IP Check Protocol (Heartbeat)
 

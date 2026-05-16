@@ -8,7 +8,7 @@ Honeywell Galaxy Flex alarm systems. It sends notifications via ntfy.sh.
 This server is configured via 'sia-server.conf' and 'configuration.py'.
 """
 # --- Application Version ---
-__version__ = "2.2.0-beta2"
+__version__ = "2.2.0-RC1"
 
 import argparse
 import asyncio
@@ -105,6 +105,7 @@ def setup_logging(logging_config):
 
 # Set up logging immediately after loading logging config.
 log = setup_logging(logging_config)
+log = logging.getLogger('sia_server')  # change name of local logs
 log.info("Logging configured successfully.")
 log.info("Using configuration file: %s", args.config)
 
@@ -362,14 +363,15 @@ async def monitor_subprocess(process, name):
         while not stream.at_eof():
             line = await stream.readline()
             if line:
-                line_str = line.decode().strip()
-                parts = line_str.split(':', 1)
-                if len(parts) == 2 and parts[0] in LEVEL_MAP:
-                    level_name, msg = parts[0], parts[1].strip()
-                    log_level = LEVEL_MAP[level_name]
-                else:
-                    msg, log_level = line_str, default_level
-                log.log(log_level, "[%s] %s", name, msg)
+                line_str = line.decode(errors='replace').strip()
+                try:
+                    level_name, logger_name, msg = line_str.split(':', 2)
+                    log_level = LEVEL_MAP.get(level_name, default_level)
+                    subprocess_logger = logging.getLogger(logger_name)
+                    subprocess_logger.log(log_level, msg)
+                except ValueError:
+                    # Fallback for malformed lines
+                    log.log(default_level, "[%s] %s", name, line_str)
     await asyncio.gather(log_stream(process.stdout, logging.INFO), log_stream(process.stderr, logging.ERROR))
     await process.wait()
     log.warning("Subprocess '%s' (PID: %d) has exited with code %d.", name, process.pid, process.returncode)

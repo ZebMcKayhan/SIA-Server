@@ -1,12 +1,21 @@
 # Honeywell Galaxy SIA Notification Server
 
-SIA-Server is a lightweight, self-hosted Python service that receives SIA protocol messages from Honeywell Galaxy Flex alarm systems and forwards them as rich, prioritized push notifications via [ntfy.sh](https://ntfy.sh/).
+SIA-Server is a lightweight, self-hosted Python service that receives SIA protocol messages from 
+Honeywell Galaxy Flex alarm systems and forwards them as prioritized push notifications to your 
+phone or computer.
 
-It was created as a replacement for the discontinued free Honeywell push notification service, allowing users to regain full control over their alarm alerts without ongoing subscription costs.
+It was created as a replacement for the discontinued free Honeywell push notification service, 
+allowing users to regain full control over their alarm alerts without ongoing subscription costs.
 
-This project was developed and tested on a Honeywell Galaxy Flex 20. It is likely compatible with other Honeywell Galaxy panels, but this has not been verified.
+Notifications are delivered via [ntfy.sh](https://ntfy.sh/) — a free, open-source push notification
+service. Just install the ntfy app on your phone (Android/iOS), subscribe to a topic, and you're done.
+No account, no registration, no subscription required.
 
-If your Galaxy Flex notifications suddenly stopped working, this project provides a self-hosted alternative.
+This project was developed and tested on a Honeywell Galaxy Flex 20. It is likely compatible with 
+other Honeywell Galaxy panels, but this has not been verified.
+
+If your Galaxy Flex notifications suddenly stopped working, or you are looking for a simple 
+self-hosted alternative without installing a full home automation ecosystem, this project is for you.
 
 > **IMPORTANT SECURITY NOTICE**
 > By default, the communication between the alarm panel and this server is **unencrypted**. This server is designed to be run on a trusted local network only. Please read the full [Security & Privacy Guidelines](#security--privacy-guidelines) before installation.
@@ -19,7 +28,7 @@ If your Galaxy Flex notifications suddenly stopped working, this project provide
 -   **Advanced Notification Routing:** Route notifications for different accounts to different ntfy.sh topics, each with its own optional authentication (Bearer Token or User/Pass).
 -   **Robust Protocol Handling:** Correctly parses the multi-message protocol used by Galaxy Flex panels.
 -   **Broad SIA Level Support:** The flexible parser can correctly handle event data from SIA Levels 0, 1, 2, and 3.
--   **Optional Heartbeat Server:** Includes an optional server to handle the proprietary Honeywell "IP Check" heartbeat.
+-   **Optional Heartbeat Server:** Includes an optional server to handle the proprietary Honeywell "IP Check" heartbeat, with connection watchdog monitoring that sends notifications when a panel stops sending heartbeats.
 -   **Connection Security Policies:** Per-account `ENABLED` policy (`Yes`/`No`/`Secure`) and a configurable `REJECT_POLICY` (`respond`/`drop`) to control how invalid connections are handled.
 -   **Protocol State Machine:** Enforces correct SIA message ordering. Any connection that does not start with a valid `ACCOUNT_ID` is immediately rejected or silently dropped.
 -   **Character Encoding Fixes:** Decodes the proprietary character set used by Galaxy panels (e.g., Å, Ä, Ö).
@@ -123,7 +132,18 @@ nano /path/to/your/sia-server/sia-server.conf
 ```
 On Windows, simply edit the file with a text editor like Notepad.
 
-## Configuration Explained
+## Configuration
+
+For most users, only three things need to be changed in `sia-server.conf`:
+
+1. **Your account number and ntfy.sh topic** — Add a section with your panel's account number and your ntfy.sh topic URL.
+2. **Port numbers** — Match the ports you configured on the alarm panel.
+3. **Logging** — Choose `Screen` for testing, or `File` with a path for permanent use.
+
+Everything else works out of the box with sensible defaults.
+
+<details>
+<summary><b>Configuration Explained</b></summary>
 
 The primary configuration is done in `sia-server.conf`. This file is designed to be user-friendly and not sensitive to Python syntax. Advanced, technical constants are located in `galaxy/constants.py`.
 
@@ -142,7 +162,11 @@ The primary configuration is done in `sia-server.conf`. This file is designed to
         -   `drop` — Silently close the connection without sending anything.
 -   **`[IP-Check]` Section:** Configure the ports and addresses for the optional heartbeat server.
     > **Note:** The IP Check server validates all incoming heartbeat packets before responding.
-    > It verifies the packet length, and header. Invalid packets are dropped.
+    > It verifies the packet length and header. Invalid packets are dropped.
+    -   `WATCHDOG_THRESHOLD`: Controls how many missed pings trigger a lost-connection notification. 
+        `2.1` means 2 missed pings + 10% buffer. Set to `0` to disable watchdog alerts entirely.
+    -   `WATCHDOG_LOST_PRIO` / `WATCHDOG_RESTORE_PRIO`: The ntfy.sh priority (1-5) for lost and 
+        restored connection notifications respectively.
 
 -   **`[Logging]` Section:** Control the log level and output destination.
     -   `LOG_LEVEL`: Set the verbosity of logs (`DEBUG`, `INFO`, `WARNING`, `ERROR`). `INFO` is recommended for normal use.
@@ -175,6 +199,8 @@ Setting `LOG_TO = Syslog` integrates the server's logging with the native operat
     -   `MAX_QUE_SIZE`, `MAX_RETRIES`, `MAX_RETRY_TIME` control the queue and retry behavior.
     -   `PRIORITY_1` through `PRIORITY_5`: Assign SIA Event Codes to different priority levels.
     -   `DEFAULT_PRIORITY`: The priority to use for any unlisted event code.
+
+</details>
 
 ## Usage
 ### For Linux
