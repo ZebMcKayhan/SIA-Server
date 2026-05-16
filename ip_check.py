@@ -17,7 +17,6 @@ from queue import Queue
 
 # --- Watchdog Configuration ---
 PANEL_EPOCH_OFFSET = 54000  # 15 hours - converts panel timestamp to local time
-WATCHDOG_THRESHOLD = 2.1    # Allow 1 missed ping + buffer
 
 # --- SCRIPT INITIALIZATION ---
 # 1. Parse arguments
@@ -74,7 +73,7 @@ except (ImportError, ModuleNotFoundError):
 # --- END INITIALIZATION ---
 
 # Watchdog state per account
-# { account: { 'state': 'UNKNOWN'|'CONNECTED'|'DISCONNECTED',
+# { account: { 'state': 'UNKNOWN'|'CONNECTED'|'DISCONNECTED'|'DISABLED',
 #              'last_seen': float,      # server time (time.time())
 #              'last_panel_time': str,  # formatted panel local time
 #              'interval': int } }      # seconds
@@ -104,31 +103,35 @@ def update_watchdog(account_number: str, site_name: str,
     current_state = watchdog_state.get(account_number, {}).get('state', 'UNKNOWN')
     previous_interval = watchdog_state.get(account_number, {}).get('interval', interval)
 
-    # Always update state to CONNECTED with latest values
+    new_state = 'DISABLED' if config.IP_CHECK_WATCHDOG <= 1.0 else 'CONNECTED'
     watchdog_state[account_number] = {
-        'state': 'CONNECTED',
+        'state': new_state,
         'last_seen': time.time(),
         'last_panel_time': panel_time,
         'interval': interval,
     }
 
     if current_state == 'DISCONNECTED':
-        # Connection restored!
+        # Connection restored - only reachable if watchdog was previously enabled
         log.info("Watchdog: Site: %s (Account: %s) - connection restored, "
                  "interval %s.", site_name, account_number, interval_str)
         enqueue_message_notification(
             account_number,
             site_name,
             f"Heartbeat received at {panel_time}, connection restored",
-            priority=2,
+            priority=config.IP_CHECK_RESTORE_PRIO,
             queue=notification_queue
         )
     elif current_state == 'UNKNOWN':
-        # First ping ever - silent transition, just log
-        log.info("Watchdog: Site: %s (Account: %s) - monitoring started, "
-                 "interval %s.", site_name, account_number, interval_str)
+        # First ping ever - log monitoring started or disabled
+        if config.IP_CHECK_WATCHDOG <= 1.0:
+            log.info("Watchdog: Site: %s (Account: %s) - watchdog DISABLED, "
+                     "interval %s.", site_name, account_number, interval_str)
+        else:
+            log.info("Watchdog: Site: %s (Account: %s) - monitoring started, "
+                     "interval %s.", site_name, account_number, interval_str)
     else:
-        # CONNECTED → CONNECTED: check if interval changed
+        # CONNECTED/DISABLED -> CONNECTED/DISABLED: check if interval changed
         if previous_interval != interval:
             log.info("Watchdog: Site: %s (Account: %s) - interval updated to %s.",
                      site_name, account_number, interval_str)
@@ -152,7 +155,7 @@ async def watchdog_task(notification_queue: Queue):
                 continue
 
             elapsed = now - state['last_seen']
-            threshold = interval * WATCHDOG_THRESHOLD
+            threshold = interval * config.IP_CHECK_WATCHDOG
 
             if elapsed > threshold:
                 # Connection lost!
@@ -164,16 +167,16 @@ async def watchdog_task(notification_queue: Queue):
                 e_hours = elapsed_int // 3600
                 e_minutes = (elapsed_int % 3600) // 60
                 e_seconds = elapsed_int % 60
-                
+
                 log.warning("Watchdog: Site: %s (Account: %s) - heartbeat lost! "
-                           "No ping received for %02d:%02d:%02d.",
-                           site_name, account_number, e_hours, e_minutes, e_seconds)
+                            "No ping received for %02d:%02d:%02d.",
+                            site_name, account_number, e_hours, e_minutes, e_seconds)
 
                 enqueue_message_notification(
                     account_number,
                     site_name,
                     f"Heartbeat lost, last heartbeat received was {last_panel_time}",
-                    priority=4,
+                    priority=config.IP_CHECK_LOST_PRIO,
                     queue=notification_queue
                 )
 
