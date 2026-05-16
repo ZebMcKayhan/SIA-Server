@@ -1,12 +1,21 @@
 # Honeywell Galaxy SIA Notification Server
 
-SIA-Server is a lightweight, self-hosted Python service that receives SIA protocol messages from Honeywell Galaxy Flex alarm systems and forwards them as rich, prioritized push notifications via [ntfy.sh](https://ntfy.sh/).
+SIA-Server is a lightweight, self-hosted Python service that receives SIA protocol messages from 
+Honeywell Galaxy Flex alarm systems and forwards them as prioritized push notifications to your 
+phone or computer.
 
-It was created as a replacement for the discontinued free Honeywell push notification service, allowing users to regain full control over their alarm alerts without ongoing subscription costs.
+It was created as a replacement for the discontinued free Honeywell push notification service, 
+allowing users to regain full control over their alarm alerts without ongoing subscription costs.
 
-This project was developed and tested on a Honeywell Galaxy Flex 20. It is likely compatible with other Honeywell Galaxy panels, but this has not been verified.
+Notifications are delivered via [ntfy.sh](https://ntfy.sh/) — a free, open-source push notification
+service. Just install the ntfy app on your phone (Android/iOS), subscribe to a topic, and you're done.
+No account, no registration, no subscription required.
 
-If your Galaxy Flex notifications suddenly stopped working, this project provides a self-hosted alternative.
+This project was developed and tested on a Honeywell Galaxy Flex 20. It is likely compatible with 
+other Honeywell Galaxy panels, but this has not been verified.
+
+If your Galaxy Flex notifications suddenly stopped working, or you are looking for a simple 
+self-hosted alternative without installing a full home automation ecosystem, this project is for you.
 
 > **IMPORTANT SECURITY NOTICE**
 > By default, the communication between the alarm panel and this server is **unencrypted**. This server is designed to be run on a trusted local network only. Please read the full [Security & Privacy Guidelines](#security--privacy-guidelines) before installation.
