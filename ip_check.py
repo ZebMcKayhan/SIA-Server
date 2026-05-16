@@ -229,7 +229,7 @@ async def handle_ip_check(reader, writer, notification_queue: Queue):
                     log.debug("IP Check handshake failed from %s - ignored.", addr[0])
                     return
                 # Read the actual ping after handshake
-                log.info("Encrypted session established from %r", addr)
+                log.debug("Encrypted session established from %r", addr)
                 data = await reader.read(1024)
                 if not data:
                     return
@@ -267,7 +267,7 @@ async def handle_ip_check(reader, writer, notification_queue: Queue):
         site_name = config.ACCOUNT_SITES.get(account_number, account_number)
         update_watchdog(account_number, site_name, data, notification_queue)
         
-        log.info("Received ping from site: %s (Account: %s) from %s. Echoing response.",
+        log.debug("Received ping from site: %s (Account: %s) from %s. Echoing response.",
                  site_name, account_number, addr[0])
 
         response = crypto.encrypt(data) if crypto else data
