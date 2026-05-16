@@ -123,7 +123,18 @@ nano /path/to/your/sia-server/sia-server.conf
 ```
 On Windows, simply edit the file with a text editor like Notepad.
 
-## Configuration Explained
+## Configuration
+
+For most users, only three things need to be changed in `sia-server.conf`:
+
+1. **Your account number and ntfy.sh topic** — Add a section with your panel's account number and your ntfy.sh topic URL.
+2. **Port numbers** — Match the ports you configured on the alarm panel.
+3. **Logging** — Choose `Screen` for testing, or `File` with a path for permanent use.
+
+Everything else works out of the box with sensible defaults.
+
+<details>
+<summary><b>Configuration Explained</b></summary>
 
 The primary configuration is done in `sia-server.conf`. This file is designed to be user-friendly and not sensitive to Python syntax. Advanced, technical constants are located in `galaxy/constants.py`.
 
@@ -179,6 +190,8 @@ Setting `LOG_TO = Syslog` integrates the server's logging with the native operat
     -   `MAX_QUE_SIZE`, `MAX_RETRIES`, `MAX_RETRY_TIME` control the queue and retry behavior.
     -   `PRIORITY_1` through `PRIORITY_5`: Assign SIA Event Codes to different priority levels.
     -   `DEFAULT_PRIORITY`: The priority to use for any unlisted event code.
+
+</details>
 
 ## Usage
 ### For Linux
