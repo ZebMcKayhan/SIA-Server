@@ -102,6 +102,7 @@ def update_watchdog(account_number: str, site_name: str,
     interval_str = f"{hours:02d}:{minutes:02d}:{seconds:02d} ({interval}s)"
 
     current_state = watchdog_state.get(account_number, {}).get('state', 'UNKNOWN')
+    previous_interval = watchdog_state.get(account_number, {}).get('interval', interval)
 
     # Always update state to CONNECTED with latest values
     watchdog_state[account_number] = {
@@ -126,8 +127,11 @@ def update_watchdog(account_number: str, site_name: str,
         # First ping ever - silent transition, just log
         log.info("Watchdog: Site: %s (Account: %s) - monitoring started, "
                  "interval %s.", site_name, account_number, interval_str)
-        
-    # CONNECTED → CONNECTED: normal operation, no notification
+    else:
+        # CONNECTED → CONNECTED: check if interval changed
+        if previous_interval != interval:
+            log.info("Watchdog: Site: %s (Account: %s) - interval updated to %s.",
+                     site_name, account_number, interval_str)
 
 async def watchdog_task(notification_queue: Queue):
     """
