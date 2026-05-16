@@ -107,7 +107,7 @@ def format_notification_text(event: Union[GalaxyEvent, MessageEvent]) -> str:
 
 def _dispatch_http_notification(event: Union[GalaxyEvent, MessageEvent],
                                 ntfy_topics: Dict, priority_map: Dict,
-                                default_priority: int) -> bool:
+                                default_priority: int) -> bool | None:
     """Sends a formatted notification using topic-specific configuration."""
 
     # 1. Find the correct topic configuration for this event's account.
@@ -116,12 +116,12 @@ def _dispatch_http_notification(event: Union[GalaxyEvent, MessageEvent],
     # 2. Check if notifications are enabled for this specific topic.
     if not topic_config or not topic_config.get('enabled', False):
         log.debug("Notifications disabled for account '%s' or default topic. Skipping.", event.account)
-        return False
+        return None
 
     ntfy_url = topic_config.get('url')
     if not ntfy_url or 'your-topic-here' in ntfy_url:
         log.warning("No valid ntfy.sh URL found for account '%s' or default. Skipping.", event.account)
-        return False
+        return None
 
     # 3. Determine priority - MessageEvent uses fixed priority, GalaxyEvent uses lookup.
     if isinstance(event, MessageEvent):
@@ -129,7 +129,7 @@ def _dispatch_http_notification(event: Union[GalaxyEvent, MessageEvent],
     else:
         if not event.event_code:
             log.warning("Event has no event_code, cannot determine priority. Skipping notification.")
-            return False
+            return None
         priority = get_event_priority(event.event_code, priority_map, default_priority)
 
     message = format_notification_text(event)
@@ -254,7 +254,11 @@ class NotificationDispatcher(Thread):
                 event, self.ntfy_topics, self.priority_map, self.default_priority
             )
 
-            if not success:
+            if success is None:
+                # Configuration issue - skip silently, no retry
+                log.debug("Notification skipped for account %s.", event.account)            
+            elif not success:
+                # Network/temporary issue - retry with backoff
                 retry_count += 1
                 if self.max_retries == 0 or retry_count <= self.max_retries:
                     delay = self.get_retry_delay(retry_count)
