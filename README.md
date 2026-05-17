@@ -51,6 +51,7 @@ The project is structured to separate the server logic, protocol parsing, and co
 ├── configuration.py        # Loads and validates all configuration.
 ├── notification.py         # Handles formatting and sending of notifications.
 ├── ip_check.py             # Optional subprocess for answering heartbeats.
+├── Dockerfile              # Docker container definition for portable deployment.
 ├── README.md               # This file.
 ├── PanelSetup.md           # Panel Configuration help.
 ├── requirements.txt        # Required python packages.
