@@ -315,12 +315,6 @@ If you prefer a persistent log file, set the following in `sia-server.conf`:
 LOG_TO = File
 LOG_FILE = /logs/sia-server.log
 ```
-Then add the log volume to `docker-compose.yml`:
-```yaml
-    volumes:
-      - ./sia-server.conf:/config/sia-server.conf:ro
-      - ./logs:/logs
-```
 The log file will appear as `./logs/sia-server.log` on the host machine.
 
 ## Security & Privacy Guidelines
