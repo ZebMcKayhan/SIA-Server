@@ -22,7 +22,7 @@ self-hosted alternative without installing a full home automation ecosystem, thi
 
 ## Features
 
--   **Self-Hosted:** Runs on any local Windows or Linux machine, like a Raspberry Pi.
+-   **Self-Hosted:** Runs on any local Windows or Linux machine (like a Raspberry Pi), or in a Docker container.
 -   **Real-time Notifications:** Instantly forwards alarm events to your devices.
 -   **Prioritized Alerts:** Uses ntfy.sh priorities to distinguish between urgent alarms and routine events.
 -   **Advanced Notification Routing:** Route notifications for different accounts to different ntfy.sh topics, each with its own optional authentication (Bearer Token or User/Pass).
@@ -52,6 +52,7 @@ The project is structured to separate the server logic, protocol parsing, and co
 ├── notification.py         # Handles formatting and sending of notifications.
 ├── ip_check.py             # Optional subprocess for answering heartbeats.
 ├── Dockerfile              # Docker container definition for portable deployment.
+├── docker-compose.yml      # Docker Compose configuration for easy container management.
 ├── README.md               # This file.
 ├── PanelSetup.md           # Panel Configuration help.
 ├── requirements.txt        # Required python packages.
@@ -280,6 +281,47 @@ You can specify a different path using the `--config` argument:
     -   **Startup directory:** Browse to your script folder.
     -   **Arguments:** `sia-server.py`
 5.  Click **Install service**. You can now manage it from the Windows Services app (`services.msc`).
+
+### Using Docker
+
+#### Prerequisites
+- [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/) installed on your machine.
+
+#### Setup and Start
+1. Place your configured `sia-server.conf` in the same directory as `docker-compose.yml`.
+2. Build and start the container:
+```bash
+docker compose up -d
+```
+3. The server is now running. To verify:
+```bash
+docker compose ps
+```
+
+#### View Logs
+```bash
+docker compose logs -f
+```
+
+#### Stop the Server
+```bash
+docker compose down
+```
+
+#### File Logging (Optional)
+By default the server logs to screen, which is captured by Docker and visible via `docker compose logs`.
+If you prefer a persistent log file, set the following in `sia-server.conf`:
+```ini
+LOG_TO = File
+LOG_FILE = /logs/sia-server.log
+```
+Then add the log volume to `docker-compose.yml`:
+```yaml
+    volumes:
+      - ./sia-server.conf:/config/sia-server.conf:ro
+      - ./logs:/logs
+```
+The log file will appear as `./logs/sia-server.log` on the host machine.
 
 ## Security & Privacy Guidelines
 Please read these guidelines carefully.
