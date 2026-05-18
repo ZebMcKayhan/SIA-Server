@@ -289,11 +289,17 @@ You can specify a different path using the `--config` argument:
 
 #### Setup and Start
 1. Place your configured `sia-server.conf` in the same directory as `docker-compose.yml`.
-2. Build and start the container:
+2. Check that the ports in `docker-compose.yml` match the ports configured in `sia-server.conf`:
+```yaml
+ports:
+  - "10000:10000"   # Must match [SIA-Server] LISTEN_PORT
+  - "10001:10001"   # Must match [IP-Check] LISTEN_PORT
+```
+3. Build and start the container:
 ```bash
 docker compose up -d
 ```
-3. The server is now running. To verify:
+4. The server is now running. To verify:
 ```bash
 docker compose ps
 ```
@@ -316,6 +322,14 @@ LOG_TO = File
 LOG_FILE = /logs/sia-server.log
 ```
 The log file will appear as `./logs/sia-server.log` on the host machine.
+The `./logs` directory will be created automatically by Docker if it does not exist.
+
+#### Timezone
+By default the container runs in UTC. Set your local timezone in `docker-compose.yml`:
+```yaml
+environment:
+  - TZ=Europe/London    # Change to your local timezone
+```
 
 ## Security & Privacy Guidelines
 Please read these guidelines carefully.
