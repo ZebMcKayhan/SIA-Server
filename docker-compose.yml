@@ -4,7 +4,7 @@ services:
     image: sia-server:latest
     container_name: sia-server
     environment:
-      - TZ=Europe/Stockholm 
+      - TZ=Europe/London 
     ports:
       - "10000:10000"
       - "10001:10001"
