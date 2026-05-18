@@ -51,6 +51,7 @@ The project is structured to separate the server logic, protocol parsing, and co
 ├── configuration.py        # Loads and validates all configuration.
 ├── notification.py         # Handles formatting and sending of notifications.
 ├── ip_check.py             # Optional subprocess for answering heartbeats.
+├── sia_server_tester.py    # Test client for sending SIA packets to the server.
 ├── Dockerfile              # Docker container definition for portable deployment.
 ├── docker-compose.yml      # Docker Compose configuration for easy container management.
 ├── README.md               # This file.
@@ -351,10 +352,16 @@ The communication between your alarm panel and this server is **unencrypted**. R
 
 **Disclaimer:** You are ultimately responsible for securing your own setup.
 
+## Alternative Versions
+Looking for a fully containerized setup with Apprise notification routing and MQTT integration?
+[@claesmathias](https://github.com/claesmathias/SIA-Server) maintains a fork of this project 
+with Docker Compose, Apprise and Mosquitto pre-configured.
+
 ## Acknowledgments
 -   This project was developed through a collaborative effort with Anthropic's AI assistant, Claude.
 -   The initial socket server structure was inspired by the [nimnull/sia-server](https://github.com/nimnull/sia-server) project.
 -   Some protocol information was found in [dklemm/FlexSIA2MQTT](https://github.com/dklemm/FlexSIA2MQTT) project.
+-   `sia_server_tester.py` was contributed by [@claesmathias](https://github.com/claesmathias/SIA-Server).
 
 ## License
 This project is licensed under the MIT License.
