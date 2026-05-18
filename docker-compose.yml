@@ -1,12 +1,14 @@
 services:
   sia-server:
     build: .
+    image: sia-server:latest
     container_name: sia-server
-
-    network_mode: host
-
+    environment:
+      - TZ=Europe/Stockholm 
+    ports:
+      - "10000:10000"
+      - "10001:10001"
     restart: unless-stopped
-
     volumes:
       - ./sia-server.conf:/config/sia-server.conf:ro
-      - ./logs:/logs  # optional, only needed if LOG_TO = File
+      - ./logs:/logs 
