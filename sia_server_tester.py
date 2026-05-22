@@ -4,6 +4,19 @@
 Builds and sends valid Galaxy SIA message blocks to the SIA server.
 This script is useful for testing the server with variable input values.
 
+--- Arguments ---
+
+  --host HOST         Server hostname or IP address (default: 127.0.0.1)
+  --port PORT         Server port (default: 10000)
+  --timeout SECS      Max seconds to wait for a response per segment (default: 2.0)
+  --quiet             Suppress all output except errors
+
+Message modes (mutually exclusive, one is required):
+  --send-sample                     Send the built-in sample message sequence.
+  --segment HEX [--segment HEX]     Send one or more raw hex segments.
+  --account-id ID --new-event EVT   Build and send a message from payloads.
+  --ascii TEXT                      ASCII block is optional (omit for SIA level 0/1/2).
+    
 --- SIA Event Structure Reference ---
 
 Event types and their DATA block (N) formats by SIA level:
@@ -64,18 +77,21 @@ SIA Level 3 - Zone alarm (Burglary Alarm, zone 1011):
       --new-event 'ti23:42/ri01/BA1011' \\
       --ascii '+INBROTT      IR Hall          '
 
-SIA Level 3 - User event (Area closed/armed by user 023, partition 013):
-    python sia_server_tester.py --account-id 123456 \\
+SIA Level 3 - User event (Area closed/armed by user 023, partition 013) Custom host and port:
+    python sia_server_tester.py --host 192.168.1.100 --port 10000 \\
+      --account-id 123456 \\
       --new-event 'ti23:42/id023/pi013/CG' \\
       --ascii ' PART SET USER'
 
-SIA Level 3 - System event (Automatic test):
-    python sia_server_tester.py --account-id 123456 \\
+SIA Level 3 - System event (Automatic test), Suppress output (quiet mode):
+    python sia_server_tester.py --quiet \\
+      --account-id 123456 \\
       --new-event 'ti08:00/ri01/RP' \\
       --ascii ' AUTO TEST...Modul'
 
-SIA Level 2 - Zone alarm (no ASCII block):
-    python sia_server_tester.py --account-id 123456 \\
+SIA Level 2 - Zone alarm (no ASCII block), Custom response timeout (default is 2.0 seconds):
+    python sia_server_tester.py --timeout 0.5 \\
+      --account-id 123456 \\
       --new-event 'ti23:42/ri01/BA1011'
 
 SIA Level 1 - Zone alarm (minimal format, 6-digit account):
@@ -94,6 +110,12 @@ SIA Level 0 - System event (fixed 000 suffix):
     python sia_server_tester.py --account-id 1234 \\
       --new-event 'RP000'
 
+Send built-in sample message:
+    python sia_server_tester.py --send-sample
+
+Send built-in sample to a remote host:
+    python sia_server_tester.py --host 192.168.1.100 --send-sample
+    
 Example using raw hex segments:
     python sia_server_tester.py \\
       --segment 46233032333439399f \\
@@ -115,7 +137,7 @@ from galaxy.constants import COMMAND_BYTES
 
 DEFAULT_HOST = '127.0.0.1'
 DEFAULT_PORT = 10000
-DEFAULT_DELAY = 0.05
+DEFAULT_TIMEOUT = 2.0
 SAMPLE_ACCOUNT = '123456'
 SAMPLE_NEW_EVENT = 'ti23:42/id023/pi013/CG'
 SAMPLE_ASCII = ' PART SET USER'
@@ -147,27 +169,38 @@ def parse_hex_segment(segment: str) -> bytes:
     return bytes.fromhex(normalized)
 
 
-def send_segments(host: str, port: int, segments: Iterable[bytes], delay: float, quiet: bool = False) -> None:
-    """Send raw byte segments to the SIA server."""
+def send_segments(host: str, port: int, segments: Iterable[bytes], timeout: float, quiet: bool = False) -> None:
+    """Send raw byte segments to the SIA server, reading and printing the response after each segment."""
     segments_list = list(segments)
     print(f'Connecting to {host}:{port}...')
     with socket.create_connection((host, port), timeout=5) as sock:
         for index, chunk in enumerate(segments_list, start=1):
             if not quiet:
-                print(f'Sending segment {index}/{len(segments_list)} ({len(chunk)} bytes)')
+                print(f'Sending segment {index}/{len(segments_list)} ({len(chunk)} bytes): {chunk.hex()}')
             sock.sendall(chunk)
-            if delay > 0 and index != len(segments_list):
-                time.sleep(delay)
 
-        try:
-            sock.settimeout(2.0)
-            response = sock.recv(4096)
-            if response:
-                print('Server response:', response.hex())
-            else:
-                print('No response received; connection closed by server.')
-        except socket.timeout:
-            print('No response received within timeout.')
+            try:
+                sock.settimeout(timeout)
+                response = sock.recv(4096)
+                if response:
+                    if len(response) >= 2:
+                        cmd_byte = response[1]
+                        if cmd_byte == 0x38:
+                            status = 'ACK'
+                        elif cmd_byte == 0x39:
+                            status = 'REJECT'
+                        else:
+                            status = f'UNKNOWN(0x{cmd_byte:02x})'
+                    else:
+                        status = 'UNKNOWN (response too short)'
+                    if not quiet:
+                        print(f'  → {status} ({response.hex()})')
+                else:
+                    if not quiet:
+                        print(f'  → No response received.')
+            except socket.timeout:
+                if not quiet:
+                    print(f'  → No response within {timeout}s, continuing.')
 
 
 def build_sample_message(account_id: str, new_event: str, ascii_text: str | None = None) -> List[bytes]:
@@ -186,7 +219,7 @@ def main(argv: List[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description='Send raw Galaxy SIA packets to a SIA server.')
     parser.add_argument('--host', default=DEFAULT_HOST, help='Server host (default: 127.0.0.1)')
     parser.add_argument('--port', type=int, default=DEFAULT_PORT, help='Server port (default: 10000)')
-    parser.add_argument('--delay', type=float, default=DEFAULT_DELAY, help='Delay between segments in seconds.')
+    parser.add_argument('--timeout', type=float, default=DEFAULT_TIMEOUT, help='Max time in seconds to wait for a response per segment (default: 2.0)')
     parser.add_argument('--account-id', help='Account ID payload for ACCOUNT_ID command.')
     parser.add_argument('--new-event', help='Payload for NEW_EVENT command.')
     parser.add_argument('--ascii', dest='ascii_text', help='Payload for ASCII command.')
@@ -212,11 +245,11 @@ def main(argv: List[str] | None = None) -> int:
         print('------------------')
         print(f'Host: {args.host}')
         print(f'Port: {args.port}')
-        print(f'Delay: {args.delay}s')
+        print(f'Timeout: {args.timeout}s')
         print(f'Segments: {len(segments)}')
 
     try:
-        send_segments(args.host, args.port, segments, args.delay, quiet=args.quiet)
+        send_segments(args.host, args.port, segments, args.timeout, quiet=args.quiet)
         return 0
     except Exception as exc:
         print(f'ERROR: {exc}', file=sys.stderr)
