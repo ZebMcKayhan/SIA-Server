@@ -158,8 +158,8 @@ def parse_galaxy_event(blocks: List[Dict], account_sites: Dict,
                 # Use the mapped site name if it exists, otherwise fall back to the account number itself.
                 event.site_name = account_sites.get(event.account, event.account)
         
-        elif command == 'NEW_EVENT':
-           parse_data_payload(payload, event, event_code_descriptions)
+        elif command in ('NEW_EVENT', 'OLD_EVENT'):
+            parse_data_payload(payload, event, event_code_descriptions)
             
         elif command == 'ASCII':
             parse_ascii_payload(payload, event, char_map)
