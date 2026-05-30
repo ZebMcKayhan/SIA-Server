@@ -26,7 +26,7 @@ class GalaxyEvent:
     # Parsed from Data Payload
     time: Optional[str] = None
     user_id: Optional[str] = None
-    partition: Optional[str] = None
+    peripheral: Optional[str] = None  # renamed from partition
     group: Optional[str] = None
     value: Optional[str] = None
     event_code: Optional[str] = None
@@ -92,9 +92,9 @@ def parse_data_payload(payload: bytes, event: GalaxyEvent, event_code_descriptio
         elif section.startswith('id'):  # id001
             event.user_id = section[2:] # 001
             log.debug("Parsed user_id: '%s'", event.user_id)
-        elif section.startswith('pi'):    # pi010
-            event.partition = section[2:] # 010
-            log.debug("Parsed partition: '%s'", event.partition)
+        elif section.startswith('pi'):
+            event.peripheral = section[2:]
+            log.debug("Parsed peripheral: '%s'", event.peripheral)
         elif section.startswith('ri'):
             event.group = section[2:]
             log.debug("Parsed group: '%s'", event.group)
