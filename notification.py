@@ -102,8 +102,8 @@ def format_notification_text(event: Union[GalaxyEvent, MessageEvent]) -> str:
             notification += f" Zone: {event.zone}"
         if event.group:
             notification += f" Group: {event.group}"
-        if event.partition:
-            notification += f" Partition: {event.partition}"
+        if event.peripheral:
+            notification += f" Peripheral: {event.peripheral}"
 
     return notification.strip()
 
