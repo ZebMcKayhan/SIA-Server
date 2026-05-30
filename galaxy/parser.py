@@ -157,7 +157,8 @@ def parse_galaxy_event(blocks: List[Dict], account_sites: Dict,
             if event.account:
                 # Use the mapped site name if it exists, otherwise fall back to the account number itself.
                 event.site_name = account_sites.get(event.account, event.account)
-        
+
+        # "OLD_EVENT" have never been observed but according to SIA documentation it exist and is identical to NEW_EVENT. Adding it just in case:
         elif command in ('NEW_EVENT', 'OLD_EVENT'):
             parse_data_payload(payload, event, event_code_descriptions)
             
