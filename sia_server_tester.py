@@ -23,28 +23,28 @@ Message modes (mutually exclusive, one is required):
 Event types and their DATA block (N) formats by SIA level:
 
   Zone events (detector alarm, keyswitch etc.):
-    Level 3/4:  #xxxxxx  N ti:xx/ri:xx/EV zzzz   + ASCII block
-    Level 2:    #xxxxxx  N ti:xx/ri:xx/EV zzzz
-    Level 1:    #xxxxxx  N EV zzzz
-    Level 0:    #xxxx    N EV zzzz
+    Level 3/4:  #xxxxxx  Ntihh:mm/rigg/EVzzzz   + ASCII block
+    Level 2:    #xxxxxx  Ntihh:mm/rigg/EVzzzz
+    Level 1:    #xxxxxx  NEVzzzz
+    Level 0:    #xxxx    NEVzzzz
 
   User events (arm/disarm, reset, duress etc.):
-    Level 3/4:  #xxxxxx  N ti:xx/ri:xx/id:uuu/pi:xxx/EV   + ASCII block
-    Level 2:    #xxxxxx  N ti:xx/ri:xx/id:uuu/pi:xxx/EV
-    Level 1:    #xxxxxx  N EV mmm
-    Level 0:    #xxxx    N EV mmm
+    Level 3/4:  #xxxxxx  Ntihh:mm/rigg/iduuu/pimmm/EV   + ASCII block
+    Level 2:    #xxxxxx  Ntihh:mm/rigg/iduuu/pimmm/EV
+    Level 1:    #xxxxxx  NEVmmm
+    Level 0:    #xxxx    NEVmmm
 
   Module events (keypad added, RIO missing etc.):
-    Level 3/4:  #xxxxxx  N ti:xx/ri:xx/pi:mmm/EV   + ASCII block
-    Level 2:    #xxxxxx  N ti:xx/ri:xx/pi:mmm/EV
-    Level 1:    #xxxxxx  N EV mmm
-    Level 0:    #xxxx    N EV mmm
+    Level 3/4:  #xxxxxx  Ntihh:mm/rigg/pimmm/EV   + ASCII block
+    Level 2:    #xxxxxx  Ntihh:mm/rigg/pimmm/EV
+    Level 1:    #xxxxxx  NEVmmm
+    Level 0:    #xxxx    NEVmmm
 
   System events (auto set, test, engineer mode etc.):
-    Level 3/4:  #xxxxxx  N ti:xx/ri:xx/EV   + ASCII block
-    Level 2:    #xxxxxx  N ti:xx/ri:xx/EV
-    Level 1:    #xxxxxx  N EV
-    Level 0:    #xxxx    N EV000
+    Level 3/4:  #xxxxxx  Ntihh:mm/rigg/EV   + ASCII block
+    Level 2:    #xxxxxx  Ntihh:mm/rigg/EV
+    Level 1:    #xxxxxx  NEV
+    Level 0:    #xxxx    NEV000
 
 Note: SIA Level 0 uses a 4-digit account number (#xxxx).
       SIA Level 1 and above use a 6-digit account number (#xxxxxx).
@@ -55,7 +55,7 @@ Note: SIA Level 0 uses a 4-digit account number (#xxxx).
 DATA Block field key:
   ti = Time (hh:mm)
   ri = Group modifier
-  x  = Group number (xx)
+  g  = Group number (gg)
   id = User modifier
   u  = User number (uuu)
   pi = Peripheral modifier
