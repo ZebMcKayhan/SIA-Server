@@ -61,7 +61,7 @@ class MessageEvent:
         self.event_description = message
         self.time              = None
         self.zone              = None
-        self.partition         = None
+        self.peripheral        = None
         self.user_id           = None
 
 
