@@ -87,9 +87,10 @@ def format_notification_text(event: Union[GalaxyEvent, MessageEvent]) -> str:
     # If we have the rich text from the ASCII block, use it (SIA Level 3+)
     if event.action_text:
         notification = f"{event_time} {event.action_text}"
-        # Add zone info if it was parsed separately and isn't already in the text
-        if event.zone and event.zone not in str(event.action_text):
-            notification += f" (Zone {event.zone})"
+        # The Zone address is the RIO address, which name is already in the ASCII block.
+        # This was not what I intended, commenting this until I figure out what to do:
+        #if event.zone and event.zone not in str(event.action_text):
+        #    notification += f" (Zone {event.zone})"
     # Otherwise, build a basic message from the Data block fields (SIA Level 2)
     else:
         notification = f"{event_time}"
