@@ -14,7 +14,8 @@ This script is useful for testing the server with variable input values.
 Message modes (mutually exclusive, one is required):
   --send-sample                     Send the built-in sample message sequence.
   --segment HEX [--segment HEX]     Send one or more raw hex segments.
-  --account-id ID --new-event EVT   Build and send a message from payloads.
+  --account-id ID --new-event EVT   Build and send new event message from payloads.
+  --account-id ID --old-event EVT   Build and send old event message from payloads.
   --ascii TEXT                      ASCII block is optional (omit for SIA level 0/1/2).
     
 --- SIA Event Structure Reference ---
@@ -93,6 +94,9 @@ SIA Level 2 - Zone alarm (no ASCII block), Custom response timeout (default is 2
     python sia_server_tester.py --timeout 0.5 \\
       --account-id 123456 \\
       --new-event 'ti23:42/ri01/BA1011'
+    
+    python sia_server_tester.py --account-id 123456 \\
+      --old-event 'ti23:42/ri01/BA1011'
 
 SIA Level 1 - Zone alarm (minimal format, 6-digit account):
     python sia_server_tester.py --account-id 123456 \\
@@ -203,11 +207,13 @@ def send_segments(host: str, port: int, segments: Iterable[bytes], timeout: floa
                     print(f'  → No response within {timeout}s, continuing.')
 
 
-def build_sample_message(account_id: str, new_event: str, ascii_text: str | None = None) -> List[bytes]:
-    """Build a standard ACCOUNT_ID + NEW_EVENT + (optional ASCII) + END_OF_DATA sequence."""
+def build_sample_message(account_id: str, event_payload: str, 
+                         event_command: str = 'NEW_EVENT',
+                         ascii_text: str | None = None) -> List[bytes]:
+    """Build a standard ACCOUNT_ID + NEW_EVENT/OLD_EVENT + (optional ASCII) + END_OF_DATA sequence."""
     segments = [
         build_sia_block('ACCOUNT_ID', account_id.encode('ascii')),
-        build_sia_block('NEW_EVENT', new_event.encode('ascii')),
+        build_sia_block(event_command, event_payload.encode('ascii')),
     ]
     if ascii_text is not None:
         segments.append(build_sia_block('ASCII', ascii_text.encode('ascii')))
@@ -222,6 +228,7 @@ def main(argv: List[str] | None = None) -> int:
     parser.add_argument('--timeout', type=float, default=DEFAULT_TIMEOUT, help='Max time in seconds to wait for a response per segment (default: 2.0)')
     parser.add_argument('--account-id', help='Account ID payload for ACCOUNT_ID command.')
     parser.add_argument('--new-event', help='Payload for NEW_EVENT command.')
+    parser.add_argument('--old-event', help='Payload for OLD_EVENT command (same format as --new-event).')
     parser.add_argument('--ascii', dest='ascii_text', help='Payload for ASCII command.')
     parser.add_argument('--send-sample', action='store_true', help='Send the built-in sample message sequence.')
     parser.add_argument('--segment', action='append', default=[], help='Raw hex segment to send. Can be repeated.')
@@ -230,13 +237,17 @@ def main(argv: List[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.send_sample:
-        segments = build_sample_message(SAMPLE_ACCOUNT, SAMPLE_NEW_EVENT, SAMPLE_ASCII)
+        segments = build_sample_message(SAMPLE_ACCOUNT, SAMPLE_NEW_EVENT, 'NEW_EVENT', SAMPLE_ASCII)
     elif args.segment:
         segments = [parse_hex_segment(segment) for segment in args.segment]
-    elif args.account_id or args.new_event or args.ascii_text:
-        if not args.account_id or not args.new_event:
-            parser.error('When building a message, --account-id and --new-event are required.')
-        segments = build_sample_message(args.account_id, args.new_event, args.ascii_text)
+    elif args.account_id or args.new_event or args.old_event or args.ascii_text:
+        if not args.account_id or not (args.new_event or args.old_event):
+            parser.error('When building a message, --account-id and --new-event or --old-event are required.')
+        if args.new_event and args.old_event:
+            parser.error('Cannot use both --new-event and --old-event.')
+        event_payload  = args.new_event or args.old_event
+        event_command  = 'NEW_EVENT' if args.new_event else 'OLD_EVENT'
+        segments = build_sample_message(args.account_id, event_payload, event_command, args.ascii_text)
     else:
         parser.error('Provide --send-sample, --segment, or the command payload arguments.')
 
