@@ -100,6 +100,8 @@ def format_notification_text(event: Union[GalaxyEvent, MessageEvent]) -> str:
             notification += f" User: {event.user_id}"
         if event.zone:
             notification += f" Zone: {event.zone}"
+        if event.group:
+            notification += f" Group: {event.group}"
         if event.partition:
             notification += f" Partition: {event.partition}"
 
