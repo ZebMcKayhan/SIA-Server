@@ -54,7 +54,8 @@ Note: SIA Level 0 uses a 4-digit account number (#xxxx).
 
 DATA Block field key:
   ti = Time (hh:mm)
-  ri = Group/partition number
+  ri = Group modifier
+  x  = Group number (xx)
   id = User modifier
   u  = User number (uuu)
   pi = Peripheral modifier
