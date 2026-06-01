@@ -26,7 +26,7 @@ class GalaxyEvent:
     # Parsed from Data Payload
     time: Optional[str] = None
     user_id: Optional[str] = None
-    peripheral: Optional[str] = None  # renamed from partition
+    peripheral: Optional[str] = None
     group: Optional[str] = None
     value: Optional[str] = None
     event_code: Optional[str] = None
@@ -78,7 +78,7 @@ def parse_data_payload(payload: bytes, event: GalaxyEvent, event_code_descriptio
     event.data_payload = payload
     data_str = payload.decode('utf-8', errors='ignore')
 
-    # The payload consists of sections separated by '/', the lowercase is data modifier, uppercase is Event Code (ECzzzz).
+    # The payload consists of sections separated by '/', lowercase is data modifier, uppercase is Event Code (ECzzzz).
     sections = data_str.split('/')
     if not sections:
         return
@@ -90,16 +90,16 @@ def parse_data_payload(payload: bytes, event: GalaxyEvent, event_code_descriptio
                 event.time = section[2:] # 11:45
                 log.debug("Parsed time: '%s'", event.time)
             elif section.startswith('id'):  # id001
-                event.user_id = section[2:] # 001
+                event.user_id = section[2:].lstrip('0') or '0' # 001 -> 1 (strip leading zeroes)
                 log.debug("Parsed user_id: '%s'", event.user_id)
             elif section.startswith('pi'):
-                event.peripheral = section[2:]
+                event.peripheral = section[2:].lstrip('0') or '0'
                 log.debug("Parsed peripheral: '%s'", event.peripheral)
             elif section.startswith('ri'):
-                event.group = section[2:]
+                event.group = section[2:].lstrip('0') or '0'
                 log.debug("Parsed group: '%s'", event.group)
             elif section.startswith('va'): # Observed in auto-test as interval in minutes (va1440 = 24h)
-                event.value = section[2:]
+                event.value = section[2:].lstrip('0') or '0'
                 log.debug("Parsed value: '%s'", event.value)
             # Other possible modifiers according to SIA standard, but never observed:
             # da = Date
@@ -128,7 +128,7 @@ def parse_data_payload(payload: bytes, event: GalaxyEvent, event_code_descriptio
                 log.debug("Mapped event description: '%s'", event.event_description)
                 # Check if the optional Zone group was found.
                 if ec_match.group(2):
-                    event.zone = ec_match.group(2)
+                    event.zone = ec_match.group(2).lstrip('0') or '0'
                     log.debug("Parsed zone: '%s'", event.zone)
             else:
                 log.warning("Could not parse event code from section: %s", section)
@@ -178,4 +178,3 @@ def parse_galaxy_event(blocks: List[Dict], account_sites: Dict,
             log.warning("Unknown command '%s' passed to parser. Payload: %r", command, payload)
             
     return event
-
