@@ -104,6 +104,8 @@ def format_notification_text(event: Union[GalaxyEvent, MessageEvent]) -> str:
             notification += f" Group: {event.group}"
         if event.peripheral:
             notification += f" Peripheral: {event.peripheral}"
+        if event.value:
+            notification += f" Value: {event.value}"            
 
     return notification.strip()
 
