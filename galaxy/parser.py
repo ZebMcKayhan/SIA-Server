@@ -102,7 +102,7 @@ def parse_data_payload(payload: bytes, event: GalaxyEvent, event_code_descriptio
             event.value = section[2:]
             log.debug("Parsed value: '%s'", event.value)
         else:
-            log.debug("Unknown data section identifier found: '%s'", section)
+            log.warning("Unknown data section modifier '%s' in payload: %r", section, payload)
     
     # Process the last section ('CL' or 'BA1011')
     # It always contains the 2-character Event Code.
