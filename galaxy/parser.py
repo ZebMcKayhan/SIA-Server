@@ -101,6 +101,15 @@ def parse_data_payload(payload: bytes, event: GalaxyEvent, event_code_descriptio
         elif section.startswith('va'): # Observed in auto-test as interval in minutes (va1440 = 24h)
             event.value = section[2:]
             log.debug("Parsed value: '%s'", event.value)
+        # Other possible modifiers according to SIA standard, but never observed:
+        # da = Date
+        # ai = Automated ID
+        # ph = Telephone ID
+        # lv = Level
+        # pt = Path
+        # rg = Route Group
+        # ss = Sub-Subscriber
+        # We let a warning message catch them in the log if they appear:
         else:
             log.warning("Unknown data section modifier '%s' in payload: %r", section, payload)
     
