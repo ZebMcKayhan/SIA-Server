@@ -98,7 +98,7 @@ def parse_data_payload(payload: bytes, event: GalaxyEvent, event_code_descriptio
         elif section.startswith('ri'):
             event.group = section[2:]
             log.debug("Parsed group: '%s'", event.group)
-        elif section.startswith('va'):
+        elif section.startswith('va'): # Observed in auto-test as interval in minutes (va1440 = 24h)
             event.value = section[2:]
             log.debug("Parsed value: '%s'", event.value)
         else:
