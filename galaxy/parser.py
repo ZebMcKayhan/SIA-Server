@@ -78,62 +78,62 @@ def parse_data_payload(payload: bytes, event: GalaxyEvent, event_code_descriptio
     event.data_payload = payload
     data_str = payload.decode('utf-8', errors='ignore')
 
-    # The payload consists of sections separated by '/', the last one is special (ECzzzz).
+    # The payload consists of sections separated by '/', the lowercase is data modifier, uppercase is Event Code (ECzzzz).
     sections = data_str.split('/')
     if not sections:
         return
 
-    # Process all sections before the last one for identifiers, ti, id, pi, ri, va.
-    # We loop through them one by one, but skip the last one.
-    for section in sections[:-1]:
-        if section.startswith('ti'): # ti11:45
-            event.time = section[2:] # 11:45
-            log.debug("Parsed time: '%s'", event.time)
-        elif section.startswith('id'):  # id001
-            event.user_id = section[2:] # 001
-            log.debug("Parsed user_id: '%s'", event.user_id)
-        elif section.startswith('pi'):
-            event.peripheral = section[2:]
-            log.debug("Parsed peripheral: '%s'", event.peripheral)
-        elif section.startswith('ri'):
-            event.group = section[2:]
-            log.debug("Parsed group: '%s'", event.group)
-        elif section.startswith('va'): # Observed in auto-test as interval in minutes (va1440 = 24h)
-            event.value = section[2:]
-            log.debug("Parsed value: '%s'", event.value)
-        # Other possible modifiers according to SIA standard, but never observed:
-        # da = Date
-        # ai = Automated ID
-        # ph = Telephone ID
-        # lv = Level
-        # pt = Path
-        # rg = Route Group
-        # ss = Sub-Subscriber
-        # We let a warning message catch them in the log if they appear:
+    # Process all sections for lowercase identifiers, ti, id, pi, ri, va or uppercase Event Code.
+    for section in sections:
+        if section[:2].islower():
+            if section.startswith('ti'): # ti11:45
+                event.time = section[2:] # 11:45
+                log.debug("Parsed time: '%s'", event.time)
+            elif section.startswith('id'):  # id001
+                event.user_id = section[2:] # 001
+                log.debug("Parsed user_id: '%s'", event.user_id)
+            elif section.startswith('pi'):
+                event.peripheral = section[2:]
+                log.debug("Parsed peripheral: '%s'", event.peripheral)
+            elif section.startswith('ri'):
+                event.group = section[2:]
+                log.debug("Parsed group: '%s'", event.group)
+            elif section.startswith('va'): # Observed in auto-test as interval in minutes (va1440 = 24h)
+                event.value = section[2:]
+                log.debug("Parsed value: '%s'", event.value)
+            # Other possible modifiers according to SIA standard, but never observed:
+            # da = Date
+            # ai = Automated ID
+            # ph = Telephone ID
+            # lv = Level
+            # pt = Path
+            # rg = Route Group
+            # ss = Sub-Subscriber
+            # We let a warning message catch them in the log if they appear:
+            else:
+                log.warning("Unknown data section modifier '%s' in payload: %r", section, payload)
+        elif section[:2].isupper():
+            # Process Event Code section ('CL' or 'BA1011')
+            # It always contains the 2-character Event Code.
+            # It may also have a 3-4 digit Zone Number appended directly to the code.
+            # We use regex to extract the two parts:
+            #   - Group 1: ([A-Z]{2})  -> Exactly two uppercase letters (the Event Code)
+            #   - Group 2: (\d{3,4})?  -> An optional group of 3 or 4 digits (the Zone)
+            ec_match = re.match(r'([A-Z]{2})(\d{3,4})?', section)
+            if ec_match:
+                event.event_code = ec_match.group(1)
+                log.debug("Parsed event_code: '%s'", event.event_code)
+                # Look up the human-readable description for this event code.
+                event.event_description = event_code_descriptions.get(event.event_code, "Unknown")
+                log.debug("Mapped event description: '%s'", event.event_description)
+                # Check if the optional Zone group was found.
+                if ec_match.group(2):
+                    event.zone = ec_match.group(2)
+                    log.debug("Parsed zone: '%s'", event.zone)
+            else:
+                log.warning("Could not parse event code from section: %s", section)
         else:
-            log.warning("Unknown data section modifier '%s' in payload: %r", section, payload)
-    
-    # Process the last section ('CL' or 'BA1011')
-    # It always contains the 2-character Event Code.
-    # It may also have a 3-4 digit Zone Number appended directly to the code.
-    last_section = sections[-1]
-
-    # We use regex to extract the two parts:
-    #   - Group 1: ([A-Z]{2})   -> Exactly two uppercase letters (the Event Code)
-    #   - Group 2: (\d{3,4})?  -> An optional group of 3 or 4 digits (the Zone)
-    ec_match = re.match(r'([A-Z]{2})(\d{3,4})?', last_section)
-    if ec_match:
-        event.event_code = ec_match.group(1)
-        log.debug("Parsed event_code: '%s'", event.event_code)
-        # Look up the human-readable description for this event code.
-        event.event_description = event_code_descriptions.get(event.event_code, "Unknown")
-        log.debug("Mapped event description: '%s'", event.event_description)
-        # Check if the optional Zone group was found.
-        if ec_match.group(2):
-            event.zone = ec_match.group(2)
-            log.debug("Parsed zone: '%s'", event.zone)
-    else:
-        log.warning("Could not parse event code from last section: %s", last_section)
+            log.warning("Unknown data section '%s' in payload: %r", section, payload)
 
 def parse_ascii_payload(payload: bytes, event: GalaxyEvent, char_map: Dict[bytes, str]):
     """Parses the clean payload of an ASCII block."""
