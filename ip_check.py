@@ -209,7 +209,7 @@ def validate_ip_check_packet(data: bytes) -> bool:
 
 def extract_account(data: bytes) -> str:
     """Extract account number from IP Check packet bytes 1-8."""
-    return data[1:9].decode('ascii', errors='ignore').lstrip('0')
+    return data[1:9].decode('ascii', errors='ignore').lstrip('0') or '0'
     
 async def handle_ip_check(reader, writer, notification_queue: Queue):
     """Handles an incoming IP Check connection by echoing the received data."""
