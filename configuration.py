@@ -370,7 +370,7 @@ def load_accounts(config_file: str = 'sia-server.conf') -> AccountsConfig:
 
     for section_name in account_sections:
         is_default     = (section_name == 'Default')
-        account_number = 'default' if is_default else section_name
+        account_number = 'default' if is_default else section_name.lstrip('0') or '0'
 
         # Site name - default account uses the literal string 'default' as fallback
         site_name = config.get(section_name, 'site_name', fallback=account_number)
