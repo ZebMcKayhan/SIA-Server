@@ -4,11 +4,13 @@ Configuration loader for the Galaxy SIA Server.
 Reads and validates settings from 'sia-server.conf',
 and provides them as clean Python objects to the main application.
 
-Loading is done in two phases:
-  Phase 1: load_logging_config() - reads only [Logging] section so that
+Loading is done in three phases:
+  Phase 1: load_logging_config()     - reads only [Logging] section so that
            logging can be set up as early as possible.
-  Phase 2: load_full_config()    - reads all remaining configuration with
-           logging now fully available.
+  Phase 2: load_application_config() - reads all server/infrastructure
+           configuration with logging now fully available.
+  Phase 3: load_accounts()           - reads all account sections and returns
+           an AccountsConfig object with provider-agnostic raw config.
 """
 
 import configparser
@@ -16,6 +18,9 @@ import logging
 import logging.handlers
 import sys
 import re
+import time
+from dataclasses import dataclass, field
+from typing import Dict, Optional
 from galaxy.constants import UNKNOWN_CHAR_MAP
 
 log = logging.getLogger(__name__)
@@ -61,7 +66,6 @@ def load_logging_config(config_file: str = 'sia-server.conf') -> LoggingConfig:
         sys.exit(1)
 
     if not config.has_section('Logging'):
-        # No logging section found, use all defaults silently.
         return logging_config
 
     logging_config.LOG_LEVEL = config.get('Logging', 'log_level', fallback='INFO').upper()
@@ -106,38 +110,33 @@ def load_logging_config(config_file: str = 'sia-server.conf') -> LoggingConfig:
                 backup_count = config.getint('Logging', 'log_backup_count', fallback=5)
                 logging_config.LOG_BACKUP_COUNT = backup_count if 1 <= backup_count <= 10 else 5
             except ValueError:
-                pass  # Use defaults
+                pass
 
     return logging_config
 
 
 # ===================================================================
-# PHASE 2: Full Application Configuration
+# PHASE 2: Application Configuration
 # ===================================================================
 
 class AppConfig:
     """Holds the complete, validated application configuration."""
     def __init__(self):
-        # --- Settings from sia-server.conf ---
         self.LISTEN_ADDR           = '0.0.0.0'
         self.LISTEN_PORT           = 10000
         self.REJECT_POLICY         = 'respond'
         self.IP_CHECK_ENABLED      = False
         self.IP_CHECK_ADDR         = '0.0.0.0'
         self.IP_CHECK_PORT         = 10001
-        self.IP_CHECK_WATCHDOG     = 2.1 
+        self.IP_CHECK_WATCHDOG     = 2.1
         self.IP_CHECK_LOST_PRIO    = 4
         self.IP_CHECK_RESTORE_PRIO = 2
-        self.ACCOUNT_SITES         = {}
-        self.NTFY_TOPICS           = {}
-        self.ACCOUNT_POLICIES      = {}
         self.MAX_QUEUE_SIZE        = 50
         self.MAX_RETRIES           = 10
         self.MAX_RETRY_TIME        = 30
         self.EVENT_PRIORITIES      = {}
         self.DEFAULT_PRIORITY      = 5
-        # --- Advanced / Constant Defaults ---
-        self.UNKNOWN_CHAR_MAP = UNKNOWN_CHAR_MAP
+        self.UNKNOWN_CHAR_MAP      = UNKNOWN_CHAR_MAP
 
 
 def _validate_port(port: int, section: str, key: str) -> bool:
@@ -152,45 +151,11 @@ def _validate_port(port: int, section: str, key: str) -> bool:
     return True
 
 
-def _parse_topic_config(config: configparser.ConfigParser, section_name: str) -> dict | None:
-    """Helper function to parse notification settings for a given section."""
-    if not config.getboolean(section_name, 'ntfy_enabled', fallback=False):
-        return None
-    if not config.has_option(section_name, 'ntfy_topic'):
-        log.warning("Section [%s] has NTFY_ENABLED=Yes but is missing NTFY_TOPIC. "
-                    "Notifications for this section will be disabled.", section_name)
-        return None
-
-    topic_config = {'enabled': True}
-    topic_config['url']   = config.get(section_name, 'ntfy_topic')
-    topic_config['title'] = config.get(section_name, 'ntfy_title', fallback='Galaxy Alarm')
-
-    auth_method = config.get(section_name, 'ntfy_auth', fallback='None').lower()
-
-    if auth_method == 'token':
-        token = config.get(section_name, 'ntfy_token', fallback=None)
-        if token:
-            topic_config['auth'] = {'method': 'token', 'token': token}
-        else:
-            log.warning("In section [%s], auth is 'Token' but 'ntfy_token' is missing. "
-                        "Auth will be disabled.", section_name)
-    elif auth_method == 'userpass':
-        user     = config.get(section_name, 'ntfy_user', fallback=None)
-        password = config.get(section_name, 'ntfy_pass', fallback=None)
-        if user and password:
-            topic_config['auth'] = {'method': 'userpass', 'user': user, 'pass': password}
-        else:
-            log.warning("In section [%s], auth is 'Userpass' but user/pass is incomplete. "
-                        "Auth will be disabled.", section_name)
-
-    return topic_config
-
-
-def load_full_config(config_file: str = 'sia-server.conf') -> AppConfig:
+def load_application_config(config_file: str = 'sia-server.conf') -> AppConfig:
     """
-    Phase 2: Reads and validates all remaining configuration from sia-server config file.
-    Logging is fully available at this point so all warnings and errors
-    will be captured correctly.
+    Phase 2: Reads and validates server/infrastructure configuration.
+    Logging is fully available at this point.
+    Account configuration is handled separately by load_accounts().
     """
     config = configparser.ConfigParser(inline_comment_prefixes=('#', ';'))
 
@@ -250,7 +215,6 @@ def load_full_config(config_file: str = 'sia-server.conf') -> AppConfig:
                 log.critical("Configuration Error in [IP-Check]: listen_port must be a number.")
                 is_valid = False
 
-            # --- Watchdog threshold ---
             try:
                 threshold = config.getfloat('IP-Check', 'watchdog_threshold',
                                             fallback=app_config.IP_CHECK_WATCHDOG)
@@ -267,7 +231,6 @@ def load_full_config(config_file: str = 'sia-server.conf') -> AppConfig:
                 log.warning("Invalid WATCHDOG_THRESHOLD in [IP-Check]. Must be a number. "
                             "Using default %.1f.", app_config.IP_CHECK_WATCHDOG)
 
-            # --- Watchdog notification priorities ---
             try:
                 lost_prio = config.getint('IP-Check', 'watchdog_lost_prio',
                                           fallback=app_config.IP_CHECK_LOST_PRIO)
@@ -340,7 +303,6 @@ def load_full_config(config_file: str = 'sia-server.conf') -> AppConfig:
                                     "Codes must be 2 characters.", code, key.upper())
             app_config.EVENT_PRIORITIES = event_priorities
 
-            # --- Parse Default Priority ---
             app_config.DEFAULT_PRIORITY = config.getint('Notification', 'default_priority',
                                                          fallback=5)
             if not 1 <= app_config.DEFAULT_PRIORITY <= 5:
@@ -351,23 +313,69 @@ def load_full_config(config_file: str = 'sia-server.conf') -> AppConfig:
         except ValueError:
             log.warning("Invalid number in [Notification] section. Using default queue settings.")
 
-    # --- Load Site and Default Sections ---
-    system_sections = ['SIA-Server', 'IP-Check', 'Logging', 'Notification']
+    if not is_valid:
+        log.critical("Configuration validation failed. Please check the errors above. Exiting.")
+        sys.exit(1)
+
+    log.info("Application configuration loaded successfully from '%s'.", config_file)
+    return app_config
+
+
+# ===================================================================
+# PHASE 3: Account Configuration
+# ===================================================================
+
+@dataclass
+class AccountConfig:
+    """Configuration for a single account/site."""
+    account_number: str
+    site_name: str
+    policy: str              # 'yes' | 'no' | 'secure'
+    provider_config: dict    # raw key-value pairs, provider-agnostic
+
+
+@dataclass
+class AccountsConfig:
+    """All configured accounts including the default fallback."""
+    load_time: float
+    accounts: Dict[str, AccountConfig] = field(default_factory=dict)
+
+    def get(self, account_number: str) -> Optional[AccountConfig]:
+        """Get account config, falling back to default if not found."""
+        return self.accounts.get(account_number,
+                                 self.accounts.get('default'))
+
+
+def load_accounts(config_file: str = 'sia-server.conf') -> AccountsConfig:
+    """
+    Phase 3: Reads all account sections from the config file and returns
+    an AccountsConfig object. Each account's provider-specific settings
+    are stored as a raw dict - notification.py decides what to do with them.
+    """
+    config = configparser.ConfigParser(inline_comment_prefixes=('#', ';'))
+
+    try:
+        if not config.read(config_file):
+            log.critical("Configuration Error: '%s' was not found or is empty.", config_file)
+            sys.exit(1)
+    except configparser.DuplicateSectionError as e:
+        log.critical("Configuration Error: Duplicate section in '%s': %s", config_file, e)
+        log.critical("Please ensure each account number appears only once.")
+        sys.exit(1)
+
+    accounts_config = AccountsConfig(load_time=time.time())
+
+    system_sections = {'SIA-Server', 'IP-Check', 'Logging', 'Notification'}
     account_sections = [s for s in config.sections() if s not in system_sections]
 
     for section_name in account_sections:
         is_default     = (section_name == 'Default')
         account_number = 'default' if is_default else section_name
 
-        if not is_default:
-            site_name = config.get(section_name, 'site_name', fallback=account_number)
-            app_config.ACCOUNT_SITES[account_number] = site_name
+        # Site name - default account uses the literal string 'default' as fallback
+        site_name = config.get(section_name, 'site_name', fallback=account_number)
 
-        topic_config = _parse_topic_config(config, section_name)
-        if topic_config:
-            app_config.NTFY_TOPICS[account_number] = topic_config
-
-        # --- Parse Connection Policy ---
+        # Connection policy
         policy_str = config.get(section_name, 'enabled', fallback='yes').lower()
         if policy_str in ['true', 'yes']:
             policy = 'yes'
@@ -379,12 +387,20 @@ def load_full_config(config_file: str = 'sia-server.conf') -> AppConfig:
             log.warning("Invalid 'enabled' value '%s' in section [%s]. Defaulting to 'yes'.",
                         policy_str, section_name)
             policy = 'yes'
-        app_config.ACCOUNT_POLICIES[account_number] = policy
 
-    if not is_valid:
-        log.critical("Configuration validation failed. Please check the errors above. Exiting.")
-        sys.exit(1)
+        # Raw provider config - everything in the section as-is
+        provider_config = dict(config.items(section_name))
 
-    log.info("Configuration loaded successfully from '%s'.", config_file)
-    return app_config
+        accounts_config.accounts[account_number] = AccountConfig(
+            account_number=account_number,
+            site_name=site_name,
+            policy=policy,
+            provider_config=provider_config,
+        )
 
+        log.debug("Loaded account '%s' (site: '%s', policy: '%s')",
+                  account_number, site_name, policy)
+
+    log.info("Loaded %d account(s) from '%s'.",
+             len(accounts_config.accounts), config_file)
+    return accounts_config
