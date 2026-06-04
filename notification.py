@@ -11,6 +11,7 @@ import time
 from typing import Dict, Union
 from queue import Queue, Full as QueueFull, Empty
 from threading import Thread, Event as ThreadEvent
+from configuration import AccountsConfig
 from galaxy.parser import GalaxyEvent
 
 # --- Dependency and Logging Initialization ---
@@ -111,24 +112,32 @@ def format_notification_text(event: Union[GalaxyEvent, MessageEvent]) -> str:
 
 
 def _dispatch_http_notification(event: Union[GalaxyEvent, MessageEvent],
-                                ntfy_topics: Dict, priority_map: Dict,
+                                accounts: AccountsConfig, priority_map: Dict,
                                 default_priority: int) -> bool | None:
     """Sends a formatted notification using topic-specific configuration."""
 
-    # 1. Find the correct topic configuration for this event's account.
-    topic_config = ntfy_topics.get(event.account, ntfy_topics.get('default'))
-
-    # 2. Check if notifications are enabled for this specific topic.
-    if not topic_config or not topic_config.get('enabled', False):
-        log.debug("Notifications disabled for account '%s' or default topic. Skipping.", event.account)
+    # 1. Find the account config for this event
+    account_config = accounts.get(event.account)
+                                    
+    # 2. Build ntfy topic config from raw provider_config
+    if account_config is None:
+        log.debug("No account config found for '%s'. Skipping.", event.account)
         return None
 
-    ntfy_url = topic_config.get('url')
+    provider_config = account_config.provider_config
+
+    # Backwards compatibility: NTFY_ENABLED maps to provider selection
+    ntfy_enabled = provider_config.get('ntfy_enabled', 'no').lower() in ('yes', 'true')
+    if not ntfy_enabled:
+        log.debug("Notifications disabled for account '%s'. Skipping.", event.account)
+        return None
+
+    ntfy_url = provider_config.get('ntfy_topic')
     if not ntfy_url or 'your-topic-here' in ntfy_url:
-        log.warning("No valid ntfy.sh URL found for account '%s' or default. Skipping.", event.account)
+        log.warning("No valid ntfy.sh URL found for account '%s'. Skipping.", event.account)
         return None
 
-    # 3. Determine priority - MessageEvent uses fixed priority, GalaxyEvent uses lookup.
+    # 3. Determine priority
     if isinstance(event, MessageEvent):
         priority = event.priority
     else:
@@ -137,10 +146,10 @@ def _dispatch_http_notification(event: Union[GalaxyEvent, MessageEvent],
             return None
         priority = get_event_priority(event.event_code, priority_map, default_priority)
 
-    message = format_notification_text(event)
+    message = format_notification_text(event)                                    
 
-    # 4. Get the title from the topic's specific configuration.
-    notification_title = topic_config.get('title', 'Galaxy Alarm')
+    # 4. Build headers
+    notification_title = provider_config.get('ntfy_title', 'Galaxy Alarm')
     account_display = event.site_name or event.account
     title = f"{notification_title}: {account_display}"
 
@@ -149,22 +158,25 @@ def _dispatch_http_notification(event: Union[GalaxyEvent, MessageEvent],
         "Priority": str(priority),
     }
 
-    auth_config = topic_config.get('auth')
+    # 5. Handle authentication
+    auth_method = provider_config.get('ntfy_auth', 'none').lower()
     auth_details = None
-    if auth_config:
-        log.debug("ntfy.sh authentication is configured for this topic.")
-        method = auth_config.get('method')
-        if method == 'token':
-            token = auth_config.get('token')
-            if token:
-                headers['Authorization'] = f"Bearer {token}"
-                log.debug("Using Bearer token authentication.")
-        elif method == 'userpass':
-            user = auth_config.get('user')
-            password = auth_config.get('pass')
-            if user and password:
-                auth_details = (user, password)
-                log.debug("Using username/password authentication.")
+
+    if auth_method == 'token':
+        token = provider_config.get('ntfy_token')
+        if token:
+            headers['Authorization'] = f"Bearer {token}"
+            log.debug("Using Bearer token authentication.")
+        else:
+            log.warning("Auth is 'Token' for account '%s' but ntfy_token is missing.", event.account)
+    elif auth_method == 'userpass':
+        user     = provider_config.get('ntfy_user')
+        password = provider_config.get('ntfy_pass')
+        if user and password:
+            auth_details = (user, password)
+            log.debug("Using username/password authentication.")
+        else:
+            log.warning("Auth is 'Userpass' for account '%s' but user/pass is incomplete.", event.account)
 
     log.debug("Sending notification (priority %d) to %s: %s", priority, ntfy_url, message)
     log.info("Sending notification (priority %d) for account %s: %s", priority, account_display, message)
@@ -216,12 +228,12 @@ class NotificationDispatcher(Thread):
     It handles sending and retries with progressive backoff without blocking the queue.
     Supports both GalaxyEvent (SIA events) and MessageEvent (custom notifications).
     """
-    def __init__(self, queue: Queue, ntfy_topics: Dict, priority_map: Dict,
+    def __init__(self, queue: Queue, accounts: AccountsConfig, priority_map: Dict,
                  default_priority: int, max_retries: int, max_retry_time: int):
         super().__init__(daemon=True)
         self.name = "NotificationDispatcher"
         self.queue = queue
-        self.ntfy_topics = ntfy_topics
+        self.accounts = accounts
         self.priority_map = priority_map
         self.default_priority = default_priority
         self.max_retries = max_retries
@@ -256,7 +268,7 @@ class NotificationDispatcher(Thread):
                 continue
 
             success = _dispatch_http_notification(
-                event, self.ntfy_topics, self.priority_map, self.default_priority
+                event, self.accounts, self.priority_map, self.default_priority
             )
 
             if success is None:
