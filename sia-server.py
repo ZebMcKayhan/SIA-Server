@@ -267,7 +267,7 @@ async def handle_connection(notification_queue: Queue, reader, writer):
             # --- ACCOUNT POLICY ENFORCEMENT ---
             # Validate account_id if according to policy
             if command_name == 'ACCOUNT_ID':
-                account_number = payload.decode(errors='ignore')
+                account_number = payload.decode(errors='ignore').lstrip('0') or '0'
                 
                 account = accounts.get(account_number)
                 policy = account.policy if account else 'yes'
