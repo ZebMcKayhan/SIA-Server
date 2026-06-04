@@ -8,7 +8,7 @@ Honeywell Galaxy Flex alarm systems. It sends notifications via ntfy.sh.
 This server is configured via 'sia-server.conf' and 'configuration.py'.
 """
 # --- Application Version ---
-__version__ = "2.3.0-beta1"
+__version__ = "2.3.0-beta2"
 
 import argparse
 import asyncio
@@ -29,7 +29,7 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-from configuration import load_logging_config, load_full_config
+from configuration import load_logging_config, load_application_config, load_accounts
 
 # Load and validate all configuration from files.
 # This single 'config' object now holds all settings for the application.
@@ -109,8 +109,9 @@ log = logging.getLogger('sia_server')  # change name of local logs
 log.info("Logging configured successfully.")
 log.info("Using configuration file: %s", args.config)
 
-# Now load the full configuration WITH logging available ---
-config = load_full_config(args.config)
+# Now load the application and account configuration WITH logging available ---
+config = load_application_config(args.config)
+accounts = load_accounts(args.config)
 
 # Now, import the rest of our modules.
 try:
@@ -268,26 +269,20 @@ async def handle_connection(notification_queue: Queue, reader, writer):
             if command_name == 'ACCOUNT_ID':
                 account_number = payload.decode(errors='ignore')
                 
-                # Look up the policy. Fall back to 'default', then to 'yes'.
-                policy = config.ACCOUNT_POLICIES.get(
-                    account_number,
-                    config.ACCOUNT_POLICIES.get('default', 'yes')
-                )
+                account = accounts.get(account_number)
+                policy = account.policy if account else 'yes'
                 
                 is_encrypted = crypto is not None
                 log.debug("Account '%s' has policy '%s'. Session is encrypted: %s",
                           account_number, policy, is_encrypted)
-                # Policy: 'no' - This account is completely disabled.
                 if policy == 'no':
                     log.warning("POLICY: Account '%s' is DISABLED. Rejecting connection.", account_number)
                     await policy_reject(writer, crypto=crypto)
                     return
-                # Policy: 'secure' - This account requires an encrypted session.
                 if policy == 'secure' and not is_encrypted:
                     log.warning("POLICY: Account '%s' requires ENCRYPTED connection but received PLAINTEXT. Rejecting.", account_number)
                     await policy_reject(writer, crypto=crypto)
                     return
-                # If we reach here, the policy is satisfied.
                 account_validated = True
                 log.debug("POLICY: Account '%s' policy satisfied.", account_number)
             
@@ -319,7 +314,7 @@ async def handle_connection(notification_queue: Queue, reader, writer):
             
             event = parse_galaxy_event(
                 chunk,
-                config.ACCOUNT_SITES,
+                {k: v.site_name for k, v in accounts.accounts.items()},
                 config.UNKNOWN_CHAR_MAP,
                 EVENT_CODE_DESCRIPTIONS
             )
@@ -445,7 +440,7 @@ def main():
     notification_queue = Queue(maxsize=config.MAX_QUEUE_SIZE)
     dispatcher = NotificationDispatcher(
         notification_queue,
-        config.NTFY_TOPICS,
+        accounts,
         config.EVENT_PRIORITIES,
         config.DEFAULT_PRIORITY,
         config.MAX_RETRIES,
