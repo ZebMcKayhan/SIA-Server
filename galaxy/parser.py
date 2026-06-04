@@ -64,7 +64,7 @@ def decode_unknown_text(data: bytes, char_map: dict) -> str:
 def parse_account_payload(payload: bytes, event: GalaxyEvent):
     """Parses the clean payload of an ACCOUNT_ID block."""
     event.account_payload = payload
-    event.account = payload.decode('utf-8', errors='ignore')
+    event.account = payload.decode('utf-8', errors='ignore').lstrip('0') or '0'
     log.debug("Parsed account: '%s'", event.account)
 
 def parse_data_payload(payload: bytes, event: GalaxyEvent, event_code_descriptions: Dict):
