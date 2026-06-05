@@ -252,10 +252,7 @@ def _dispatch_notification(event: Union[GalaxyEvent, MessageEvent],
 
     message = format_notification_text(event)
     account_display = event.site_name or event.account
-    title = f"{account_display}"
 
-    # Let the provider build its own title if it has one
-    # (ntfy provider uses its configured title prefix)
     log.info("Sending notification (priority %d) via %s for account %s: %s",
              priority, provider.name, account_display, message)
 
