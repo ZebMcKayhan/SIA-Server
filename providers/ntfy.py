@@ -5,7 +5,7 @@ Sends notifications via ntfy.sh or a self-hosted ntfy server.
 Supports public topics, token authentication and username/password authentication.
 
 Configuration keys in sia-server.conf account section:
-  NTFY_TOPIC   = https://ntfy.sh/your-topic   (required)
+  NTFY_TOPIC   = https://ntfy.sh/your-topic    (required, but could be to a private server)
   NTFY_TITLE   = My Alarm                      (optional, default: 'Galaxy Alarm')
   NTFY_AUTH    = None | Token | Userpass       (optional, default: None)
   NTFY_TOKEN   = tk_yourtoken                  (required if NTFY_AUTH = Token)
@@ -43,14 +43,14 @@ class NtfyProvider(NotificationProvider):
 
     provider_name = 'ntfy'
 
-def __init__(self, account_number: str, site_name: str, url: str, title: str,
-             auth_method: str, auth_details: dict):
-    self._account_number = account_number
-    self._site_name      = site_name
-    self._url            = url
-    self._title          = title
-    self._auth_method    = auth_method
-    self._auth_details   = auth_details
+    def __init__(self, account_number: str, site_name: str, url: str, title: str,
+                 auth_method: str, auth_details: dict):
+        self._account_number = account_number
+        self._site_name      = site_name
+        self._url            = url
+        self._title          = title
+        self._auth_method    = auth_method
+        self._auth_details   = auth_details
 
     @classmethod
     def from_config(cls, account_number: str, provider_config: dict) -> 'NtfyProvider':
@@ -67,6 +67,9 @@ def __init__(self, account_number: str, site_name: str, url: str, title: str,
 
         # --- Title ---
         title = provider_config.get('ntfy_title', 'Galaxy Alarm')
+
+        # --- Site name ---
+        site_name = provider_config.get('site_name', account_number)
 
         # --- Authentication ---
         auth_method  = provider_config.get('ntfy_auth', 'none').lower()
@@ -96,11 +99,9 @@ def __init__(self, account_number: str, site_name: str, url: str, title: str,
         log.debug("ntfy provider configured for account '%s' (url=%s, auth=%s)",
                   account_number, url, auth_method)
 
-        site_name = provider_config.get('site_name', account_number)
         return cls(account_number, site_name, url, title, auth_method, auth_details)
 
     def send(self, account: str, message: str, priority: int) -> bool | None:
-        full_title = f"{self._title}: {self._site_name}"
         """
         Send a notification via ntfy.sh HTTP POST.
 
@@ -109,8 +110,10 @@ def __init__(self, account_number: str, site_name: str, url: str, title: str,
             False - delivery failed, will be retried
             None  - should not happen for ntfy (config validated in from_config)
         """
+        full_title = f"{self._title}: {self._site_name}"
+
         headers = {
-            'Title':    title,
+            'Title':    full_title,
             'Priority': str(priority),
         }
 
@@ -126,6 +129,8 @@ def __init__(self, account_number: str, site_name: str, url: str, title: str,
 
         log.debug("Sending ntfy notification (priority %d) to %s: %s",
                   priority, self._url, message)
+        log.info("Sending ntfy notification (priority %d) for account %s: %s",
+                 priority, self._site_name, message)
 
         try:
             response = requests.post(
