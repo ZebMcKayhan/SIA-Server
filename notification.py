@@ -259,7 +259,7 @@ def _dispatch_notification(event: Union[GalaxyEvent, MessageEvent],
     log.info("Sending notification (priority %d) via %s for account %s: %s",
              priority, provider.name, account_display, message)
 
-    return provider.send(title, message, priority)
+    return provider.send(event.account, message, priority)
 
 
 # ===================================================================
