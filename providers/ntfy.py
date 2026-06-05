@@ -43,13 +43,14 @@ class NtfyProvider(NotificationProvider):
 
     provider_name = 'ntfy'
 
-    def __init__(self, account_number: str, url: str, title: str,
-                 auth_method: str, auth_details: dict):
-        self._account_number = account_number
-        self._url            = url
-        self._title          = title
-        self._auth_method    = auth_method  # 'none' | 'token' | 'userpass'
-        self._auth_details   = auth_details  # {'token': ...} or {'user': ..., 'pass': ...}
+def __init__(self, account_number: str, site_name: str, url: str, title: str,
+             auth_method: str, auth_details: dict):
+    self._account_number = account_number
+    self._site_name      = site_name
+    self._url            = url
+    self._title          = title
+    self._auth_method    = auth_method
+    self._auth_details   = auth_details
 
     @classmethod
     def from_config(cls, account_number: str, provider_config: dict) -> 'NtfyProvider':
@@ -95,9 +96,11 @@ class NtfyProvider(NotificationProvider):
         log.debug("ntfy provider configured for account '%s' (url=%s, auth=%s)",
                   account_number, url, auth_method)
 
-        return cls(account_number, url, title, auth_method, auth_details)
+        site_name = provider_config.get('site_name', account_number)
+        return cls(account_number, site_name, url, title, auth_method, auth_details)
 
-    def send(self, title: str, message: str, priority: int) -> bool | None:
+    def send(self, account: str, message: str, priority: int) -> bool | None:
+        full_title = f"{self._title}: {self._site_name}"
         """
         Send a notification via ntfy.sh HTTP POST.
 
