@@ -64,9 +64,9 @@ class NotificationProvider(ABC):
         Send a notification.
 
         Args:
-            title:    Notification title string.
-            message:  Notification message body.
-            priority: Integer priority 1-5 (1=lowest, 5=highest/urgent).
+            site_name: The site/account name from account configuration.
+            message:   Notification message body.
+            priority:  Integer priority 1-5 (1=lowest, 5=highest/urgent).
 
         Returns:
             True  - Notification sent successfully.
