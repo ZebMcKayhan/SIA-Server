@@ -58,17 +58,17 @@ class NotificationProvider(ABC):
         """
         ...
 
-@abstractmethod
-def send(self, account: str, message: str, priority: int) -> bool | None:
-    """
-    Send a notification.
+    @abstractmethod
+    def send(self, account: str, message: str, priority: int) -> bool | None:
+        """
+        Send a notification.
 
-    Args:
-        account:  The account number this notification belongs to.
-        message:  Notification message body.
-        priority: Integer priority 1-5 (1=lowest, 5=highest/urgent).
-    """
-    ...
+        Args:
+            account:  The account number this notification belongs to.
+            message:  Notification message body.
+            priority: Integer priority 1-5 (1=lowest, 5=highest/urgent).
+        """
+        ...
 
     @property
     def name(self) -> str:
