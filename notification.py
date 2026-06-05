@@ -1,18 +1,33 @@
 """
 Galaxy SIA Notification Handler
 
-This module is responsible for formatting and sending notifications
-to a service like ntfy.sh based on a parsed GalaxyEvent or MessageEvent.
+This module is responsible for:
+  - Formatting notification text from SIA events
+  - Managing the notification queue and retry logic
+  - Discovering and loading provider plugins from providers/
+  - Routing notifications to the correct provider per account
+
+Provider plugins are auto-discovered from the providers/ directory.
+Each plugin must subclass providers.base.NotificationProvider and define
+a class attribute 'provider_name'.
+
+Backwards compatibility:
+  NTFY_ENABLED = Yes   is treated as PROVIDER = ntfy
+  NTFY_ENABLED = No    is treated as PROVIDER = none (notifications disabled)
 """
 
+import importlib
 import logging
+import pkgutil
 import sys
 import time
-from typing import Dict, Union
+from typing import Dict, Optional, Union
 from queue import Queue, Full as QueueFull, Empty
 from threading import Thread, Event as ThreadEvent
+
 from configuration import AccountsConfig
 from galaxy.parser import GalaxyEvent
+from providers.base import NotificationProvider
 
 # --- Dependency and Logging Initialization ---
 log = logging.getLogger(__name__)
@@ -29,20 +44,6 @@ except ImportError:
     else:
         log.info("PyOpenSSL not available; using default system SSL context.")
 
-# --- CRITICAL: Check for 'requests' library ---
-try:
-    import requests
-except ImportError:
-    log.critical("="*60)
-    log.critical("FATAL ERROR: The 'requests' library is not installed.")
-    log.critical("This library is required to send notifications.")
-    if sys.platform == "win32":
-        log.critical("Please install it by running: python -m pip install requests")
-    else:
-        log.critical("Please install it by running: sudo apt install python3-requests")
-    log.critical("="*60)
-    sys.exit(1)
-
 
 class MessageEvent:
     """
@@ -52,7 +53,7 @@ class MessageEvent:
     Examples: watchdog heartbeat alerts, server status messages, etc.
     Priority is fixed by the caller rather than derived from event codes.
     """
-    def __init__(self, account: str, site_name: str, 
+    def __init__(self, account: str, site_name: str,
                  message: str, priority: int):
         self.account           = account
         self.site_name         = site_name
@@ -66,6 +67,114 @@ class MessageEvent:
         self.user_id           = None
 
 
+# ===================================================================
+# Provider Discovery
+# ===================================================================
+
+def _get_all_subclasses(cls):
+    """Recursively find all subclasses of a class."""
+    result = {}
+    for subclass in cls.__subclasses__():
+        if hasattr(subclass, 'provider_name'):
+            result[subclass.provider_name] = subclass
+        result.update(_get_all_subclasses(subclass))
+    return result
+
+
+def _discover_providers() -> Dict[str, type]:
+    """
+    Auto-discover all provider plugins in the providers/ directory.
+    Imports each module and collects all NotificationProvider subclasses.
+    Returns a dict mapping provider_name -> provider class.
+    """
+    import providers
+
+    for finder, name, ispkg in pkgutil.iter_modules(providers.__path__):
+        if name == 'base':
+            continue
+        try:
+            importlib.import_module(f'providers.{name}')
+            log.debug("Loaded provider plugin: %s", name)
+        except Exception as e:
+            log.warning("Failed to load provider plugin '%s': %s", name, e)
+
+    registry = {}
+    for provider_name, cls in _get_all_subclasses(NotificationProvider).items():
+        if provider_name in registry:
+            log.warning("Provider name conflict: '%s' registered by both %s and %s. "
+                        "Using %s.", provider_name, registry[provider_name], cls, cls)
+        registry[provider_name] = cls
+        log.info("Registered notification provider: '%s'", provider_name)
+
+    return registry
+
+
+# ===================================================================
+# Provider instantiation per account
+# ===================================================================
+
+def _get_provider_name(provider_config: dict) -> Optional[str]:
+    """
+    Determine which provider to use for an account.
+
+    Checks for PROVIDER key first, then falls back to
+    NTFY_ENABLED for backwards compatibility.
+    """
+    # New style: explicit PROVIDER key
+    provider = provider_config.get('provider', '').lower().strip()
+    if provider and provider != 'none':
+        return provider
+
+    # Backwards compatibility: NTFY_ENABLED = Yes → ntfy
+    ntfy_enabled = provider_config.get('ntfy_enabled', 'no').lower()
+    if ntfy_enabled in ('yes', 'true'):
+        log.debug("NTFY_ENABLED detected - using 'ntfy' provider. "
+                  "Consider switching to PROVIDER = ntfy.")
+        return 'ntfy'
+
+    return None
+
+
+def _build_provider_cache(accounts: AccountsConfig,
+                           registry: Dict[str, type]) -> Dict[str, Optional[NotificationProvider]]:
+    """
+    Build a cache of provider instances per account.
+    Called once at startup - validates all account configs early.
+    Returns dict mapping account_number -> provider instance (or None if disabled).
+    """
+    cache = {}
+    for account_number, account_config in accounts.accounts.items():
+        provider_name = _get_provider_name(account_config.provider_config)
+
+        if provider_name is None:
+            log.debug("Account '%s': no notification provider configured.", account_number)
+            cache[account_number] = None
+            continue
+
+        if provider_name not in registry:
+            log.warning("Account '%s': unknown provider '%s'. "
+                        "Notifications disabled for this account.",
+                        account_number, provider_name)
+            cache[account_number] = None
+            continue
+
+        try:
+            provider = registry[provider_name].from_config(
+                account_number, account_config.provider_config)
+            log.info("Account '%s': using provider '%s'.", account_number, provider_name)
+            cache[account_number] = provider
+        except ValueError as e:
+            log.warning("Account '%s': provider configuration error - %s. "
+                        "Notifications disabled for this account.", account_number, e)
+            cache[account_number] = None
+
+    return cache
+
+
+# ===================================================================
+# Notification formatting
+# ===================================================================
+
 def get_event_priority(event_code: str, priority_map: Dict, default_priority: int) -> int:
     """Gets the notification priority for a given event code from the defaults map."""
     return priority_map.get(event_code, default_priority)
@@ -78,21 +187,17 @@ def format_notification_text(event: Union[GalaxyEvent, MessageEvent]) -> str:
     For GalaxyEvent, intelligently chooses between the rich ASCII block text
     or constructs a message from the Data block fields.
     """
-    # MessageEvent always has the complete message in action_text
     if isinstance(event, MessageEvent):
         return event.action_text
 
-    # Use a more descriptive name to avoid shadowing the 'time' module.
     event_time = event.time or "??"
 
-    # If we have the rich text from the ASCII block, use it (SIA Level 3+)
     if event.action_text:
         notification = f"{event_time} {event.action_text}"
         # The Zone address is the RIO address, which name is already in the ASCII block.
         # This was not what I intended, commenting this until I figure out what to do:
         #if event.zone and event.zone not in str(event.action_text):
         #    notification += f" (Zone {event.zone})"
-    # Otherwise, build a basic message from the Data block fields (SIA Level 2)
     else:
         notification = f"{event_time}"
         if event.event_code:
@@ -106,100 +211,60 @@ def format_notification_text(event: Union[GalaxyEvent, MessageEvent]) -> str:
         if event.peripheral:
             notification += f" Peripheral: {event.peripheral}"
         if event.value:
-            notification += f" Value: {event.value}"            
+            notification += f" Value: {event.value}"
 
     return notification.strip()
 
 
-def _dispatch_http_notification(event: Union[GalaxyEvent, MessageEvent],
-                                accounts: AccountsConfig, priority_map: Dict,
-                                default_priority: int) -> bool | None:
-    """Sends a formatted notification using topic-specific configuration."""
+# ===================================================================
+# Dispatch
+# ===================================================================
 
-    # 1. Find the account config for this event
-    account_config = accounts.get(event.account)
-                                    
-    # 2. Build ntfy topic config from raw provider_config
-    if account_config is None:
-        log.debug("No account config found for '%s'. Skipping.", event.account)
+def _dispatch_notification(event: Union[GalaxyEvent, MessageEvent],
+                            provider_cache: Dict[str, Optional[NotificationProvider]],
+                            priority_map: Dict,
+                            default_priority: int) -> bool | None:
+    """
+    Dispatch a notification to the appropriate provider for this event's account.
+
+    Returns:
+        True  - sent successfully
+        False - delivery failed, will be retried
+        None  - no provider configured or config issue, skip silently
+    """
+    # Look up provider - try account first, then default
+    provider = provider_cache.get(event.account)
+    if provider is None and event.account != 'default':
+        provider = provider_cache.get('default')
+
+    if provider is None:
+        log.debug("No provider configured for account '%s'. Skipping.", event.account)
         return None
 
-    provider_config = account_config.provider_config
-
-    # Backwards compatibility: NTFY_ENABLED maps to provider selection
-    ntfy_enabled = provider_config.get('ntfy_enabled', 'no').lower() in ('yes', 'true')
-    if not ntfy_enabled:
-        log.debug("Notifications disabled for account '%s'. Skipping.", event.account)
-        return None
-
-    ntfy_url = provider_config.get('ntfy_topic')
-    if not ntfy_url or 'your-topic-here' in ntfy_url:
-        log.warning("No valid ntfy.sh URL found for account '%s'. Skipping.", event.account)
-        return None
-
-    # 3. Determine priority
+    # Determine priority
     if isinstance(event, MessageEvent):
         priority = event.priority
     else:
         if not event.event_code:
-            log.warning("Event has no event_code, cannot determine priority. Skipping notification.")
+            log.warning("Event has no event_code, cannot determine priority. Skipping.")
             return None
         priority = get_event_priority(event.event_code, priority_map, default_priority)
 
-    message = format_notification_text(event)                                    
-
-    # 4. Build headers
-    notification_title = provider_config.get('ntfy_title', 'Galaxy Alarm')
+    message = format_notification_text(event)
     account_display = event.site_name or event.account
-    title = f"{notification_title}: {account_display}"
+    title = f"{account_display}"
 
-    headers = {
-        "Title": title,
-        "Priority": str(priority),
-    }
+    # Let the provider build its own title if it has one
+    # (ntfy provider uses its configured title prefix)
+    log.info("Sending notification (priority %d) via %s for account %s: %s",
+             priority, provider.name, account_display, message)
 
-    # 5. Handle authentication
-    auth_method = provider_config.get('ntfy_auth', 'none').lower()
-    auth_details = None
+    return provider.send(title, message, priority)
 
-    if auth_method == 'token':
-        token = provider_config.get('ntfy_token')
-        if token:
-            headers['Authorization'] = f"Bearer {token}"
-            log.debug("Using Bearer token authentication.")
-        else:
-            log.warning("Auth is 'Token' for account '%s' but ntfy_token is missing.", event.account)
-    elif auth_method == 'userpass':
-        user     = provider_config.get('ntfy_user')
-        password = provider_config.get('ntfy_pass')
-        if user and password:
-            auth_details = (user, password)
-            log.debug("Using username/password authentication.")
-        else:
-            log.warning("Auth is 'Userpass' for account '%s' but user/pass is incomplete.", event.account)
 
-    log.debug("Sending notification (priority %d) to %s: %s", priority, ntfy_url, message)
-    log.info("Sending notification (priority %d) for account %s: %s", priority, account_display, message)
-
-    try:
-        response = requests.post(
-            ntfy_url,
-            data=message.encode('utf-8'),
-            headers=headers,
-            timeout=10,
-            auth=auth_details
-        )
-        response.raise_for_status()
-        log.debug("Dispatch successful for account %s.", event.account)
-        return True
-
-    except requests.exceptions.Timeout:
-        log.error("Notification failed: Request to ntfy.sh timed out.")
-        return False
-    except requests.exceptions.RequestException as e:
-        log.error("Dispatch failed for account %s: %s", event.account, e)
-        return False
-
+# ===================================================================
+# Queue helpers
+# ===================================================================
 
 def _enqueue(event: Union[GalaxyEvent, MessageEvent], queue: Queue):
     """
@@ -215,12 +280,15 @@ def _enqueue(event: Union[GalaxyEvent, MessageEvent], queue: Queue):
             pass
 
     try:
-        # A new event is always ready to be sent immediately (next_attempt_time = 0)
         queue.put_nowait((event, 0, 0))
         log.debug("Event for account %s added to notification queue.", event.account)
     except QueueFull:
         log.error("Notification queue is still full! Event for %s was lost.", event.account)
 
+
+# ===================================================================
+# Dispatcher thread
+# ===================================================================
 
 class NotificationDispatcher(Thread):
     """
@@ -231,51 +299,55 @@ class NotificationDispatcher(Thread):
     def __init__(self, queue: Queue, accounts: AccountsConfig, priority_map: Dict,
                  default_priority: int, max_retries: int, max_retry_time: int):
         super().__init__(daemon=True)
-        self.name = "NotificationDispatcher"
-        self.queue = queue
-        self.accounts = accounts
-        self.priority_map = priority_map
-        self.default_priority = default_priority
-        self.max_retries = max_retries
+        self.name              = "NotificationDispatcher"
+        self.queue             = queue
+        self.accounts          = accounts
+        self.priority_map      = priority_map
+        self.default_priority  = default_priority
+        self.max_retries       = max_retries
         self.max_retry_time_minutes = max_retry_time
-        self.shutdown_event = ThreadEvent()
+        self.shutdown_event    = ThreadEvent()
+        self._provider_cache: Dict[str, Optional[NotificationProvider]] = {}
+
+    def start(self):
+        """Discover providers and build cache before starting the thread."""
+        registry = _discover_providers()
+        self._provider_cache = _build_provider_cache(self.accounts, registry)
+        super().start()
 
     def get_retry_delay(self, retry_count: int) -> int:
         """
         Calculates the retry delay using progressive exponential backoff.
         The delay doubles with each retry, up to the configured maximum.
         """
-        base_delay = 1  # in minutes
+        base_delay    = 1
         current_delay = base_delay * (2 ** (retry_count - 1))
-        final_delay = min(current_delay, self.max_retry_time_minutes)
-        return final_delay * 60  # Convert minutes to seconds
+        final_delay   = min(current_delay, self.max_retry_time_minutes)
+        return final_delay * 60
 
     def run(self):
         log.info("NotificationDispatcher thread started.")
         while not self.shutdown_event.is_set():
             event, retry_count, next_attempt_time = self.queue.get()
-            if not event:  # Shutdown signal
+            if not event:
                 self.queue.task_done()
                 break
 
             current_time = time.time()
 
             if current_time < next_attempt_time:
-                # Not time to retry yet - put back and process next item.
                 self.queue.put((event, retry_count, next_attempt_time))
                 self.queue.task_done()
                 time.sleep(1.0)
                 continue
 
-            success = _dispatch_http_notification(
-                event, self.accounts, self.priority_map, self.default_priority
+            success = _dispatch_notification(
+                event, self._provider_cache, self.priority_map, self.default_priority
             )
 
             if success is None:
-                # Configuration issue - skip silently, no retry
-                log.debug("Notification skipped for account %s.", event.account)            
+                log.debug("Notification skipped for account %s.", event.account)
             elif not success:
-                # Network/temporary issue - retry with backoff
                 retry_count += 1
                 if self.max_retries == 0 or retry_count <= self.max_retries:
                     delay = self.get_retry_delay(retry_count)
@@ -296,8 +368,12 @@ class NotificationDispatcher(Thread):
     def stop(self):
         log.info("Stopping NotificationDispatcher thread...")
         self.shutdown_event.set()
-        self.queue.put((None, 0, 0))  # Unblock the .get() call
+        self.queue.put((None, 0, 0))
 
+
+# ===================================================================
+# Public enqueue functions
+# ===================================================================
 
 def enqueue_notification(event: GalaxyEvent, queue: Queue):
     """
@@ -314,7 +390,7 @@ def enqueue_message_notification(account: str, site_name: str,
     Puts a generic message notification onto the notification queue.
     Can be called by any part of the system to send a custom notification.
     Priority is explicitly set by the caller.
-    
+
     Examples of use:
     - ip_check.py: heartbeat connection lost/restored
     - sia-server.py: server starting/stopping
