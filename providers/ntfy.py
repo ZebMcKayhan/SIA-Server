@@ -11,9 +11,6 @@ Configuration keys in sia-server.conf account section:
   NTFY_TOKEN   = tk_yourtoken                  (required if NTFY_AUTH = Token)
   NTFY_USER    = username                      (required if NTFY_AUTH = Userpass)
   NTFY_PASS    = password                      (required if NTFY_AUTH = Userpass)
-
-Backwards compatibility:
-  NTFY_ENABLED = Yes | No                      (deprecated, use PROVIDER = ntfy instead)
 """
 
 import logging
