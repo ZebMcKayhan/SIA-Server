@@ -58,22 +58,17 @@ class NotificationProvider(ABC):
         """
         ...
 
-    @abstractmethod
-    def send(self, title: str, message: str, priority: int) -> bool | None:
-        """
-        Send a notification.
+@abstractmethod
+def send(self, account: str, message: str, priority: int) -> bool | None:
+    """
+    Send a notification.
 
-        Args:
-            site_name: The site/account name from account configuration.
-            message:   Notification message body.
-            priority:  Integer priority 1-5 (1=lowest, 5=highest/urgent).
-
-        Returns:
-            True  - Notification sent successfully.
-            False - Delivery failed, will be retried with backoff.
-            None  - Configuration issue, skip silently without retry.
-        """
-        ...
+    Args:
+        account:  The account number this notification belongs to.
+        message:  Notification message body.
+        priority: Integer priority 1-5 (1=lowest, 5=highest/urgent).
+    """
+    ...
 
     @property
     def name(self) -> str:
