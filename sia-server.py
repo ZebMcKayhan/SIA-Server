@@ -314,7 +314,7 @@ async def handle_connection(notification_queue: Queue, reader, writer):
             
             event = parse_galaxy_event(
                 chunk,
-                {k: v.site_name for k, v in accounts.accounts.items()},
+                {k: v.site_name for k, v in accounts.accounts.items() if v.site_name is not None},
                 config.UNKNOWN_CHAR_MAP,
                 EVENT_CODE_DESCRIPTIONS
             )
