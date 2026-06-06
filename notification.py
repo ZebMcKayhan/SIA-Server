@@ -256,7 +256,7 @@ def _dispatch_notification(event: Union[GalaxyEvent, MessageEvent],
     message = format_notification_text(event)
     account_display = event.site_name or event.account
 
-    log.info("Sending notification (priority %d) via %s for account %s: %s",
+    log.debug("Sending notification (priority %d) via %s for account %s: %s",
              priority, provider.name, account_display, message)
 
     return provider.send(event.account, message, priority)
