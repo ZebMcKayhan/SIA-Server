@@ -329,7 +329,7 @@ def load_application_config(config_file: str = 'sia-server.conf') -> AppConfig:
 class AccountConfig:
     """Configuration for a single account/site."""
     account_number: str
-    site_name: str
+    site_name: Optional[str]
     policy: str              # 'yes' | 'no' | 'secure'
     provider_config: dict    # raw key-value pairs, provider-agnostic
 
@@ -372,8 +372,8 @@ def load_accounts(config_file: str = 'sia-server.conf') -> AccountsConfig:
         is_default     = (section_name == 'Default')
         account_number = 'default' if is_default else section_name.lstrip('0') or '0'
 
-        # Site name - default account uses the literal string 'default' as fallback
-        site_name = config.get(section_name, 'site_name', fallback=account_number)
+        # Site name - None if not configured, account number used as fallback at display time
+        site_name = config.get(section_name, 'site_name', fallback=None)
 
         # Connection policy
         policy_str = config.get(section_name, 'enabled', fallback='yes').lower()
