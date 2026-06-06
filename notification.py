@@ -233,8 +233,11 @@ def _dispatch_notification(event: Union[GalaxyEvent, MessageEvent],
         None  - no provider configured or config issue, skip silently
     """
     # Look up provider - try account first, then default
-    provider = provider_cache.get(event.account)
-    if provider is None and event.account != 'default':
+    # Note: we must distinguish between 'account not in cache' (fall back to default)
+    # and 'account in cache but provider is None' (explicitly disabled, no fallback)
+    if event.account in provider_cache:
+        provider = provider_cache[event.account]
+    else:
         provider = provider_cache.get('default')
 
     if provider is None:
