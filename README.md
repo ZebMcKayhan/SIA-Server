@@ -9,7 +9,8 @@ allowing users to regain full control over their alarm alerts without ongoing su
 
 Notifications are delivered via [ntfy.sh](https://ntfy.sh/) — a free, open-source push notification
 service. Just install the ntfy app on your phone (Android/iOS), subscribe to a topic, and you're done.
-No account, no registration, no subscription required.
+No account, no registration, no subscription required. Custom notification providers are also supported
+via a plugin system — see [providers/README.md](providers/README.md) for details.
 
 This project was developed and tested on a Honeywell Galaxy Flex 20. It is likely compatible with 
 other Honeywell Galaxy panels, but this has not been verified.
@@ -33,6 +34,9 @@ self-hosted alternative without installing a full home automation ecosystem, thi
 -   **Protocol State Machine:** Enforces correct SIA message ordering. Any connection that does not start with a valid `ACCOUNT_ID` is immediately rejected or silently dropped.
 -   **Character Encoding Fixes:** Decodes the proprietary character set used by Galaxy panels (e.g., Å, Ä, Ö).
 -   **Highly Configurable:** Most user settings are in a simple `sia-server.conf` file, with advanced protocol constants located in the `galaxy/` directory.
+-   **Extensible Notification Providers:** Built-in support for ntfy.sh with a plugin architecture
+    for custom providers. Drop a new provider file into the `providers/` directory and it is
+    auto-discovered at startup. See [providers/README.md](providers/README.md).
 
 ## Prerequisites
 
@@ -62,6 +66,11 @@ The project is structured to separate the server logic, protocol parsing, and co
 │   ├── README.md           # Technical description of the protocol.  
 │   ├── parser.py           # Handles parsing of the Galaxy SIA protocol.
 │   └── constants.py        # Constants used in the SIA protocol.
+├── providers/
+│   ├── __init__.py
+│   ├── README.md           # How to create custom notification providers.
+│   ├── base.py             # Abstract base class for notification providers.
+│   └── ntfy.py             # Built-in ntfy.sh notification provider.
 └── asuswrt-merlin/
     ├── README.md           # Install instructions for Asuswrt-Merlin.
     ├── S99siaserver        # Entware service (init.d) file.
@@ -139,7 +148,7 @@ On Windows, simply edit the file with a text editor like Notepad.
 
 For most users, only three things need to be changed in `sia-server.conf`:
 
-1. **Your account number and ntfy.sh topic** — Add a section with your panel's account number and your ntfy.sh topic URL.
+1. **Your account number and notification provider** — Add a section with your panel's account number and configure your preferred notification provider (default: ntfy.sh).
 2. **Port numbers** — Match the ports you configured on the alarm panel.
 3. **Logging** — Choose `Screen` for testing, or `File` with a path for permanent use.
 
@@ -156,7 +165,10 @@ The primary configuration is done in `sia-server.conf`. This file is designed to
         -   `Yes` — Accept all connections to this account (default).
         -   `No` — Reject all connections from this account.
         -   `Secure` — Only accept encrypted connections. Plaintext connections will be rejected. You will need to supply `galaxy/encryption.py` to enable encryption.
-    -   `NTFY_ENABLED`, `NTFY_TOPIC`, `NTFY_TITLE`: Configure notification delivery for this site.
+    -   `PROVIDER`: The notification provider to use. Set to `ntfy` for ntfy.sh notifications, or
+        `None` to disable notifications for this account. Custom providers are supported —
+        see [providers/README.md](providers/README.md).
+    -   `NTFY_TOPIC`, `NTFY_TITLE`: Configure ntfy.sh notification delivery for this site.
     -   `NTFY_AUTH`: Set to `None`, `Token`, or `Userpass` for private topics and provide the corresponding `NTFY_TOKEN` or `NTFY_USER`/`NTFY_PASS` keys.
 -   **`[Default]` Section:** A special section for events from account numbers not specifically listed.
 -   **`[SIA-Server]` Section:** Configure the ports and addresses for the main server.
