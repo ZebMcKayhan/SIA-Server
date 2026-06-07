@@ -255,8 +255,15 @@ def _dispatch_notification(event: Union[GalaxyEvent, MessageEvent],
 
     message = format_notification_text(event)
 
-    log.info("Sending notification (priority %d) via %s for account %s: %s",
-             priority, provider.name, event.account, message)
+    # Build display name for logging - site_name if available, otherwise just account number
+    site_name = getattr(event, 'site_name', None)
+    if site_name and site_name != event.account:
+        display = f"{site_name} ({event.account})"
+    else:
+        display = f"{event.account}"
+
+    log.info("Sending notification (priority %d) via %s for %s: %s",
+             priority, provider.name, display, message)
 
     return provider.send(event.account, message, priority)
 
