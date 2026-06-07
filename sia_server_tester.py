@@ -17,7 +17,9 @@ Message modes (mutually exclusive, one is required):
   --account-id ID --new-event EVT   Build and send new event message from payloads.
   --account-id ID --old-event EVT   Build and send old event message from payloads.
   --ascii TEXT                      ASCII block is optional (omit for SIA level 0/1/2).
-    
+  --account-id ID --ip-check        Send a simulated IP Check (heartbeat) ping.
+  --interval HH:MM                  Heartbeat interval for --ip-check (default: 00:15)
+
 --- SIA Event Structure Reference ---
 
 Event types and their DATA block (N) formats by SIA level:
@@ -95,7 +97,7 @@ SIA Level 2 - Zone alarm (no ASCII block), Custom response timeout (default is 2
     python sia_server_tester.py --timeout 0.5 \\
       --account-id 123456 \\
       --new-event 'ti23:42/ri01/BA1011'
-    
+
     python sia_server_tester.py --account-id 123456 \\
       --old-event 'ti23:42/ri01/BA1011'
 
@@ -115,12 +117,19 @@ SIA Level 0 - System event (fixed 000 suffix):
     python sia_server_tester.py --account-id 1234 \\
       --new-event 'RP000'
 
+IP Check (heartbeat) - default 15 minute interval, default port 10001:
+    python sia_server_tester.py --account-id 123456 --ip-check
+
+IP Check with custom interval and port:
+    python sia_server_tester.py --account-id 123456 --ip-check \\
+      --interval 00:30 --port 10001
+
 Send built-in sample message:
     python sia_server_tester.py --send-sample
 
 Send built-in sample to a remote host:
     python sia_server_tester.py --host 192.168.1.100 --send-sample
-    
+
 Example using raw hex segments:
     python sia_server_tester.py \\
       --segment 46233032333439399f \\
@@ -133,6 +142,7 @@ from __future__ import annotations
 
 import argparse
 import socket
+import struct
 import sys
 import time
 from typing import Iterable, List
@@ -140,12 +150,19 @@ from typing import Iterable, List
 from galaxy.constants import COMMAND_BYTES
 
 
-DEFAULT_HOST = '127.0.0.1'
-DEFAULT_PORT = 10000
-DEFAULT_TIMEOUT = 2.0
-SAMPLE_ACCOUNT = '123456'
+DEFAULT_HOST       = '127.0.0.1'
+DEFAULT_PORT       = 10000
+DEFAULT_IP_CHECK_PORT = 10001
+DEFAULT_TIMEOUT    = 2.0
+DEFAULT_INTERVAL   = '00:15'
+PANEL_EPOCH_OFFSET = 54000  # 15 hours - same as ip_check.py
+
+SAMPLE_ACCOUNT  = '123456'
 SAMPLE_NEW_EVENT = 'ti23:42/id023/pi013/CG'
-SAMPLE_ASCII = ' PART SET USER'
+SAMPLE_ASCII    = ' PART SET USER'
+
+# Static block bytes 9-14 - observed constant across all captures
+_IP_CHECK_STATIC = bytes([0x11, 0x0c, 0x00, 0xfd, 0x09, 0x00])
 
 
 def build_sia_block(command: str | int, payload: bytes = b'') -> bytes:
@@ -174,7 +191,64 @@ def parse_hex_segment(segment: str) -> bytes:
     return bytes.fromhex(normalized)
 
 
-def send_segments(host: str, port: int, segments: Iterable[bytes], timeout: float, quiet: bool = False) -> None:
+def parse_interval(interval_str: str) -> int:
+    """Parse HH:MM interval string and return total seconds."""
+    try:
+        parts = interval_str.strip().split(':')
+        if len(parts) != 2:
+            raise ValueError
+        hours   = int(parts[0])
+        minutes = int(parts[1])
+        if not (0 <= hours <= 99 and 0 <= minutes <= 59):
+            raise ValueError
+        return hours * 3600 + minutes * 60
+    except ValueError:
+        raise ValueError(f"Invalid interval format '{interval_str}'. Use HH:MM (e.g. 00:15 or 01:30).")
+
+
+def build_ip_check_packet(account_id: str, interval_seconds: int) -> bytes:
+    """
+    Build a 26-byte IP Check (heartbeat) packet.
+
+    Structure:
+      Byte 0:     0x00 header
+      Bytes 1-8:  account number, ASCII zero-padded to 8 chars
+      Bytes 9-14: static ID block (observed constant across all captures)
+      Bytes 15-18: timestamp, 32-bit little-endian (Unix time - PANEL_EPOCH_OFFSET)
+      Byte 19:    0x3c (unknown, always observed as 60)
+      Bytes 20-23: interval in seconds, 32-bit little-endian
+      Bytes 24-25: checksum (algorithm unknown, set to 0x00 0x00)
+
+    Note: The checksum algorithm is unknown so bytes 24-25 are set to 0x00.
+          ip_check.py does not currently validate the checksum so this is
+          sufficient for testing.
+    """
+    # Byte 0: header
+    header = bytes([0x00])
+
+    # Bytes 1-8: account number zero-padded to 8 chars
+    account_padded = account_id.zfill(8).encode('ascii')[:8]
+
+    # Bytes 15-18: timestamp (current unix time minus panel epoch offset)
+    timestamp = int(time.time()) - PANEL_EPOCH_OFFSET
+    ts_bytes = struct.pack('<I', timestamp & 0xFFFFFFFF)
+
+    # Byte 19: unknown, always 0x3c
+    unknown = bytes([0x3c])
+
+    # Bytes 20-23: interval in seconds
+    iv_bytes = struct.pack('<I', interval_seconds & 0xFFFFFFFF)
+
+    # Bytes 24-25: checksum unknown, set to 0x00
+    checksum = bytes([0x00, 0x00])
+
+    packet = header + account_padded + _IP_CHECK_STATIC + ts_bytes + unknown + iv_bytes + checksum
+    assert len(packet) == 26, f"IP Check packet must be 26 bytes, got {len(packet)}"
+    return packet
+
+
+def send_segments(host: str, port: int, segments: Iterable[bytes],
+                  timeout: float, quiet: bool = False) -> None:
     """Send raw byte segments to the SIA server, reading and printing the response after each segment."""
     segments_list = list(segments)
     print(f'Connecting to {host}:{port}...')
@@ -208,7 +282,38 @@ def send_segments(host: str, port: int, segments: Iterable[bytes], timeout: floa
                     print(f'  → No response within {timeout}s, continuing.')
 
 
-def build_sample_message(account_id: str, event_payload: str, 
+def send_ip_check(host: str, port: int, packet: bytes,
+                  timeout: float, quiet: bool = False) -> None:
+    """
+    Send an IP Check packet and wait for the echo response.
+    The server echoes the exact packet back - we verify it matches.
+    """
+    print(f'Connecting to {host}:{port} for IP Check...')
+    with socket.create_connection((host, port), timeout=5) as sock:
+        if not quiet:
+            print(f'Sending IP Check packet ({len(packet)} bytes): {packet.hex()}')
+        sock.sendall(packet)
+
+        try:
+            sock.settimeout(timeout)
+            response = sock.recv(1024)
+            if response:
+                if response == packet:
+                    if not quiet:
+                        print(f'  → Echo received ({len(response)} bytes) ✓ matches sent packet')
+                else:
+                    if not quiet:
+                        print(f'  → Response received ({len(response)} bytes): {response.hex()}')
+                        print(f'  → WARNING: Response does not match sent packet!')
+            else:
+                if not quiet:
+                    print(f'  → No response received.')
+        except socket.timeout:
+            if not quiet:
+                print(f'  → No response within {timeout}s.')
+
+
+def build_sample_message(account_id: str, event_payload: str,
                          event_command: str = 'NEW_EVENT',
                          ascii_text: str | None = None) -> List[bytes]:
     """Build a standard ACCOUNT_ID + NEW_EVENT/OLD_EVENT + (optional ASCII) + END_OF_DATA sequence."""
@@ -224,19 +329,65 @@ def build_sample_message(account_id: str, event_payload: str,
 
 def main(argv: List[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description='Send raw Galaxy SIA packets to a SIA server.')
-    parser.add_argument('--host', default=DEFAULT_HOST, help='Server host (default: 127.0.0.1)')
-    parser.add_argument('--port', type=int, default=DEFAULT_PORT, help='Server port (default: 10000)')
-    parser.add_argument('--timeout', type=float, default=DEFAULT_TIMEOUT, help='Max time in seconds to wait for a response per segment (default: 2.0)')
-    parser.add_argument('--account-id', help='Account ID payload for ACCOUNT_ID command.')
-    parser.add_argument('--new-event', help='Payload for NEW_EVENT command.')
-    parser.add_argument('--old-event', help='Payload for OLD_EVENT command (same format as --new-event).')
-    parser.add_argument('--ascii', dest='ascii_text', help='Payload for ASCII command.')
-    parser.add_argument('--send-sample', action='store_true', help='Send the built-in sample message sequence.')
-    parser.add_argument('--segment', action='append', default=[], help='Raw hex segment to send. Can be repeated.')
-    parser.add_argument('--quiet', action='store_true', help='Suppress debug output.')
+    parser.add_argument('--host', default=DEFAULT_HOST,
+                        help='Server host (default: 127.0.0.1)')
+    parser.add_argument('--port', type=int, default=DEFAULT_PORT,
+                        help='Server port (default: 10000, IP Check default: 10001)')
+    parser.add_argument('--timeout', type=float, default=DEFAULT_TIMEOUT,
+                        help='Max time in seconds to wait for a response (default: 2.0)')
+    parser.add_argument('--account-id',
+                        help='Account ID payload for ACCOUNT_ID command.')
+    parser.add_argument('--new-event',
+                        help='Payload for NEW_EVENT command.')
+    parser.add_argument('--old-event',
+                        help='Payload for OLD_EVENT command (same format as --new-event).')
+    parser.add_argument('--ascii', dest='ascii_text',
+                        help='Payload for ASCII command.')
+    parser.add_argument('--ip-check', action='store_true',
+                        help='Send a simulated IP Check (heartbeat) ping.')
+    parser.add_argument('--interval', default=DEFAULT_INTERVAL,
+                        help='Heartbeat interval for --ip-check in HH:MM format (default: 00:15).')
+    parser.add_argument('--send-sample', action='store_true',
+                        help='Send the built-in sample message sequence.')
+    parser.add_argument('--segment', action='append', default=[],
+                        help='Raw hex segment to send. Can be repeated.')
+    parser.add_argument('--quiet', action='store_true',
+                        help='Suppress debug output.')
 
     args = parser.parse_args(argv)
 
+    # --- IP Check mode ---
+    if args.ip_check:
+        if not args.account_id:
+            parser.error('--ip-check requires --account-id.')
+
+        # Default to IP Check port if user did not specify a port
+        port = args.port if args.port != DEFAULT_PORT else DEFAULT_IP_CHECK_PORT
+
+        try:
+            interval_seconds = parse_interval(args.interval)
+        except ValueError as e:
+            parser.error(str(e))
+
+        packet = build_ip_check_packet(args.account_id, interval_seconds)
+
+        if not args.quiet:
+            print('SIA Server Tester - IP Check mode')
+            print('----------------------------------')
+            print(f'Host:     {args.host}')
+            print(f'Port:     {port}')
+            print(f'Account:  {args.account_id}')
+            print(f'Interval: {args.interval} ({interval_seconds}s)')
+            print(f'Timeout:  {args.timeout}s')
+
+        try:
+            send_ip_check(args.host, port, packet, args.timeout, quiet=args.quiet)
+            return 0
+        except Exception as exc:
+            print(f'ERROR: {exc}', file=sys.stderr)
+            return 1
+
+    # --- SIA Event modes ---
     if args.send_sample:
         segments = build_sample_message(SAMPLE_ACCOUNT, SAMPLE_NEW_EVENT, 'NEW_EVENT', SAMPLE_ASCII)
     elif args.segment:
@@ -246,18 +397,18 @@ def main(argv: List[str] | None = None) -> int:
             parser.error('When building a message, --account-id and --new-event or --old-event are required.')
         if args.new_event and args.old_event:
             parser.error('Cannot use both --new-event and --old-event.')
-        event_payload  = args.new_event or args.old_event
-        event_command  = 'NEW_EVENT' if args.new_event else 'OLD_EVENT'
+        event_payload = args.new_event or args.old_event
+        event_command = 'NEW_EVENT' if args.new_event else 'OLD_EVENT'
         segments = build_sample_message(args.account_id, event_payload, event_command, args.ascii_text)
     else:
-        parser.error('Provide --send-sample, --segment, or the command payload arguments.')
+        parser.error('Provide --send-sample, --segment, --ip-check, or the command payload arguments.')
 
     if not args.quiet:
         print('SIA Server Tester')
         print('------------------')
-        print(f'Host: {args.host}')
-        print(f'Port: {args.port}')
-        print(f'Timeout: {args.timeout}s')
+        print(f'Host:     {args.host}')
+        print(f'Port:     {args.port}')
+        print(f'Timeout:  {args.timeout}s')
         print(f'Segments: {len(segments)}')
 
     try:

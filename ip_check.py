@@ -29,7 +29,7 @@ parser.add_argument(
 args = parser.parse_args()
 
 # 2. Import configuration loader
-from configuration import load_logging_config, load_full_config
+from configuration import load_logging_config, load_application_config, load_accounts
 
 # 3. Load ONLY logging config first 
 logging_config = load_logging_config(args.config)
@@ -47,8 +47,9 @@ root_logger.addHandler(handler)
 
 log = logging.getLogger('ip_check')
 
-# 5. NOW load full config - logging is ready so all warnings/errors are captured
-config = load_full_config(args.config)
+# 5. NOW load application and account config - logging is ready so all warnings/errors are captured
+config = load_application_config(args.config)
+accounts = load_accounts(args.config)
 
 # 6. Now, import the rest of our modules.
 from notification import NotificationDispatcher, enqueue_message_notification
@@ -161,7 +162,7 @@ async def watchdog_task(notification_queue: Queue):
                 # Connection lost!
                 watchdog_state[account_number]['state'] = 'DISCONNECTED'
                 last_panel_time = state['last_panel_time']
-                site_name = config.ACCOUNT_SITES.get(account_number, account_number)
+                site_name = accounts.get(account_number).site_name if accounts.get(account_number) else account_number
                 # Format elapsed time as hh:mm:ss
                 elapsed_int = int(elapsed)
                 e_hours = elapsed_int // 3600
@@ -208,7 +209,7 @@ def validate_ip_check_packet(data: bytes) -> bool:
 
 def extract_account(data: bytes) -> str:
     """Extract account number from IP Check packet bytes 1-8."""
-    return data[1:9].decode('ascii', errors='ignore').lstrip('0')
+    return data[1:9].decode('ascii', errors='ignore').lstrip('0') or '0'
     
 async def handle_ip_check(reader, writer, notification_queue: Queue):
     """Handles an incoming IP Check connection by echoing the received data."""
@@ -249,10 +250,8 @@ async def handle_ip_check(reader, writer, notification_queue: Queue):
 
         # --- ACCOUNT POLICY ENFORCEMENT ---
         account_number = extract_account(data)
-        policy = config.ACCOUNT_POLICIES.get(
-            account_number,
-            config.ACCOUNT_POLICIES.get('default', 'yes')
-        )
+        account = accounts.get(account_number)
+        policy = account.policy if account else 'yes'
         is_encrypted = crypto is not None
 
         if policy == 'no':
@@ -264,7 +263,7 @@ async def handle_ip_check(reader, writer, notification_queue: Queue):
             return
 
         log.debug("IP Check account '%s' policy satisfied.", account_number)
-        site_name = config.ACCOUNT_SITES.get(account_number, account_number)
+        site_name = account.site_name if account else account_number
         update_watchdog(account_number, site_name, data, notification_queue)
         
         log.debug("Received ping from site: %s (Account: %s) from %s. Echoing response.",
@@ -308,7 +307,7 @@ async def start_ip_check_server(): # Renamed from 'main' to be an async function
     notification_queue = Queue(maxsize=config.MAX_QUEUE_SIZE)
     dispatcher = NotificationDispatcher(
         notification_queue,
-        config.NTFY_TOPICS,
+        accounts,
         config.EVENT_PRIORITIES,
         config.DEFAULT_PRIORITY,
         config.MAX_RETRIES,
