@@ -34,9 +34,12 @@ class MyProvider(NotificationProvider):
 
     provider_name = 'myprovider'  # must be unique, lowercase
 
-    def __init__(self, account_number: str, ...):
-        self._account_number = account_number
-        # store validated config values
+    def __init__(self, site_name: str, my_setting: str):
+        # Store validated config values.
+        # Do NOT store account_number - it is passed to send() at runtime
+        # as the actual account number received from the panel.
+        self._site_name  = site_name   # None if not configured
+        self._my_setting = my_setting
 
     @classmethod
     def from_config(cls, account_number: str, provider_config: dict) -> 'MyProvider':
@@ -44,26 +47,38 @@ class MyProvider(NotificationProvider):
         Validate config and return a configured instance.
         Raises ValueError if config is invalid.
         provider_config keys are always lowercase.
+        account_number is available for error messages and logging only.
         """
-        # validate required keys
+        # Validate required keys
         my_setting = provider_config.get('my_setting')
         if not my_setting:
             raise ValueError(f"[{account_number}] MY_SETTING is required but missing.")
 
-        return cls(account_number, my_setting)
+        # site_name is None if not configured - use account number as fallback in send()
+        site_name = provider_config.get('site_name')
+
+        return cls(site_name, my_setting)
 
     def send(self, account: str, message: str, priority: int) -> bool | None:
         """
         Send a notification.
+
+        Args:
+            account:  The account number received from the panel (ground truth).
+            message:  The formatted notification text.
+            priority: Integer 1-5 (1=lowest, 5=highest/urgent).
 
         Returns:
             True  - sent successfully
             False - delivery failed, will be retried with backoff
             None  - configuration issue, skip silently without retry
         """
+        # Use configured site_name for display if available, otherwise account number
+        display_name = self._site_name if self._site_name else account
+
         try:
             # your delivery code here
-            log.info("Sent notification for account %s via myprovider.", account)
+            log.info("Sent notification for %s (%s) via myprovider.", display_name, account)
             return True
         except Exception as e:
             log.error("Failed to send notification for account %s: %s", account, e)
@@ -71,7 +86,11 @@ class MyProvider(NotificationProvider):
 
     @property
     def name(self) -> str:
-        return f'myprovider'
+        """
+        Simple provider name used by notification.py in log messages.
+        Keep this short - detailed delivery info belongs in send() logs.
+        """
+        return 'myprovider'
 ```
 
 ### 2. Configure an account to use your provider
@@ -107,9 +126,12 @@ all required settings and raise `ValueError` with a descriptive message if
 anything is missing or invalid. This is the right place to check for external
 dependencies.
 
+Note: `account_number` is available for use in error messages and logging only.
+Do not store it - the actual runtime account number is passed to `send()`.
+
 ### `send(account, message, priority)` (instance method)
 Called each time a notification needs to be sent. Parameters:
-- `account` - the account number string
+- `account` - the account number string as received from the panel (ground truth)
 - `message` - the formatted notification text
 - `priority` - integer 1-5 (1=lowest, 5=highest/urgent)
 
@@ -119,8 +141,9 @@ Return values:
 - `None` - configuration issue, skip silently without retry
 
 ### `name` (property)
-Optional. Human-readable name used in log messages. Defaults to `provider_name`
-but can be overridden to include useful context like the destination URL.
+Human-readable provider name used in log messages by `notification.py`.
+Should return a simple name like `'myprovider'`. Keep it short - detailed
+delivery information belongs in the provider's own log messages inside `send()`.
 
 ## Configuration Keys
 
@@ -128,12 +151,12 @@ Your provider can use any configuration keys in the account section of
 `sia-server.conf`. Keys are normalized to lowercase by the configuration loader.
 
 The following keys are reserved and used by the server itself:
-- `site_name` - the human-readable site name
+- `site_name` - the human-readable site name (`None` if not configured).
+  Available in `provider_config` in `from_config()`. Use it to build
+  notification titles, falling back to the `account` parameter in `send()`
+  when `None`.
 - `enabled` - connection policy (Yes/No/Secure)
 - `provider` - which provider to use
-
-Your provider has access to all keys including `site_name` via `provider_config`
-in `from_config()`. This is useful for building notification titles.
 
 ## External Dependencies
 
@@ -164,4 +187,4 @@ Provider plugins that meet the following criteria are welcome as pull requests:
 - Documented configuration keys
 
 Providers requiring additional dependencies beyond the standard library and
-`requests` are welcome as forks or private implementations.
+`requests` or `pycryptodome` are welcome as forks or private implementations.
