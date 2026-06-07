@@ -129,10 +129,11 @@ class NtfyProvider(NotificationProvider):
             auth = (self._auth_details['user'], self._auth_details['password'])
             log.debug("Using username/password authentication.")
 
+        display = f"{self._site_name} ({account})" if self._site_name else account
         log.debug("Sending ntfy notification (priority %d) to %s: %s",
                   priority, self._url, message)
-        log.info("Sending ntfy notification (priority %d) for account %s: %s",
-                 priority, account, message)  # always log account number
+        log.info("Sending ntfy notification (priority %d) for %s: %s",
+                 priority, display, message)
 
         try:
             response = requests.post(
