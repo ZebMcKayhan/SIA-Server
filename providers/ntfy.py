@@ -43,9 +43,8 @@ class NtfyProvider(NotificationProvider):
 
     provider_name = 'ntfy'
 
-    def __init__(self, account_number: str, site_name: str, url: str, title: str,
+    def __init__(self, site_name: str, url: str, title: str,
                  auth_method: str, auth_details: dict):
-        self._account_number = account_number
         self._site_name      = site_name
         self._url            = url
         self._title          = title
@@ -69,7 +68,8 @@ class NtfyProvider(NotificationProvider):
         title = provider_config.get('ntfy_title', 'Galaxy Alarm')
 
         # --- Site name ---
-        site_name = provider_config.get('site_name', account_number)
+        # Site name - None if not configured, account number used as fallback in send()
+        site_name = provider_config.get('site_name')
 
         # --- Authentication ---
         auth_method  = provider_config.get('ntfy_auth', 'none').lower()
@@ -99,7 +99,7 @@ class NtfyProvider(NotificationProvider):
         log.debug("ntfy provider configured for account '%s' (url=%s, auth=%s)",
                   account_number, url, auth_method)
 
-        return cls(account_number, site_name, url, title, auth_method, auth_details)
+        return cls(site_name, url, title, auth_method, auth_details)
 
     def send(self, account: str, message: str, priority: int) -> bool | None:
         """
@@ -110,7 +110,9 @@ class NtfyProvider(NotificationProvider):
             False - delivery failed, will be retried
             None  - should not happen for ntfy (config validated in from_config)
         """
-        full_title = f"{self._title}: {self._site_name}"
+        # Use configured site_name for display if available, otherwise account number
+        display_name = self._site_name if self._site_name else account
+        full_title = f"{self._title}: {display_name}"
 
         headers = {
             'Title':    full_title,
@@ -130,7 +132,7 @@ class NtfyProvider(NotificationProvider):
         log.debug("Sending ntfy notification (priority %d) to %s: %s",
                   priority, self._url, message)
         log.info("Sending ntfy notification (priority %d) for account %s: %s",
-                 priority, self._site_name, message)
+                 priority, account, message)  # always log account number
 
         try:
             response = requests.post(
@@ -141,17 +143,15 @@ class NtfyProvider(NotificationProvider):
                 auth=auth
             )
             response.raise_for_status()
-            log.debug("ntfy dispatch successful for account %s.", self._account_number)
+            log.debug("ntfy dispatch successful for account %s.", account)
             return True
 
         except requests.exceptions.Timeout:
-            log.error("ntfy notification failed for account %s: request timed out.",
-                      self._account_number)
+            log.error("ntfy notification failed for account %s: request timed out.", account)
             return False
 
         except requests.exceptions.RequestException as e:
-            log.error("ntfy dispatch failed for account %s: %s",
-                      self._account_number, e)
+            log.error("ntfy dispatch failed for account %s: %s", account, e)
             return False
 
     @property
