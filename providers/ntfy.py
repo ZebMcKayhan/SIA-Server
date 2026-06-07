@@ -156,4 +156,4 @@ class NtfyProvider(NotificationProvider):
 
     @property
     def name(self) -> str:
-        return f'ntfy({self._url})'
+        return 'ntfy'
