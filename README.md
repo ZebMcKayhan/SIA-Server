@@ -21,6 +21,12 @@ self-hosted alternative without installing a full home automation ecosystem, thi
 > **IMPORTANT SECURITY NOTICE**
 > By default, the communication between the alarm panel and this server is **unencrypted**. This server is designed to be run on a trusted local network only. Please read the full [Security & Privacy Guidelines](#security--privacy-guidelines) before installation.
 
+If you are having trouble self-hosting and would like to test against a live server before setting up your own, feel free to reach out via PM on 
+[DIYNOT](https://www.diynot.com) or [Reddit](https://www.reddit.com) 
+(username: **ZebMcKayhan** on both). I can set up a test account on my personal server 
+to help you verify your panel is communicating correctly. Note that this is a personal 
+setup with no guarantees of uptime or longevity.
+
 ## Features
 
 -   **Self-Hosted:** Runs on any local Windows or Linux machine (like a Raspberry Pi), or in a Docker container.
