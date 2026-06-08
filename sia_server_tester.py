@@ -229,8 +229,12 @@ def build_ip_check_packet(account_id: str, interval_seconds: int) -> bytes:
     # Bytes 1-8: account number zero-padded to 8 chars
     account_padded = account_id.zfill(8).encode('ascii')[:8]
 
-    # Bytes 15-18: timestamp (current unix time minus panel epoch offset)
-    timestamp = int(time.time()) - PANEL_EPOCH_OFFSET
+    # Bytes 15-18: timestamp (current unix time minus timezone and panel epoch offset)
+    if time.localtime().tm_isdst and time.daylight:
+        tz_offset = time.altzone
+    else:
+        tz_offset = time.timezone
+    timestamp = int(time.time()) - tz_offset - PANEL_EPOCH_OFFSET
     ts_bytes = struct.pack('<I', timestamp & 0xFFFFFFFF)
 
     # Byte 19: unknown, always 0x3c
