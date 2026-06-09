@@ -194,10 +194,9 @@ def format_notification_text(event: Union[GalaxyEvent, MessageEvent]) -> str:
 
     if event.action_text:
         notification = f"{event_time} {event.action_text}"
-        # The Zone address is the RIO address, which name is already in the ASCII block.
-        # This was not what I intended, commenting this until I figure out what to do:
-        #if event.zone and event.zone not in str(event.action_text):
-        #    notification += f" (Zone {event.zone})"
+        # Group info is not shown much in ASCII block, so append it to notification if it exist:
+        if event.group:
+            notification += f" (Group {event.group})"
     else:
         notification = f"{event_time}"
         if event.event_code:
