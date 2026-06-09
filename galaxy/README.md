@@ -41,8 +41,9 @@ The `Command Byte` (the second byte of every block) determines the message's mea
 
 | Hex    | ASCII | Command Name      | Source | Description                                             |
 | :----- | :---- | :---------------- | :----- | :------------------------------------------------------ |
-| `0x23` | `#`   | `ACCOUNT_ID`      | Client | Identifies the alarm panel account.                       |
+| `0x23` | `#`   | `ACCOUNT_ID`      | Client | Identifies the alarm panel account.                     |
 | `0x4E` | `N`   | `NEW_EVENT`       | Client | Contains the core event data (time, codes, zones, etc.).|
+| `0x4F` | `O`   | `OLD_EVENT`       | Client | Same as NEW_EVENT but for previously confirmed events.  |
 | `0x41` | `A`   | `ASCII`           | Client | Contains a human-readable description of the event.     |
 | `0x30` | `0`   | `END_OF_DATA`     | Client | Signals the end of all transmissions for the connection.|
 | `0x38` | `8`   | `ACKNOWLEDGE`     | Server | Sent by the server to confirm a block was received OK.  |
@@ -59,24 +60,27 @@ The `Command Byte` (the second byte of every block) determines the message's mea
 This is the most information-rich block, containing the core details of the alarm event. The payload is a string composed of one or more sections delimited by a forward slash (`/`).
 
 **General Structure:**
-`[Section1]/[Section2]/.../[FinalSection]`
+`[Section1]/[Section2]/.../[EventCodeSection]`
 
--   **Identifier Sections:** Every section *before the last one* is prefixed with a 2-character identifier that defines its content.
+-   **Modifier Sections:** Sections starting with two **lowercase** letters are modifier 
+    codes that describe the event (time, user, area etc.).
 
--   **Final Section:** The *very last section* of the string is always the **Event Code**, and it does not have an identifier. It may also have a Zone Number appended directly to it.
+-   **Event Code Section:** The section starting with two **uppercase** letters is the 
+    Event Code, which may be followed immediately by a Zone Number.
 
 **Known Section Identifiers:**
 
-| Identifier | Description          | Example Payload Section |
-| :--------- | :------------------- | :---------------------- |
-| `ti`       | **Time**             | `ti11:45`               |
-| `id`       | **User ID**          | `id001`                 |
-| `pi`       | **Partition ID**     | `pi010`                 |
-| `va`       | **Value** (for tests)| `va1440`                |
+| Identifier | Description              | Example Payload Section |
+| :--------- | :----------------------- | :---------------------- |
+| `ti`       | **Time**                 | `ti11:45`               |
+| `ri`       | **Group/Area ID**        | `ri01`                  |
+| `id`       | **User ID**              | `id001`                 |
+| `pi`       | **Peripheral ID**        | `pi010`                 |
+| `va`       | **Value** (for tests)    | `va1440`                |
 
-**Final Section (Event Code & Zone):**
+**Event Code Section:**
 
-The structure of the last section is always a **two-character uppercase Event Code**, which may be followed immediately by a 3-4 digit Zone Number.
+The structure of the Event Code section, which is always observed as the last section, is always a **two-character uppercase Event Code**, which may be followed immediately by a 3-4 digit Zone Number.
 
 1.  **Event Code only:**
     -   *Format:* `[EventCode(2)]`
@@ -91,7 +95,7 @@ The structure of the last section is always a **two-character uppercase Event Co
 -   **User Arm Event Payload:** `ti11:45/id001/pi010/CL`
     -   `ti11:45`: Time is 11:45
     -   `id001`: User ID is 001
-    -   `pi010`: Partition is 010
+    -   `pi010`: Peripheral ID is 010
     -   `CL`: Event Code is "Closing"
 
 -   **Burglary Alarm Event Payload:** `ti11:46/BA1011`
