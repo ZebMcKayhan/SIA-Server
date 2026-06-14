@@ -8,6 +8,11 @@ Providers handle the delivery of notifications to various services.
 | Provider | File | Description |
 |----------|------|-------------|
 | `ntfy` | `ntfy.py` | Sends notifications via [ntfy.sh](https://ntfy.sh/) or a self-hosted ntfy server |
+| `telegram` | `telegram.py` | Sends notifications via [Telegram](https://telegram.org/) or self hosted Bot API |
+
+> **Note:** The `ntfy` provider is the primary provider and is fully documented with
+> examples in `sia-server.conf`. For other providers, see the docstring at the top of
+> the provider file for configuration keys and setup instructions.
 
 ## How Providers Work
 
