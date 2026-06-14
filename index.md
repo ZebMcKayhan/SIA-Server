@@ -1,18 +1,22 @@
-# SIA DC-09 Server for Honeywell Galaxy Flex (Python)
+# Galaxy SIA Notification Server for Honeywell Galaxy Flex (Python)
 
-This project is a Python implementation of the SIA DC-09 alarm protocol server, designed for Honeywell Galaxy Flex alarm panels.
-
-It receives alarm events and sends real-time notifications using ntfy.
+A lightweight, self-hosted Python server that receives SIA protocol messages from 
+Honeywell Galaxy Flex alarm panels and forwards them as push notifications to your 
+phone or computer.
 
 ## Features
-- SIA DC-09 protocol support
+- SIA protocol support (Levels 0-3)
 - Honeywell Galaxy Flex compatibility
-- Real-time alarm notifications
-- Lightweight Python server
+- Real-time push notifications via ntfy.sh (free, no account required)
+- Extensible notification provider plugin system
+- Optional heartbeat monitoring with lost connection alerts
+- Lightweight - runs on a Raspberry Pi, router, NAS, Docker container or Windows.
+- No cloud subscription required - fully self-hosted
 
-## Repository
-👉 SIA DC-09 Server repository:
-[https://github.com/ZebMcKayhan/SIA-Server](https://github.com/ZebMcKayhan/SIA-Server)
+## Getting Started
+Full documentation and installation guide:  
+👉 [https://github.com/ZebMcKayhan/SIA-Server](https://github.com/ZebMcKayhan/SIA-Server)
 
 ## Keywords
-SIA DC-09, SIA protocol, alarm monitoring, Honeywell Galaxy Flex, Python server, ntfy notifications
+SIA protocol, Honeywell Galaxy Flex, alarm notifications, push notifications, 
+ntfy, self-hosted, Python, Raspberry Pi, Docker, heartbeat monitoring
