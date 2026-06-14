@@ -4,7 +4,25 @@ Galaxy SIA Notification Provider - Telegram
 Sends notifications via the Telegram Bot API.
 Supports standard Telegram and self-hosted Telegram Bot API servers.
 
-Configuration keys in sia-server.conf account section:
+--- Setting up a Telegram Bot ---
+
+1. Open Telegram and start a chat with @BotFather
+2. Send /newbot and follow the wizard
+3. BotFather will give you a bot token that looks like:
+      123456789:ABCdefGHIjklMNOpqrSTUvwxYZ
+
+4. To get your Chat ID, add your bot to a chat or send it a message,
+   then visit:
+      https://api.telegram.org/bot{YOUR_TOKEN}/getUpdates
+   The chat_id will appear in the response.
+
+5. You can verify your bot token is working by visiting:
+      https://api.telegram.org/bot{YOUR_TOKEN}/getMe
+
+For more information see: https://core.telegram.org/bots/api
+
+--- Configuration keys in sia-server.conf account section ---
+
   TELEGRAM_TOKEN   = 123456789:ABCdefGHIjklMNOpqrSTUvwxYZ  (required)
   TELEGRAM_CHAT_ID = 987654321                              (required)
   TELEGRAM_TITLE   = Galaxy Alarm                           (optional, default: 'Galaxy Alarm')
