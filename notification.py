@@ -261,10 +261,15 @@ def _dispatch_notification(event: Union[GalaxyEvent, MessageEvent],
     else:
         display = f"{event.account}"
 
-    log.debug("Sending notification (priority %d) via %s for %s: %s",
-             priority, provider.name, display, message)
-
-    return provider.send(event.account, message, priority)
+    # Send via provider - raw event or formatted message depending on provider type
+    if getattr(provider, 'raw_event', False):
+        log.debug("Sending raw event (priority %d) via %s for %s: %s",
+                  priority, provider.name, display, message)
+        return provider.send(event.account, event, priority)
+    else:
+        log.debug("Sending notification (priority %d) via %s for %s: %s",
+                  priority, provider.name, display, message)
+        return provider.send(event.account, message, priority)
 
 
 # ===================================================================
