@@ -24,6 +24,7 @@ with a JSON body. The following fields are included in the payload:
   event_description - Human-readable event description
   zone             - Zone number if present
   action_text      - Full ASCII block text if present (SIA Level 3)
+  priority         - Event priority, 1 (low) - 5 (high/urgent) 
 
 --- Configuration keys in sia-server.conf account section ---
 
