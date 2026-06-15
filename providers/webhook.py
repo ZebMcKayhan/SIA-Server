@@ -38,7 +38,7 @@ with a JSON body. The following fields are included in the payload:
 --- Example payload ---
 
   {
-      "account": "597263",
+      "account": "123456",
       "site_name": "My Home",
       "time": "08:00",
       "user_id": null,
