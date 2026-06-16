@@ -8,6 +8,12 @@ Providers handle the delivery of notifications to various services.
 | Provider | File | Description |
 |----------|------|-------------|
 | `ntfy` | `ntfy.py` | Sends notifications via [ntfy.sh](https://ntfy.sh/) or a self-hosted ntfy server |
+| `pushover` | `pushover.py` | Sends notifications via [Pushover](https://pushover.net) |
+| `webhook` | `webhook.py` | Sends the full alarm event as JSON to a configurable HTTP/HTTPS endpoint |
+
+> **Note:** The `ntfy` provider is the primary provider and is fully documented with
+> examples in `sia-server.conf`. For other providers, see the docstring at the top of
+> the provider file for configuration keys and setup instructions.
 
 ## How Providers Work
 
@@ -129,10 +135,17 @@ dependencies.
 Note: `account_number` is available for use in error messages and logging only.
 Do not store it - the actual runtime account number is passed to `send()`.
 
+### `raw_event` (class attribute, optional)
+Set to `True` if `send()` should receive the raw event object instead of
+formatted text. Default is `False`. When `True`, the `message` parameter in
+`send()` will be a `GalaxyEvent` or `MessageEvent` object rather than a
+string. See `webhook.py` for an example.
+
 ### `send(account, message, priority)` (instance method)
 Called each time a notification needs to be sent. Parameters:
 - `account` - the account number string as received from the panel (ground truth)
-- `message` - the formatted notification text
+- `message` - the formatted notification text (str) when `raw_event = False`,
+  or the raw event object when `raw_event = True`
 - `priority` - integer 1-5 (1=lowest, 5=highest/urgent)
 
 Return values:
