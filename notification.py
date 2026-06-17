@@ -61,7 +61,7 @@ class MessageEvent:
         self.priority          = priority
         self.event_code        = 'MSG'
         self.event_description = 'Server Message'
-        self.time              = None
+        self.time              = time.strftime('%H:%M')  # server local time
         self.zone              = None
         self.peripheral        = None
         self.user_id           = None
