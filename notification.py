@@ -60,7 +60,7 @@ class MessageEvent:
         self.action_text       = message
         self.priority          = priority
         self.event_code        = 'MSG'
-        self.event_description = message
+        self.event_description = 'Server Message'
         self.time              = None
         self.zone              = None
         self.peripheral        = None
