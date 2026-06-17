@@ -141,16 +141,16 @@ class WebhookProvider(NotificationProvider):
         """Serialize event to JSON-safe dict, excluding raw payload bytes."""
         return {
             'account':           account,
-            'site_name':         event.site_name,
-            'time':              event.time,
-            'user_id':           event.user_id,
-            'peripheral':        event.peripheral,
-            'group':             event.group,
-            'value':             event.value,
-            'event_code':        event.event_code,
-            'event_description': event.event_description,
-            'zone':              event.zone,
-            'action_text':       event.action_text,
+            'site_name':         getattr(event, 'site_name', None),
+            'time':              getattr(event, 'time', None),
+            'user_id':           getattr(event, 'user_id', None),
+            'peripheral':        getattr(event, 'peripheral', None),
+            'group':             getattr(event, 'group', None),
+            'value':             getattr(event, 'value', None),
+            'event_code':        getattr(event, 'event_code', None),
+            'event_description': getattr(event, 'event_description', None),
+            'zone':              getattr(event, 'zone', None),
+            'action_text':       getattr(event, 'action_text', None),
         }
 
     def send(self, account: str, event, priority: int) -> bool | None:
