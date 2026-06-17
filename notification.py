@@ -28,6 +28,7 @@ from threading import Thread, Event as ThreadEvent
 from configuration import AccountsConfig
 from galaxy.parser import GalaxyEvent
 from providers.base import NotificationProvider
+from galaxy.constants import EVENT_CODE_DESCRIPTIONS
 
 # --- Dependency and Logging Initialization ---
 log = logging.getLogger(__name__)
@@ -60,8 +61,8 @@ class MessageEvent:
         self.action_text       = message
         self.priority          = priority
         self.event_code        = 'MSG'
-        self.event_description = message
-        self.time              = None
+        self.event_description = EVENT_CODE_DESCRIPTIONS.get('MSG', 'Server Message')
+        self.time              = time.strftime('%H:%M')  # server local time
         self.zone              = None
         self.peripheral        = None
         self.user_id           = None
@@ -261,10 +262,15 @@ def _dispatch_notification(event: Union[GalaxyEvent, MessageEvent],
     else:
         display = f"{event.account}"
 
-    log.debug("Sending notification (priority %d) via %s for %s: %s",
-             priority, provider.name, display, message)
-
-    return provider.send(event.account, message, priority)
+    # Send via provider - raw event or formatted message depending on provider type
+    if getattr(provider, 'raw_event', False):
+        log.debug("Sending raw event (priority %d) via %s for %s: %s",
+                  priority, provider.name, display, message)
+        return provider.send(event.account, event, priority)
+    else:
+        log.debug("Sending notification (priority %d) via %s for %s: %s",
+                  priority, provider.name, display, message)
+        return provider.send(event.account, message, priority)
 
 
 # ===================================================================

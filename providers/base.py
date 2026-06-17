@@ -34,6 +34,12 @@ class NotificationProvider(ABC):
     # Example: provider_name = 'ntfy'
     provider_name: str
 
+    # Set to True if send() expects the raw event object instead of formatted text.
+    # Default is False - send() receives (account, message, priority).
+    # When True - send() receives (account, event, priority) where event is
+    # a GalaxyEvent or MessageEvent object.
+    raw_event: bool = False
+
     @classmethod
     @abstractmethod
     def from_config(cls, account_number: str, provider_config: dict) -> 'NotificationProvider':
@@ -59,14 +65,20 @@ class NotificationProvider(ABC):
         ...
 
     @abstractmethod
-    def send(self, account: str, message: str, priority: int) -> bool | None:
+    def send(self, account: str, message, priority: int) -> bool | None:
         """
         Send a notification.
 
         Args:
             account:  The account number this notification belongs to.
-            message:  Notification message body.
+            message:  Notification message body (str) when raw_event = False,
+                      or GalaxyEvent/MessageEvent object when raw_event = True.
             priority: Integer priority 1-5 (1=lowest, 5=highest/urgent).
+
+        Returns:
+            True  - sent successfully
+            False - delivery failed, will be retried
+            None  - configuration issue, skip silently without retry
         """
         ...
 
