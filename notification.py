@@ -28,6 +28,7 @@ from threading import Thread, Event as ThreadEvent
 from configuration import AccountsConfig
 from galaxy.parser import GalaxyEvent
 from providers.base import NotificationProvider
+from galaxy.constants import EVENT_CODE_DESCRIPTIONS
 
 # --- Dependency and Logging Initialization ---
 log = logging.getLogger(__name__)
@@ -60,7 +61,7 @@ class MessageEvent:
         self.action_text       = message
         self.priority          = priority
         self.event_code        = 'MSG'
-        self.event_description = 'Server Message'
+        self.event_description = EVENT_CODE_DESCRIPTIONS.get('MSG', 'Server Message')
         self.time              = time.strftime('%H:%M')  # server local time
         self.zone              = None
         self.peripheral        = None
