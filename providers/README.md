@@ -8,6 +8,7 @@ Providers handle the delivery of notifications to various services.
 | Provider | File | Description |
 |----------|------|-------------|
 | `ntfy` | `ntfy.py` | Sends notifications via [ntfy.sh](https://ntfy.sh/) or a self-hosted ntfy server |
+| `telegram` | `telegram.py` | Sends notifications via [Telegram](https://telegram.org/) Bot API |
 | `pushover` | `pushover.py` | Sends notifications via [Pushover](https://pushover.net) |
 | `webhook` | `webhook.py` | Sends the full alarm event as JSON to a configurable HTTP/HTTPS endpoint |
 
