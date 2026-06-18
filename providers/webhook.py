@@ -15,7 +15,7 @@ with a JSON body. The following fields are included in the payload:
 
   account          - Account number received from the panel
   site_name        - Configured site name (null if not configured)
-  event_type       - 'New' for NEW_EVENT or 'Old' for OLD_EVENT or None for Messages
+  event_type       - Panel event 'New' for NEW_EVENT or 'Old' for OLD_EVENT if present.
   time             - Event time (hh:mm)
   user_id          - User ID if present
   peripheral       - Peripheral ID if present
