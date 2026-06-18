@@ -15,6 +15,7 @@ with a JSON body. The following fields are included in the payload:
 
   account          - Account number received from the panel
   site_name        - Configured site name (null if not configured)
+  event_type       - 'New' for NEW_EVENT or 'Old' for OLD_EVENT or None for Messages
   time             - Event time (hh:mm)
   user_id          - User ID if present
   peripheral       - Peripheral ID if present
@@ -40,6 +41,7 @@ with a JSON body. The following fields are included in the payload:
   {
       "account": "123456",
       "site_name": "My Home",
+      "event_type": "New",
       "time": "08:00",
       "user_id": null,
       "peripheral": null,
@@ -142,6 +144,7 @@ class WebhookProvider(NotificationProvider):
         return {
             'account':           account,
             'site_name':         getattr(event, 'site_name', None),
+            'event_type':        getattr(event, 'event_type', None),
             'time':              getattr(event, 'time', None),
             'user_id':           getattr(event, 'user_id', None),
             'peripheral':        getattr(event, 'peripheral', None),
