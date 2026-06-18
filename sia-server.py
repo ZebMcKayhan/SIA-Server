@@ -321,7 +321,8 @@ async def handle_connection(notification_queue: Queue, reader, writer):
             
             log.info("Site: %s (Account: %s)", event.site_name, event.account)
             description = event.action_text or event.event_description
-            log.info("Event: %s (%s)", event.event_code, description)
+            event_type_str = f"{event.event_type} " if event.event_type else ""
+            log.info("%sEvent: %s (%s)", event_type_str, event.event_code, description)
             
             # Send the notification to our que:
             enqueue_notification(event, notification_queue)
