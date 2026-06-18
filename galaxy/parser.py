@@ -24,6 +24,7 @@ class GalaxyEvent:
     site_name: Optional[str] = None
     
     # Parsed from Data Payload
+    event_type: Optional[str] = None  # 'New' | 'Old' | None
     time: Optional[str] = None
     user_id: Optional[str] = None
     peripheral: Optional[str] = None
@@ -167,9 +168,11 @@ def parse_galaxy_event(blocks: List[Dict], account_sites: Dict,
                 # Use the mapped site name if it exists, otherwise use None as each instance could treat None as they prefer.
                 event.site_name = account_sites.get(event.account)
 
-        # "OLD_EVENT" have never been observed but according to SIA documentation it exist and is identical to NEW_EVENT. Adding it just in case:
+        # OLD_EVENT is identical to NEW_EVENT but indicates the event was previously confirmed.
+        # Some panels (observed) send set/unset events as OLD_EVENT.
         elif command in ('NEW_EVENT', 'OLD_EVENT'):
             parse_data_payload(payload, event, event_code_descriptions)
+            event.event_type = 'New' if command == 'NEW_EVENT' else 'Old'
             
         elif command == 'ASCII':
             parse_ascii_payload(payload, event, char_map)
