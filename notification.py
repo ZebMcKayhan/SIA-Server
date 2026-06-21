@@ -280,21 +280,24 @@ def _dispatch_notification(event: Union[GalaxyEvent, MessageEvent],
 def _enqueue(event: Union[GalaxyEvent, MessageEvent], queue: Queue):
     """
     Internal helper to add any event type to the notification queue.
-    If the queue is full, removes the oldest item to make space.
+    If the queue is full, evicts the oldest item to make space.
+    Retries up to 3 times to handle concurrent queue activity.
     """
-    if queue.full():
+    for _ in range(3):
         try:
-            oldest_event, _, _ = queue.get_nowait()
-            log.warning("Notification queue is full. Dropping the oldest event to make space.")
-            queue.task_done()
-        except Empty:
-            pass
-
-    try:
-        queue.put_nowait((event, 0, 0))
-        log.debug("Event for account %s added to notification queue.", event.account)
-    except QueueFull:
-        log.error("Notification queue is still full! Event for %s was lost.", event.account)
+            queue.put_nowait((event, 0, 0))
+            log.debug("Event for account %s added to notification queue.", event.account)
+            return
+        except QueueFull:
+            try:
+                dropped, _, _ = queue.get_nowait()
+                queue.task_done()
+                log.warning("Notification queue full. Dropped oldest event (account %s) "
+                            "to make room for new event (account %s).",
+                            getattr(dropped, 'account', '?'), event.account)
+            except Empty:
+                pass
+    log.error("Notification queue is still full! Event for %s was lost.", event.account)
 
 
 # ===================================================================
@@ -338,18 +341,34 @@ class NotificationDispatcher(Thread):
 
     def run(self):
         log.info("NotificationDispatcher thread started.")
+        pending_retries = []  # items not yet due: list of (event, retry_count, next_attempt_time)
         while not self.shutdown_event.is_set():
-            event, retry_count, next_attempt_time = self.queue.get()
-            if not event:
+            # Re-inject any retries that have become due. Keeping them in a
+            # local list (instead of cycling them through the queue) avoids
+            # a 1-second busy loop and never delays fresh events behind waiting retries.
+            now = time.time()
+            due = [item for item in pending_retries if item[2] <= now]
+            for item in due:
+                pending_retries.remove(item)
+                try:
+                    self.queue.put_nowait(item)
+                except QueueFull:
+                    log.error("Queue full. Dropping due retry for account %s.",
+                              getattr(item[0], 'account', '?'))
+
+            try:
+                event, retry_count, next_attempt_time = self.queue.get(timeout=1.0)
+            except Empty:
+                continue
+
+            if not event:  # Shutdown signal
                 self.queue.task_done()
                 break
 
-            current_time = time.time()
-
-            if current_time < next_attempt_time:
-                self.queue.put((event, retry_count, next_attempt_time))
+            if time.time() < next_attempt_time:
+                # Not due yet - park it locally and move on
+                pending_retries.append((event, retry_count, next_attempt_time))
                 self.queue.task_done()
-                time.sleep(1.0)
                 continue
 
             success = _dispatch_notification(
@@ -365,10 +384,7 @@ class NotificationDispatcher(Thread):
                     new_next_attempt_time = time.time() + delay
                     log.warning("Dispatch failed for account %s. Re-queueing for retry in %d mins (attempt %d).",
                                 event.account, delay // 60, retry_count)
-                    try:
-                        self.queue.put_nowait((event, retry_count, new_next_attempt_time))
-                    except QueueFull:
-                        log.error("Queue is full. Cannot re-queue failed notification for %s.", event.account)
+                    pending_retries.append((event, retry_count, new_next_attempt_time))
                 else:
                     log.error("Dispatch failed for account %s after %d retries. Giving up.",
                               event.account, self.max_retries)
