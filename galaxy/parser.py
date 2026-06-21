@@ -119,8 +119,8 @@ def parse_data_payload(payload: bytes, event: GalaxyEvent, event_code_descriptio
             # It may also have a 3-4 digit Zone Number appended directly to the code.
             # We use regex to extract the two parts:
             #   - Group 1: ([A-Z]{2})  -> Exactly two uppercase letters (the Event Code)
-            #   - Group 2: (\d{3,4})?  -> An optional group of 3 or 4 digits (the Zone)
-            ec_match = re.match(r'([A-Z]{2})(\d{3,4})?', section)
+            #   - Group 2: (\d{1,4})?  -> An optional group of 1 to 4 digits (the Zone)
+            ec_match = re.match(r'([A-Z]{2})(\d{1,4})?', section)
             if ec_match:
                 event.event_code = ec_match.group(1)
                 log.debug("Parsed event_code: '%s'", event.event_code)
