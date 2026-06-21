@@ -417,9 +417,26 @@ async def start_servers(notification_queue: Queue):
     
     log.info('='*60)
     
-    # Run the main SIA server forever
+    # Prefer loop-level signal handlers so the finally block (which
+    # terminates the IP Check subprocess) always runs on SIGINT/SIGTERM.
+    loop = asyncio.get_running_loop()
+    serve_task = asyncio.ensure_future(sia_server.serve_forever())
+
+    def _handle_signal(sig):
+        log.info("Received signal %s, shutting down...", sig)
+        serve_task.cancel()
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, lambda s=sig: _handle_signal(s))
+        except (NotImplementedError, RuntimeError):
+            pass  # Windows: falls back to signal.signal() handlers in main()
+
+    # Run the main SIA server
     try:
-        await sia_server.serve_forever()
+        await serve_task
+    except asyncio.CancelledError:
+        log.info("Server shutdown requested.")
     finally:
         # When the main server is shut down, also terminate the subprocess
         if ip_check_process and ip_check_process.returncode is None:
