@@ -18,6 +18,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application files
 COPY *.py ./
 COPY galaxy/*.py ./galaxy/
+COPY providers/*.py ./providers/
 
 # Optional config mount location
 VOLUME ["/config"]
