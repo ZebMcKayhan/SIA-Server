@@ -50,8 +50,14 @@ COMMAND_BYTES = {name: byte for byte, name in COMMANDS.items()}
 
 # --- SIA Event Code Translations ---
 # A human-readable description for each 2-character SIA Event Code.
-# This can be used to generate descriptive notifications for SIA Level 2 events.
-# Source: Honeywell Galaxy Flex Installer Manual & community contributions.
+# 
+# Primary source: Honeywell Galaxy Flex Installer Manual - these codes and
+# descriptions are confirmed for this panel and take priority.
+#
+# Secondary source: SIA DC-09 standard event code library - additional codes
+# have been included for completeness and compatibility with other panels.
+# These are marked with '# SIA-Library (not galaxy)' and may not be used
+# by the Galaxy, or may behave differently than described.
 EVENT_CODE_DESCRIPTIONS = {
     # A - Alarm Cause / AC Power
     'AC': "Alarm Cause Reported",
@@ -118,6 +124,7 @@ EVENT_CODE_DESCRIPTIONS = {
     'FS': "Fire Supervisory", # SIA-Library (not galaxy)
     'FT': "Fire Trouble",
     'FU': "Fire Unbypass",
+    'FV': "Fire Confirm",
     'FX': "Fire Test",
     'FY': "Missing Fire Trouble", # SIA-Library (not galaxy)
 
@@ -145,15 +152,16 @@ EVENT_CODE_DESCRIPTIONS = {
     # I - Peripheral Fault
     'IA': "Equipment Failure",
     'IR': "Equipment Failure Restored",
+    'IV': "Picture Ready",
 
     # J - User/Log
     'JA': "Code Tamper",
     'JD': "Date Changed", # SIA-Library (not galaxy)
     'JH': "Holiday Changed", # SIA-Library (not galaxy)
     'JL': "Log Almost Full",
+    'JO': "Log Overflow", # SIA-Library (not galaxy)
     'JR': "Timer Event",
     'JT': "Time/Date Changed",
-    'JO': "Log Overflow", # SIA-Library (not galaxy)
     'JS': "Schedule Change", # SIA-Library (not galaxy)
     'JV': "User Code Change", # SIA-Library (not galaxy)
     'JX': "User Code Delete", # SIA-Library (not galaxy)
@@ -162,7 +170,7 @@ EVENT_CODE_DESCRIPTIONS = {
     'KA': "Heat Alarm",
     'KB': "Heat Bypass",
     'KH': "Heat Alarm Restored", # SIA-Library (not galaxy)
-    'KJ': "Heat Trouble Restored", # SIA-Library (not galaxy)
+    'KJ': "Heat Trouble Restored",
     'KR': "Heat Alarm Restored",
     'KS': "Heat Supervisory", # SIA-Library (not galaxy)
     'KT': "Heat Trouble",
@@ -177,7 +185,7 @@ EVENT_CODE_DESCRIPTIONS = {
     'LS': "Local Program Success", # SIA-Library (not galaxy)
     'LT': "Phone Line Trouble",
     'LU': "Local Program Failed", # SIA-Library (not galaxy)
-    'LX': "Local Program End", # SIA-Library (not galaxy)
+    'LX': "Local Program End",
 
     # M - Medical (Custom SIA)
     'MA': "Medical Alarm",
@@ -200,7 +208,7 @@ EVENT_CODE_DESCRIPTIONS = {
     'OG': "Area Opened",
     'OI': "Fail to Open", # SIA-Library (not galaxy)
     'OJ': "Late Open", # SIA-Library (not galaxy)
-    'OK': "Early Open", # SIA-Library (not galaxy)
+    'OK': "Early Open", 
     'OP': "Opening Report (User Disarmed)",
     'OR': "Disarm from Alarm",
     'OS': "Opening Keyswitch", # SIA-Library (not galaxy)
@@ -279,7 +287,7 @@ EVENT_CODE_DESCRIPTIONS = {
     'VR': "Printer Restored", # SIA-Library (not galaxy)
     'VT': "Printer Trouble", # SIA-Library (not galaxy)
     'VX': "Printer Test", # SIA-Library (not galaxy)
-    'VY': "Print OC OL", # Note: Unclear code from Installer manual.
+    'VY': "Print OC OL",
     'VZ': "Printer Off Line", # SIA-Library (not galaxy)
 
     # W - Water (Custom SIA)
