@@ -125,7 +125,9 @@ class TelegramProvider(NotificationProvider):
         emoji = PRIORITY_EMOJI.get(priority, '🔔')
         full_message = f"{self._title}: {display_name}\n{emoji} {message}"
 
-        url = f"{self._api_url}/bot{self._token}/sendMessage"
+        # Ensure token has 'bot' prefix - add it if not already present
+        token = self._token if self._token.lower().startswith('bot') else f"bot{self._token}"
+        url = f"{self._api_url}/{token}/sendMessage"
 
         log.debug("Sending Telegram notification (priority %d) to chat %s: %s",
                   priority, self._chat_id, message)
