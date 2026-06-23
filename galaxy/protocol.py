@@ -22,6 +22,14 @@ CHECKSUM_SIZE  = 1
 MIN_BLOCK_SIZE = HEADER_SIZE + CHECKSUM_SIZE   # 3 bytes minimum
 MAX_PAYLOAD    = 0xFF - LENGTH_OFFSET          # 191 bytes maximum
 
+# Connection timeout constants
+# Time to wait for the rest of an incomplete block (partial TCP read)
+INCOMPLETE_BLOCK_TIMEOUT = 0.5   # seconds
+
+# Time to wait for the next command from the panel
+# (between complete blocks within a session)
+INTER_COMMAND_TIMEOUT = 5.0      # seconds
+
 
 def xor_checksum(data: bytes) -> int:
     """
@@ -57,7 +65,46 @@ def build_block(command_byte: int, payload: bytes = b'') -> bytes:
     message = bytes([LENGTH_OFFSET + len(payload), command_byte]) + payload
     return message + bytes([xor_checksum(message)])
 
+def check_block(buffer: bytearray, valid_commands: set) -> Tuple[bool, Optional[int], int]:
+    """
+    Inspect the start of the buffer to determine if it looks like a valid
+    SIA block and how many bytes we expect.
 
+    Args:
+        buffer:         The receive buffer (not modified).
+        valid_commands: Set of valid command byte values.
+
+    Returns:
+        (command_ok, expected_len, received_len) where:
+        - command_ok:    True if length and command bytes look valid
+        - expected_len:  Total expected block size, or None if invalid
+        - received_len:  How many bytes are currently in the buffer
+
+    Callers should:
+        - If not command_ok → reject connection
+        - If received_len < expected_len → wait for more data (incomplete block)
+        - If received_len >= expected_len → process the block
+    """
+    received = len(buffer)
+
+    if received < 2:
+        return False, None, received
+
+    length_byte  = buffer[0]
+    command_byte = buffer[1]
+
+    # Validate length byte range
+    payload_len = length_byte - LENGTH_OFFSET
+    if payload_len < 0 or payload_len > MAX_PAYLOAD:
+        return False, None, received
+
+    # Validate command byte
+    if command_byte not in valid_commands:
+        return False, None, received
+
+    expected = payload_len + MIN_BLOCK_SIZE
+    return True, expected, received
+    
 def validate_and_strip(block: bytes) -> Tuple[Optional[int], Optional[bytes]]:
     """
     Validates a complete raw SIA block and returns the command byte and payload.
