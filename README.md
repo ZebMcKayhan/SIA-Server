@@ -9,8 +9,10 @@ allowing users to regain full control over their alarm alerts without ongoing su
 
 Notifications are delivered via [ntfy.sh](https://ntfy.sh/) — a free, open-source push notification
 service. Just install the ntfy app on your phone (Android/iOS), subscribe to a topic, and you're done.
-No account, no registration, no subscription required. Custom notification providers are also supported
-via a plugin system — see [providers/README.md](providers/README.md) for details.
+No account, no registration, no subscription required. Additional built-in providers include
+[Telegram](https://telegram.org/), [Pushover](https://pushover.net/) and webhook for custom
+integrations. A plugin system also allows adding your own providers — see
+[providers/README.md](providers/README.md) for details.
 
 This project was developed and tested on a Honeywell Galaxy Flex 20. It is likely compatible with 
 other Honeywell Galaxy panels, but this has not been verified.
