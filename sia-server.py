@@ -142,6 +142,8 @@ from galaxy.parser import parse_sia_frame, FrameResult, GalaxyEvent
 from notification import NotificationDispatcher, enqueue_notification
 from galaxy.constants import COMMANDS, COMMAND_BYTES, EVENT_CODE_DESCRIPTIONS
 
+VALID_COMMANDS = set(COMMANDS.keys())
+
 # --- END INITIALIZATION ---
 
 async def build_and_send(writer, command: str, payload: bytes = b'', crypto: CryptoContext | None = None):
@@ -194,21 +196,29 @@ async def handle_connection(notification_queue: Queue, reader, writer):
             if not data:
                 log.debug("Connection closed by peer")
                 break
+
+            buffer.extend(data)
+            # We need at least 2 bytes to detect anything meaningful
+            if len(buffer) < 2:
+                log.debug("Only 1 byte in buffer from %r, waiting for more.", addr)
+                continue
+            
             # --- encryption detection ---
-            if data.startswith(START_ENC_HEADER):
+            if crypto is None and buffer.startswith(START_ENC_HEADER):
                 if ENCRYPTION_AVAILABLE:
+                    if len(buffer) < 5:
+                        log.debug("Encrypted header incomplete from %r, waiting for more.", addr)
+                        continue
                     log.debug("Encrypted header detected from %r", addr)
-                    crypto = await do_handshake(reader, writer, data, log)
+                    crypto = await do_handshake(reader, writer, buffer, log)
                     if crypto is None:
                         if config.REJECT_POLICY == 'respond':
                             log.warning("Handshake failed, closing connection")
                         return
                     log.info("Encrypted session established from %r", addr)
                     # Handshake successful, now wait for the first real SIA message.
-                    data = await reader.read(1024)
-                    if not data:
-                        log.info("Connection closed after handshake")
-                        return
+                    buffer.clear()
+                    continue
                 else:
                     # This block runs if encryption is detected but not supported.
                     log.error("="*60)
@@ -220,20 +230,43 @@ async def handle_connection(notification_queue: Queue, reader, writer):
                     return            
           
             if crypto:
-                data = crypto.decrypt(data)
+                data = crypto.decrypt(buffer)
+                if not data:
+                    log.debug("Incomplete encrypted block from %r, waiting for more.", addr)
+                    continue
+            else:
+                data = buffer
 
+            command_ok, expected_len, received_len = check_block(data, VALID_COMMANDS)
+
+            if not command_ok:
+                if config.REJECT_POLICY == 'respond':
+                    log.warning("Invalid frame header from %r - rejected. "
+                                "Buffer: %r", addr, bytes(buffer))
+                await policy_reject(writer, crypto)
+                return
+
+            if received_len > expected_len:
+                log.warning("Protocol violation from %r: expected %d bytes, got %d. "
+                            "Buffer: %r", addr, expected_len, received_len, bytes(buffer))
+                await policy_reject(writer, crypto)
+                return
+
+            if received_len < expected_len:
+                log.debug("Incomplete block from %r: have %d/%d bytes",
+                          addr, received_len, expected_len)
+                continue
+
+            buffer.clear()
+            
             command_byte, payload = validate_and_strip(data)
             
             if command_byte is None:
-                if len(data) > 0:
-                    if config.REJECT_POLICY == 'respond': #only print warning if we respond
-                        log.warning("Invalid frame from %r - rejected.", addr)
-                    log.debug("Raw: %r", data)
-                else:
-                    if config.REJECT_POLICY == 'respond': #only print warning if we respond
-                        log.warning("Invalid frame, received empty data block, from %r - rejected.", addr)
-                await policy_reject(writer, crypto=crypto)
-                continue
+                if config.REJECT_POLICY == 'respond':
+                    log.warning("Bad checksum or malformed block from %r - rejected. "
+                                "Raw: %r", addr, data)
+                await policy_reject(writer, crypto)
+                return
             
             command_name = COMMANDS.get(command_byte, f'UNKNOWN(0x{command_byte:02x})')
             log.debug("Received Command: %s, Payload: %r", command_name, payload)
