@@ -137,48 +137,17 @@ except ImportError:
     log.info("Encryption modules failed to import. Encrypted sessions will be rejected.")
 # ---
 
+from galaxy.protocol import build_block, validate_and_strip
 from galaxy.parser import parse_galaxy_event
 from notification import NotificationDispatcher, enqueue_notification
 from galaxy.constants import COMMANDS, COMMAND_BYTES, EVENT_CODE_DESCRIPTIONS
 
 # --- END INITIALIZATION ---
 
-
-def validate_and_strip(data: bytes) -> tuple[int, bytes] | tuple[None, None]:
-    """Validates a raw message block and returns the command byte and payload."""
-    if len(data) < 3:
-        log.debug("Invalid block: too short.")
-        return None, None
-    declared_payload_length = data[0] - 0x40
-    actual_payload_length = len(data) - 3
-    if declared_payload_length != actual_payload_length:
-        log.debug("Block length mismatch! Declared: %d, Actual: %d.",
-                    declared_payload_length, actual_payload_length)
-        return None, None
-    expected_checksum = data[-1]
-    message_to_check = data[:-1]
-    checksum = 0xFF
-    for byte in message_to_check:
-        checksum ^= byte
-    if checksum != expected_checksum:
-        log.debug("Checksum mismatch! Calculated: 0x%02x, Expected: 0x%02x.",
-                    checksum, expected_checksum)
-        return None, None
-    command_byte = data[1]
-    payload = data[2:-1]
-    return command_byte, payload
-
-
 async def build_and_send(writer, command: str, payload: bytes = b'', crypto: CryptoContext | None = None):
     """Builds and sends a valid Galaxy message block."""
     command_byte = COMMAND_BYTES[command]
-    payload_length = len(payload)
-    length_byte = payload_length + 0x40
-    message_part = bytes([length_byte, command_byte]) + payload
-    checksum = 0xFF
-    for byte in message_part:
-        checksum ^= byte
-    final_message = message_part + bytes([checksum])
+    final_message = build_block(command_byte, payload)
     
     if crypto:
         log.debug("Encrypting outgoing command: %s", command)
