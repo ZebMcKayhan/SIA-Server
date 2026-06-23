@@ -138,7 +138,7 @@ except ImportError:
 # ---
 
 from galaxy.protocol import build_block, validate_and_strip
-from galaxy.parser import parse_galaxy_event
+from galaxy.parser import parse_sia_frame, FrameResult, GalaxyEvent
 from notification import NotificationDispatcher, enqueue_notification
 from galaxy.constants import COMMANDS, COMMAND_BYTES, EVENT_CODE_DESCRIPTIONS
 
@@ -175,7 +175,7 @@ async def handle_connection(notification_queue: Queue, reader, writer):
 
     crypto = None  # This will hold our CryptoContext object if the session is encrypted
     account_validated = False
-    valid_blocks = []
+    events = []
     
     try:
         while True:
@@ -227,20 +227,26 @@ async def handle_connection(notification_queue: Queue, reader, writer):
             command_name = COMMANDS.get(command_byte, f'UNKNOWN(0x{command_byte:02x})')
             log.debug("Received Command: %s, Payload: %r", command_name, payload)
 
-            if not account_validated and command_name != 'ACCOUNT_ID':
-                log.warning("Protocol violation from %r: expected ACCOUNT_ID, got '%s'. Rejecting.",
-                            addr, command_name)
+            # Parse the frame - parser enforces protocol state machine
+            result = parse_sia_frame(
+                command_name, payload, events,
+                {k: v.site_name for k, v in accounts.accounts.items() if v.site_name is not None},
+                EVENT_CODE_DESCRIPTIONS,
+                config.UNKNOWN_CHAR_MAP
+            )
+
+            if result == FrameResult.FAIL:
+                if config.REJECT_POLICY == 'respond':
+                    log.warning("Invalid or unexpected frame '%s' from %r - rejected.",
+                                command_name, addr)
                 await policy_reject(writer, crypto=crypto)
                 return
 
-            # --- ACCOUNT POLICY ENFORCEMENT ---
-            # Validate account_id if according to policy
-            if command_name == 'ACCOUNT_ID':
-                account_number = payload.decode(errors='ignore').lstrip('0') or '0'
-                
+            # Policy check whenever a new account is parsed
+            if events and events[-1].account and not account_validated:
+                account_number = events[-1].account
                 account = accounts.get(account_number)
                 policy = account.policy if account else 'yes'
-                
                 is_encrypted = crypto is not None
                 log.debug("Account '%s' has policy '%s'. Session is encrypted: %s",
                           account_number, policy, is_encrypted)
@@ -255,47 +261,26 @@ async def handle_connection(notification_queue: Queue, reader, writer):
                 account_validated = True
                 log.debug("POLICY: Account '%s' policy satisfied.", account_number)
             
-            if command_name != 'END_OF_DATA':
-                valid_blocks.append({'command': command_name, 'payload': payload})
             await build_and_send(writer, 'ACKNOWLEDGE', crypto=crypto)
-            
-            if command_name == 'END_OF_DATA':
+
+            if result == FrameResult.END:
                 log.debug("End of data received, processing sequence.")
                 break
-        
-        if not valid_blocks:
+
+        if not events:
             return
             
-        event_chunks = []
-        current_chunk = []
-        for block in valid_blocks:
-            if block['command'] == 'ACCOUNT_ID' and current_chunk:
-                event_chunks.append(current_chunk)
-                current_chunk = [block]
-            else:
-                current_chunk.append(block)
-        if current_chunk:
-            event_chunks.append(current_chunk)
-        
-        log.info("Found %d event(s) in connection from %s", len(event_chunks), addr[0])
-        for i, chunk in enumerate(event_chunks, 1):
-            log.debug("--- Processing Event %d of %d ---", i, len(event_chunks))
-            
-            event = parse_galaxy_event(
-                chunk,
-                {k: v.site_name for k, v in accounts.accounts.items() if v.site_name is not None},
-                config.UNKNOWN_CHAR_MAP,
-                EVENT_CODE_DESCRIPTIONS
-            )
-            
+        log.info("Found %d event(s) in connection from %s", len(events), addr[0])
+        for i, event in enumerate(events, 1):
+            log.debug("--- Processing Event %d of %d ---", i, len(events))
+
             log.info("Site: %s (Account: %s)", event.site_name, event.account)
             description = event.action_text or event.event_description
             event_type_str = f"{event.event_type} " if event.event_type else ""
             log.info("%sEvent: %s (%s)", event_type_str, event.event_code, description)
-            
-            # Send the notification to our que:
+
             enqueue_notification(event, notification_queue)
-            
+
             log.debug("--- Event %d complete ---", i)
 
     except (ConnectionResetError, BrokenPipeError):
