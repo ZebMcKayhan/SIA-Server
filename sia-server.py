@@ -137,7 +137,7 @@ except ImportError:
     log.info("Encryption modules failed to import. Encrypted sessions will be rejected.")
 # ---
 
-from galaxy.protocol import build_block, validate_and_strip
+from galaxy.protocol import build_block, validate_and_strip, check_block, INCOMPLETE_BLOCK_TIMEOUT, INTER_COMMAND_TIMEOUT
 from galaxy.parser import parse_sia_frame, FrameResult, GalaxyEvent
 from notification import NotificationDispatcher, enqueue_notification
 from galaxy.constants import COMMANDS, COMMAND_BYTES, EVENT_CODE_DESCRIPTIONS
@@ -176,10 +176,21 @@ async def handle_connection(notification_queue: Queue, reader, writer):
     crypto = None  # This will hold our CryptoContext object if the session is encrypted
     account_validated = False
     events = []
+    buffer          = bytearray()  # TCP reassembly buffer
     
     try:
         while True:
-            data = await reader.read(1024)
+            timeout = INCOMPLETE_BLOCK_TIMEOUT if buffer else INTER_COMMAND_TIMEOUT
+            try:
+                data = await asyncio.wait_for(reader.read(1024), timeout=timeout)
+            except asyncio.TimeoutError:
+                if buffer:
+                    log.debug("Timeout waiting for complete block from %r", addr)
+                else:
+                    log.debug("Timeout waiting for next command from %r", addr)
+                await policy_reject(writer, crypto)
+                return
+                
             if not data:
                 log.debug("Connection closed by peer")
                 break
