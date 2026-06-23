@@ -8,6 +8,7 @@ phone or computer.
 - SIA protocol support (Levels 0-3)
 - Honeywell Galaxy Flex compatibility
 - Real-time push notifications via ntfy.sh (free, no account required)
+- Also supports Telegram, Pushover and webhook out of the box
 - Extensible notification provider plugin system
 - Optional heartbeat monitoring with lost connection alerts
 - Lightweight - runs on a Raspberry Pi, router, NAS, Docker container or Windows.
@@ -19,4 +20,5 @@ Full documentation and installation guide:
 
 ## Keywords
 SIA protocol, Honeywell Galaxy Flex, alarm notifications, push notifications, 
-ntfy, self-hosted, Python, Raspberry Pi, Docker, heartbeat monitoring
+ntfy, Telegram, Pushover, webhook, self-hosted, Python, Raspberry Pi, Docker, 
+heartbeat monitoring
