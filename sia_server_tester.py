@@ -147,6 +147,7 @@ import sys
 import time
 from typing import Iterable, List
 
+from galaxy.protocol import build_block
 from galaxy.constants import COMMAND_BYTES
 
 
@@ -163,24 +164,6 @@ SAMPLE_ASCII    = ' PART SET USER'
 
 # Static block bytes 9-14 - observed constant across all captures
 _IP_CHECK_STATIC = bytes([0x11, 0x0c, 0x00, 0xfd, 0x09, 0x00])
-
-
-def build_sia_block(command: str | int, payload: bytes = b'') -> bytes:
-    """Build a valid Galaxy SIA block with checksum."""
-    if isinstance(command, str):
-        command = command.upper()
-        if command not in COMMAND_BYTES:
-            raise ValueError(f'Unknown SIA command: {command}')
-        command_byte = COMMAND_BYTES[command]
-    else:
-        command_byte = command
-
-    length_byte = 0x40 + len(payload)
-    message = bytes([length_byte, command_byte]) + payload
-    checksum = 0xFF
-    for byte in message:
-        checksum ^= byte
-    return message + bytes([checksum])
 
 
 def parse_hex_segment(segment: str) -> bytes:
@@ -322,12 +305,12 @@ def build_sample_message(account_id: str, event_payload: str,
                          ascii_text: str | None = None) -> List[bytes]:
     """Build a standard ACCOUNT_ID + NEW_EVENT/OLD_EVENT + (optional ASCII) + END_OF_DATA sequence."""
     segments = [
-        build_sia_block('ACCOUNT_ID', account_id.encode('ascii')),
-        build_sia_block(event_command, event_payload.encode('ascii')),
+        build_block(COMMAND_BYTES['ACCOUNT_ID'], account_id.encode('ascii')),
+        build_block(COMMAND_BYTES[event_command], event_payload.encode('ascii')),
     ]
     if ascii_text is not None:
-        segments.append(build_sia_block('ASCII', ascii_text.encode('ascii')))
-    segments.append(build_sia_block('END_OF_DATA', b''))
+        segments.append(build_block(COMMAND_BYTES['ASCII'], ascii_text.encode('ascii')))
+    segments.append(build_block(COMMAND_BYTES['END_OF_DATA'], b''))
     return segments
 
 
