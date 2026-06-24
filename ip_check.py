@@ -14,6 +14,7 @@ import sys
 import time
 import datetime
 from queue import Queue
+from typing import Optional, Tuple
 
 # --- Watchdog Configuration ---
 PANEL_EPOCH_OFFSET = 54000  # 15 hours - converts panel timestamp to local time
@@ -52,6 +53,7 @@ config = load_application_config(args.config)
 accounts = load_accounts(args.config)
 
 # 6. Now, import the rest of our modules.
+from galaxy.protocol import INCOMPLETE_BLOCK_TIMEOUT, INTER_COMMAND_TIMEOUT
 from notification import NotificationDispatcher, enqueue_message_notification
 try:
     import uvloop
@@ -181,31 +183,32 @@ async def watchdog_task(notification_queue: Queue):
                     queue=notification_queue
                 )
 
-def validate_ip_check_packet(data: bytes) -> bool:
+def validate_ip_check_packet(data: bytes) -> Tuple[bool, Optional[int], int]:
     """
-    Validates an incoming IP Check packet.
-    Returns True if the packet is valid, False otherwise.
+    Inspect the buffer to determine if it looks like a valid IP Check packet.
     
-    Validation checks:
-    1. Length must be exactly 26 bytes
-    2. First byte (header) must be 0x00
-    3. Checksum - algorithm unknown, not validated
+    Returns:
+        (valid_header, expected_len, received_len) where:
+        - valid_header:  True if header byte looks valid
+        - expected_len:  Always 26 (or None if header invalid)
+        - received_len:  How many bytes are currently in the buffer
+
+    Callers should:
+        - If not valid_header → drop connection
+        - If received_len < expected_len → wait for more data
+        - If received_len > expected_len → protocol violation, drop
+        - If received_len == expected_len → process the packet
     """
-    # Check 1: Length
-    if len(data) != 26:
-        log.debug("IP Check: Invalid length %d (expected 26)", len(data))
-        return False
-    
-    # Check 2: Header byte
+    received = len(data)
+
+    if received < 1:
+        return False, None, received
+
     if data[0] != 0x00:
         log.debug("IP Check: Invalid header byte 0x%02x (expected 0x00)", data[0])
-        return False
-    
-    # Check 3: checksum
+        return False, None, received
 
-    # Algo unknown...
-    
-    return True
+    return True, 26, received
 
 def extract_account(data: bytes) -> str:
     """Extract account number from IP Check packet bytes 1-8."""
@@ -215,70 +218,109 @@ async def handle_ip_check(reader, writer, notification_queue: Queue):
     """Handles an incoming IP Check connection by echoing the received data."""
     addr = writer.get_extra_info('peername')
     crypto = None
+    buffer = bytearray()  # TCP reassembly buffer
     
     try:
-        data = await reader.read(1024)
-        if not data:
-            return
-
-        # --- Encryption detection ---
-        if data.startswith(START_ENC_HEADER):
-            if ENCRYPTION_AVAILABLE:
-                log.debug("Encrypted header detected from %s", addr[0])
-                crypto = await do_handshake(reader, writer, data, log)
-                if crypto is None:
-                    log.debug("IP Check handshake failed from %s - ignored.", addr[0])
-                    return
-                # Read the actual ping after handshake
-                log.debug("Encrypted session established from %r", addr)
-                data = await reader.read(1024)
-                if not data:
-                    return
-            else:
-                log.warning("Encrypted session requested from %s but encryption not available - ignored.", addr[0])
+        while True:
+            timeout = INCOMPLETE_BLOCK_TIMEOUT if buffer else INTER_COMMAND_TIMEOUT
+            try:
+                data = await asyncio.wait_for(reader.read(1024), timeout=timeout)
+            except asyncio.TimeoutError:
+                if buffer:
+                    log.debug("Timeout waiting for complete IP Check packet from %r", addr)
+                else:
+                    log.debug("Timeout waiting for IP Check packet from %r", addr)
                 return
 
-        # Decrypt if encrypted session
-        if crypto:
-            data = crypto.decrypt(data)
+            if not data:
+                log.debug("Connection closed by peer %r", addr)
+                return
+
+            buffer.extend(data)
+
+            # We need at least 2 bytes to detect anything meaningful
+            if len(buffer) < 2:
+                log.debug("Only 1 byte in buffer from %r, waiting for more.", addr)
+                continue
+                
+            # --- Encryption detection ---
+            if crypto is None and buffer.startswith(START_ENC_HEADER):
+                if len(buffer) < 5:
+                    log.debug("Encrypted header incomplete from %r, waiting for more.", addr)
+                    continue
+                if ENCRYPTION_AVAILABLE:
+                    log.debug("Encrypted header detected from %s", addr[0])
+                    crypto = await do_handshake(reader, writer, bytes(buffer), log)
+                    if crypto is None:
+                        log.debug("IP Check handshake failed from %s - ignored.", addr[0])
+                        return
+                    # Read the actual ping after handshake
+                    log.debug("Encrypted session established from %r", addr)
+                    buffer.clear()
+                    continue
+                else:
+                    log.warning("Encrypted session requested from %s but encryption not available - ignored.", addr[0])
+                    return
+
+            # Decrypt if encrypted session
+            if crypto:
+                data = crypto.decrypt(buffer)
+                if not data:
+                    log.debug("Incomplete encrypted packet from %r, waiting for more.", addr)
+                    continue
+            else:
+                data = bytes(buffer)
             
-        log.debug("Ping HEX: %s", data.hex())
-        # Validate the packet before responding
-        if not validate_ip_check_packet(data):
-            log.debug("Invalid IP Check packet from %s - ignored.", addr[0])
-            return  # Silent drop
-
-        # --- ACCOUNT POLICY ENFORCEMENT ---
-        account_number = extract_account(data)
-        account = accounts.get(account_number)
-        policy = account.policy if account else 'yes'
-        is_encrypted = crypto is not None
-
-        if policy == 'no':
-            log.warning("IP Check from disabled account '%s' - ignored.", account_number)
-            return
-
-        if policy == 'secure' and not is_encrypted:
-            log.warning("IP Check from '%s' requires encrypted connection - ignored.", account_number)
-            return
-
-        log.debug("IP Check account '%s' policy satisfied.", account_number)
-        site_name = account.site_name if account else account_number
-        update_watchdog(account_number, site_name, data, notification_queue)
+            log.debug("Ping HEX: %s", data.hex())
         
-        log.debug("Received ping from site: %s (Account: %s) from %s. Echoing response.",
-                 site_name, account_number, addr[0])
+            # Validate the packet before responding
+            valid_header, expected_len, received_len = validate_ip_check_packet(data)
+            if not valid_header:
+                log.debug("Invalid IP Check packet from %r - ignored.", addr)
+                return
+            if received_len < expected_len:
+                log.debug("Incomplete IP Check packet from %r: have %d/26 bytes",
+                          addr, received_len)
+                continue
+            if received_len > expected_len:
+                log.debug("Oversized IP Check packet from %r: got %d bytes, expected 26. "
+                         "Ignoring.", addr, received_len)
+                return            
 
-        response = crypto.encrypt(data) if crypto else data
-        # Echo the exact same data back to the panel.
-        writer.write(response)
-        await writer.drain()
+            buffer.clear()
 
-        # Wait for the panel to close the connection.
-        # Note: The panel closes the connection after 15s:
-        await reader.read(-1)
-        log.debug("Panel at %r has closed the connection.", addr)
+            # --- ACCOUNT POLICY ENFORCEMENT ---
+            account_number = extract_account(data)
+            account = accounts.get(account_number)
+            policy = account.policy if account else 'yes'
+            is_encrypted = crypto is not None
 
+            if policy == 'no':
+                log.warning("IP Check from disabled account '%s' - ignored.", account_number)
+                return
+
+            if policy == 'secure' and not is_encrypted:
+                log.warning("IP Check from '%s' requires encrypted connection - ignored.", account_number)
+                return
+
+            log.debug("IP Check account '%s' policy satisfied.", account_number)
+            site_name = account.site_name if account else account_number
+            update_watchdog(account_number, site_name, data, notification_queue)
+        
+            log.debug("Received ping from site: %s (Account: %s) from %s. Echoing response.",
+                     site_name, account_number, addr[0])
+
+            response = crypto.encrypt(data) if crypto else data
+            # Echo the exact same data back to the panel.
+            writer.write(response)
+            await writer.drain()
+
+            # Wait for the panel to close the connection.
+            # Note: The panel closes the connection after 15s:
+            await reader.read(-1)
+            log.debug("Panel at %r has closed the connection.", addr)
+            break
+    
     except asyncio.IncompleteReadError:
         log.debug("Panel at %r has closed the connection (IncompleteReadError).", addr)
     except (ConnectionResetError, BrokenPipeError):
