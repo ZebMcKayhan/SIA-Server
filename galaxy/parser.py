@@ -205,11 +205,19 @@ def parse_sia_frame(command_name: str, payload: bytes,
 
     if command_name in ('NEW_EVENT', 'OLD_EVENT'):
         # OLD_EVENT is identical to NEW_EVENT but indicates previously confirmed event
+        if event.data_payload is not None:
+            log.warning("Protocol violation: received '%s' without a preceding ACCOUNT_ID "
+                        "for account '%s'. Overwriting existing event data.",
+                        command_name, event.account)      
         _parse_data_payload(payload, event, event_code_descriptions)
         event.event_type = 'New' if command_name == 'NEW_EVENT' else 'Old'
         return FrameResult.SUCCESS
 
     elif command_name == 'ASCII':
+        if event.ascii_payload is not None:
+            log.warning("Protocol violation: received duplicate ASCII block "
+                        "for account '%s'. Overwriting existing ASCII data.",
+                        event.account)      
         _parse_ascii_payload(payload, event, char_map)
         return FrameResult.SUCCESS
 
