@@ -70,7 +70,7 @@ try:
     from galaxy.encryption import do_handshake, CryptoContext, START_ENC_HEADER
     ENCRYPTION_AVAILABLE = True
     log.debug("Encryption modules loaded.")
-except (ImportError, ModuleNotFoundError):
+except (ImportError, ModuleNotFoundError, OSError):
     pass
     
 # --- END INITIALIZATION ---
