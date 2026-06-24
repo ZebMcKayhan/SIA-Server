@@ -135,6 +135,8 @@ except ModuleNotFoundError:
     log.info("Encryption modules not found. Encrypted sessions will be rejected.")
 except ImportError:
     log.info("Encryption modules failed to import. Encrypted sessions will be rejected.")
+except Exception as e:
+    log.info("Encryption modules failed to load: %s. Encrypted sessions will be rejected.", e)
 # ---
 
 from galaxy.protocol import build_block, validate_and_strip, check_block, INCOMPLETE_BLOCK_TIMEOUT, INTER_COMMAND_TIMEOUT
