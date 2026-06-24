@@ -235,7 +235,7 @@ async def handle_connection(notification_queue: Queue, reader, writer):
                     log.debug("Incomplete encrypted block from %r, waiting for more.", addr)
                     continue
             else:
-                data = buffer
+                data = bytes(buffer) # make a copy rather than reference
 
             command_ok, expected_len, received_len = check_block(data, VALID_COMMANDS)
 
