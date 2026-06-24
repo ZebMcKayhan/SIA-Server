@@ -250,7 +250,7 @@ async def handle_ip_check(reader, writer, notification_queue: Queue):
                     continue
                 if ENCRYPTION_AVAILABLE:
                     log.debug("Encrypted header detected from %s", addr[0])
-                    crypto = await do_handshake(reader, writer, buffer, log)
+                    crypto = await do_handshake(reader, writer, bytes(buffer), log)
                     if crypto is None:
                         log.debug("IP Check handshake failed from %s - ignored.", addr[0])
                         return
@@ -264,7 +264,7 @@ async def handle_ip_check(reader, writer, notification_queue: Queue):
 
             # Decrypt if encrypted session
             if crypto:
-                data = crypto.decrypt(buffer)
+                data = crypto.decrypt(bytes(buffer))
                 if not data:
                     log.debug("Incomplete encrypted packet from %r, waiting for more.", addr)
                     continue
