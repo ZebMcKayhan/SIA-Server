@@ -178,7 +178,7 @@ async def handle_connection(notification_queue: Queue, reader, writer):
     crypto = None  # This will hold our CryptoContext object if the session is encrypted
     account_validated = False
     events = []
-    buffer          = bytearray()  # TCP reassembly buffer
+    buffer = bytearray()  # TCP reassembly buffer
     
     try:
         while True:
@@ -210,7 +210,7 @@ async def handle_connection(notification_queue: Queue, reader, writer):
                     continue
                 if ENCRYPTION_AVAILABLE:
                     log.debug("Encrypted header detected from %r", addr)
-                    crypto = await do_handshake(reader, writer, buffer, log)
+                    crypto = await do_handshake(reader, writer, bytes(buffer), log)
                     if crypto is None:
                         if config.REJECT_POLICY == 'respond':
                             log.warning("Handshake failed, closing connection")
@@ -230,7 +230,7 @@ async def handle_connection(notification_queue: Queue, reader, writer):
                     return            
           
             if crypto:
-                data = crypto.decrypt(buffer)
+                data = crypto.decrypt(bytes(buffer))
                 if not data:
                     log.debug("Incomplete encrypted block from %r, waiting for more.", addr)
                     continue
