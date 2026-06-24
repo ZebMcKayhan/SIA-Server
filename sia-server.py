@@ -205,10 +205,10 @@ async def handle_connection(notification_queue: Queue, reader, writer):
             
             # --- encryption detection ---
             if crypto is None and buffer.startswith(START_ENC_HEADER):
+                if len(buffer) < 5:
+                    log.debug("Encrypted header incomplete from %r, waiting for more.", addr)
+                    continue
                 if ENCRYPTION_AVAILABLE:
-                    if len(buffer) < 5:
-                        log.debug("Encrypted header incomplete from %r, waiting for more.", addr)
-                        continue
                     log.debug("Encrypted header detected from %r", addr)
                     crypto = await do_handshake(reader, writer, buffer, log)
                     if crypto is None:
