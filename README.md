@@ -8,8 +8,8 @@ It was created as a replacement for the discontinued free Honeywell push notific
 allowing users to regain full control over their alarm alerts without ongoing subscription costs.
 
 Notifications are delivered via [ntfy.sh](https://ntfy.sh/) — a free, open-source push notification
-service. Just install the ntfy app on your phone (Android/iOS), subscribe to a topic, and you're done.
-No account, no registration, no subscription required. Additional built-in providers include
+service. Just install the ntfy app on your phone (Android/iOS), add your chosen topic to the app, 
+and you're done. No account, no registration, no subscription required. Additional built-in providers include
 [Telegram](https://telegram.org/), [Pushover](https://pushover.net/) and webhook for custom
 integrations. A plugin system also allows adding your own providers — see
 [providers/README.md](providers/README.md) for details.
