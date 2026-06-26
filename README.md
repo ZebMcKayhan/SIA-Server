@@ -74,14 +74,21 @@ The project is structured to separate the server logic, protocol parsing, and co
 ├── requirements.txt        # Required python packages.
 ├── galaxy/
 │   ├── __init__.py
-│   ├── README.md           # Technical description of the protocol.  
+│   ├── README.md           # Technical description of the protocol.
+│   ├── constants.py        # Constants used in the SIA protocol.
 │   ├── parser.py           # Handles parsing of the Galaxy SIA protocol.
-│   └── constants.py        # Constants used in the SIA protocol.
+│   ├── protocol.py         # Low-level SIA block framing and checksum helpers.
+│   └── encryption/         # Optional encryption module (platform-specific).
+│       ├── __init__.py
+│       └── *.so            # Compiled encryption module for supported platforms.
 ├── providers/
 │   ├── __init__.py
 │   ├── README.md           # How to create custom notification providers.
 │   ├── base.py             # Abstract base class for notification providers.
-│   └── ntfy.py             # Built-in ntfy.sh notification provider.
+│   ├── ntfy.py             # Built-in ntfy.sh notification provider.
+│   ├── pushover.py         # Built-in Pushover notification provider.
+│   ├── telegram.py         # Built-in Telegram notification provider.
+│   └── webhook.py          # Built-in Webhook event sender.
 └── asuswrt-merlin/
     ├── README.md           # Install instructions for Asuswrt-Merlin.
     ├── S99siaserver        # Entware service (init.d) file.
