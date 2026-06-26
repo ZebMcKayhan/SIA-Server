@@ -21,7 +21,10 @@ If your Galaxy Flex notifications suddenly stopped working, or you are looking f
 self-hosted alternative without installing a full home automation ecosystem, this project is for you.
 
 > **IMPORTANT SECURITY NOTICE**
-> By default, the communication between the alarm panel and this server is **unencrypted**. This server is designed to be run on a trusted local network only. Please read the full [Security & Privacy Guidelines](#security--privacy-guidelines) before installation.
+> By default, the communication between the alarm panel and this server is **unencrypted**. 
+> This server is designed to be run on a trusted local network. An optional encryption 
+> module is available for supported platforms — see [Security & Privacy Guidelines](#security--privacy-guidelines) 
+> for details and recommended hardening steps before installation.
 
 If you are having trouble self-hosting and would like to test against a live server before setting up your own, feel free to reach out via PM on 
 [DIYNOT](https://www.diynot.com) or [Reddit](https://www.reddit.com) 
@@ -118,6 +121,10 @@ This server requires Python 3. The installation steps are different for Linux an
     ```bash
     sudo apt update
     sudo apt install python3-requests python3-uvloop
+    ```
+3.  **Install Encryption Dependencies (Optional):** Only required if your platform has a compatible encryption module in `galaxy/encryption/`.
+    ```bash
+    sudo apt install python3-pycryptodome
     ```
 
 #### For Windows
@@ -357,9 +364,12 @@ Please read these guidelines carefully.
 
 **1. Local Network Communication (Panel to Server)**
 
-The communication between your alarm panel and this server is **unencrypted**. Run it on a trusted local network (LAN).
+The communication between your alarm panel and this server is **unencrypted** by default. 
+Run it on a trusted local network (LAN).
 
-> **Warning:** Do not expose the server's listening ports directly to the public internet. If you must, use a **VPN** (e.g., WireGuard).
+> **Warning:** Do not expose the server's listening ports directly to the public internet. 
+> If you must, use a **VPN** (e.g., WireGuard) or enable the optional encryption module 
+> (see below). Note that the encryption module is only available for selected platforms.
 
 **2. Notification Privacy (Server to ntfy.sh)**
 
@@ -369,6 +379,21 @@ The communication between your alarm panel and this server is **unencrypted**. R
     -   **Consider a generic Site Name** that cannot be linked to your address.
     -   Alternatively: **Subscribe to NTFY.sh PRO** to setup private channels with authentication. This server fully supports authentication via the `NTFY_AUTH` settings.
     -   Alternatively: **Host NTFY yourself** to be able to setup private channels free of charge (Requires a machine with public ip)
+
+**3. Encrypted Sessions (Recommended for Internet-Facing Servers)**
+
+If your server is exposed to the internet, enabling encryption on the panel combined with 
+the following configuration makes the server virtually invisible to scanners and attackers:
+
+-   Set `ENABLED = Secure` for all accounts — plaintext connections are rejected silently.
+-   Set `ENABLED = No` for the `[Default]` account — unknown accounts get no response.
+-   Set `REJECT_POLICY = drop` — invalid connections are silently dropped, not responded to.
+-   Use random, unguessable account numbers on the panel.
+
+This makes the server effectively invisible to port scanners and brute-force attempts.
+
+> **Note:** Encrypted sessions require the optional encryption module, which is available 
+> for selected platforms only, see `./galaxy/encryption/` folder. 
 
 **Disclaimer:** You are ultimately responsible for securing your own setup.
 
