@@ -130,7 +130,8 @@ do_handshake = None
 try:
     from galaxy.encryption import do_handshake, CryptoContext
     ENCRYPTION_AVAILABLE = True
-    log.info("INFO: Encryption modules loaded. Encrypted SIA sessions are supported.")
+    enc_version = getattr(sys.modules.get('galaxy.encryption'), '__version__', None)
+    log.info("Encryption modules loaded (version %s). Encrypted SIA sessions are supported.", enc_version)
 except ModuleNotFoundError:
     log.info("Encryption modules not found. Encrypted sessions will be rejected.")
 except ImportError:
