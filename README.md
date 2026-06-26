@@ -366,9 +366,6 @@ environment:
   - TZ=Europe/London    # Change to your local timezone
 ```
 
-## Security & Privacy Guidelines
-Please read these guidelines carefully.
-
 **1. Local Network Communication (Panel to Server)**
 
 The communication between your alarm panel and this server is **unencrypted** by default. 
@@ -378,29 +375,27 @@ Run it on a trusted local network (LAN).
 > If you must, use a **VPN** (e.g., WireGuard) or enable the optional encryption module 
 > (see below). Note that the encryption module is only available for selected platforms.
 
-**2. Notification Privacy (Server to Notification Providers)**
-
--   **Transport Security:** Communication to providers uses **HTTPS** as default and is secure.
--   **Topic Privacy (ntfy.sh):** topics are public by default. To secure them:
-    -   **Use a long, unguessable topic name.**
-    -   **Consider a generic Site Name** that cannot be linked to your address.
-    -   Alternatively: **Subscribe to NTFY.sh PRO** to setup private channels with authentication. This server fully supports authentication via the `NTFY_AUTH` settings.
-    -   Alternatively: **Host NTFY yourself** to be able to setup private channels free of charge (Requires a machine with public ip)
-
-**3. Encrypted Sessions (Recommended for Internet-Facing Servers)**
-
 If your server is exposed to the internet, enabling encryption on the panel combined with 
-the following configuration makes the server virtually invisible to scanners and attackers:
+the following configuration makes the server much more resilient against unwanted access:
 
--   Set `ENABLED = Secure` for all accounts — plaintext connections are rejected silently.
--   Set `ENABLED = No` for the `[Default]` account — unknown accounts get no response.
--   Set `REJECT_POLICY = drop` — invalid connections are silently dropped, not responded to.
+-   Set `ENABLED = Secure` for all accounts — plaintext connections are rejected.
+-   Set `ENABLED = No` for the `[Default]` account — unknown accounts are rejected.
+-   Set `REJECT_POLICY = drop` — rejected connections are silently dropped without response.
 -   Use random, unguessable account numbers on the panel.
 
-This makes the server effectively invisible to port scanners and brute-force attempts.
-
 > **Note:** Encrypted sessions require the optional encryption module, which is available 
-> for selected platforms only, see `./galaxy/encryption/` folder. 
+> for selected platforms only, see `./galaxy/encryption/` folder.
+
+**2. Notification Privacy (Server to Notification Providers)**
+
+-   **Transport Security:** All built-in providers use **HTTPS** and are secure.
+-   **Topic Privacy (ntfy.sh):** ntfy.sh topics are public by default. To secure them:
+    -   **Use a long, unguessable topic name.**
+    -   **Consider a generic Site Name** that cannot be linked to your address.
+    -   Alternatively: **Subscribe to ntfy.sh PRO** to set up private channels with 
+        authentication. This server fully supports authentication via the `NTFY_AUTH` settings.
+    -   Alternatively: **Host ntfy yourself** for private channels free of charge 
+        (requires a machine with a public IP).
 
 **Disclaimer:** You are ultimately responsible for securing your own setup.
 
