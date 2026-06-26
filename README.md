@@ -36,8 +36,8 @@ setup with no guarantees of uptime or longevity.
 
 -   **Self-Hosted:** Runs on any local Windows or Linux machine (like a Raspberry Pi), or in a Docker container.
 -   **Real-time Notifications:** Instantly forwards alarm events to your devices.
--   **Prioritized Alerts:** Uses ntfy.sh priorities to distinguish between urgent alarms and routine events.
--   **Advanced Notification Routing:** Route notifications for different accounts to different ntfy.sh topics, each with its own optional authentication (Bearer Token or User/Pass).
+-   **Prioritized Alerts:** Uses notification priorities to distinguish between urgent alarms and routine events.
+-   **Advanced Notification Routing:** Route notifications for different accounts to different channels or topics, each with its own optional authentication (Bearer Token or User/Pass).
 -   **Robust Protocol Handling:** Correctly parses the multi-message protocol used by Galaxy Flex panels.
 -   **Broad SIA Level Support:** The flexible parser can correctly handle event data from SIA Levels 0, 1, 2, and 3.
 -   **Optional Heartbeat Server:** Includes an optional server to handle the proprietary Honeywell "IP Check" heartbeat, with connection watchdog monitoring that sends notifications when a panel stops sending heartbeats.
@@ -45,7 +45,7 @@ setup with no guarantees of uptime or longevity.
 -   **Protocol State Machine:** Enforces correct SIA message ordering. Any connection that does not start with a valid `ACCOUNT_ID` is immediately rejected or silently dropped.
 -   **Character Encoding Fixes:** Decodes the proprietary character set used by Galaxy panels (e.g., Å, Ä, Ö).
 -   **Highly Configurable:** Most user settings are in a simple `sia-server.conf` file, with advanced protocol constants located in the `galaxy/` directory.
--   **Extensible Notification Providers:** Built-in support for ntfy.sh with a plugin architecture
+-   **Extensible Notification Providers:** Built-in support for ntfy.sh, Pushover and Telegram with a plugin architecture
     for custom providers. Drop a new provider file into the `providers/` directory and it is
     auto-discovered at startup. See [providers/README.md](providers/README.md).
 
@@ -154,7 +154,7 @@ Log into your Galaxy Flex panel's installer menu and configure the Ethernet modu
 -   **ARC Port:** The port for the `[SIA-Server]` and optionally the `[IP-Check]` server. (Menu `56.1.1.1.4.1`)
 -   **Protocol:** SIA. Levels 0-3 are supported; Level 3 is recommended for the most detail. (Menu `56.1.1.1.4.2`)
 -   **Account Number:** Your 4 or 6-digit alarm account number. SIA Level 3 requires 6 digits. (Menu `56.1.2.1.1`)
--   **Encryption:** Set to **Off** unless you have `galaxy/encryption.py` installed. (Menu `56.3.3.5`)
+-   **Encryption:** Set to **Off** unless you have a compatible encryption module installed `galaxy/encryption/`. (Menu `56.3.3.5`)
 -   **IP-Check:** (Optional) To use the heartbeat feature, enable it by setting a time interval (e.g., 00:30 for 30 minutes). `00:00` means disabled. (Menu `56.3.3.7.1`)
 -   **Eng. Test:** Use this to send a test notification without generating a fault. (Menu `56.7.1`)
 
@@ -186,7 +186,7 @@ The primary configuration is done in `sia-server.conf`. This file is designed to
     -   `ENABLED`: Controls the connection policy for this account. Accepts `Yes`, `No`, or `Secure`.
         -   `Yes` — Accept all connections to this account (default).
         -   `No` — Reject all connections from this account.
-        -   `Secure` — Only accept encrypted connections. Plaintext connections will be rejected. You will need to supply `galaxy/encryption.py` to enable encryption.
+        -   `Secure` — Only accept encrypted connections. Plaintext connections will be rejected. You will need a compatible encryption module in `galaxy/encryption/` to enable encryption.
     -   `PROVIDER`: The notification provider to use. Set to `ntfy` for ntfy.sh notifications, or
         `None` to disable notifications for this account. Custom providers are supported —
         see [providers/README.md](providers/README.md).
@@ -378,10 +378,10 @@ Run it on a trusted local network (LAN).
 > If you must, use a **VPN** (e.g., WireGuard) or enable the optional encryption module 
 > (see below). Note that the encryption module is only available for selected platforms.
 
-**2. Notification Privacy (Server to ntfy.sh)**
+**2. Notification Privacy (Server to Notification Providers)**
 
--   **Transport Security:** Communication to `ntfy.sh` uses **HTTPS** and is secure.
--   **Topic Privacy:** ntfy.sh topics are public by default. To secure them:
+-   **Transport Security:** Communication to providers uses **HTTPS** as default and is secure.
+-   **Topic Privacy (ntfy.sh):** topics are public by default. To secure them:
     -   **Use a long, unguessable topic name.**
     -   **Consider a generic Site Name** that cannot be linked to your address.
     -   Alternatively: **Subscribe to NTFY.sh PRO** to setup private channels with authentication. This server fully supports authentication via the `NTFY_AUTH` settings.
