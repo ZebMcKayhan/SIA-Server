@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y \
 
 # Install Python dependencies
 COPY requirements.txt ./
-RUN pip install -r requirements.txt && pip install pycryptodome
+RUN pip install -r requirements.txt && pip install uvloop pycryptodome
 
 # Copy application files
 COPY *.py ./
