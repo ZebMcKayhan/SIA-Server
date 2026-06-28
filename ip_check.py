@@ -10,6 +10,7 @@ This script is intended to be run as a subprocess by sia-server.py.
 import argparse
 import asyncio
 import logging
+import signal
 import sys
 import time
 import datetime
@@ -70,8 +71,12 @@ try:
     from galaxy.encryption import do_handshake, CryptoContext, START_ENC_HEADER
     ENCRYPTION_AVAILABLE = True
     log.debug("Encryption modules loaded.")
-except (ImportError, ModuleNotFoundError, OSError):
-    pass
+except ModuleNotFoundError:
+    log.debug("Encryption modules not found. Encrypted sessions will be rejected.")
+except ImportError:
+    log.debug("Encryption modules failed to import. Encrypted sessions will be rejected.")
+except Exception as e:
+    log.debug("Encryption modules failed to load: %s. Encrypted sessions will be rejected.", e)
     
 # --- END INITIALIZATION ---
 
@@ -390,9 +395,19 @@ async def start_ip_check_server(): # Renamed from 'main' to be an async function
         asyncio.create_task(watchdog_task(notification_queue))
         await server.serve_forever()
 
+def handle_shutdown(signum, frame):
+    log.info("Received shutdown signal (%d), stopping IP Check server...", signum)
+    sys.exit(0)
+
+def handle_sighup(signum, frame):
+    # future use for config reload.
+    log.info("Received SIGHUP signal. (No action taken)")
 
 if __name__ == '__main__':
-    # The main execution block is now just a simple try...except wrapper
+    signal.signal(signal.SIGINT, handle_shutdown)
+    signal.signal(signal.SIGTERM, handle_shutdown)
+    if hasattr(signal, 'SIGHUP'):
+        signal.signal(signal.SIGHUP, handle_sighup)
     try:
         asyncio.run(start_ip_check_server())
     except (KeyboardInterrupt, SystemExit):
