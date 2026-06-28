@@ -393,7 +393,10 @@ async def start_ip_check_server(): # Renamed from 'main' to be an async function
 
     async with server:
         asyncio.create_task(watchdog_task(notification_queue))
-        await server.serve_forever()
+        try:
+            await server.serve_forever()
+        except asyncio.CancelledError:
+            log.info("IP Check server shutdown requested.")
 
 def handle_shutdown(signum, frame):
     log.info("Received shutdown signal (%d), stopping IP Check server...", signum)
