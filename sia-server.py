@@ -8,7 +8,7 @@ Honeywell Galaxy Flex alarm systems. It sends notifications via ntfy.sh.
 This server is configured via 'sia-server.conf' and 'configuration.py'.
 """
 # --- Application Version ---
-__version__ = "2.5.0-beta2"
+__version__ = "2.5.0-beta3"
 
 import argparse
 import asyncio
@@ -463,10 +463,15 @@ def handle_shutdown(signum, frame):
     log.info("Received shutdown signal (%d), stopping server...", signum)
     sys.exit(0)
 
+def handle_sighup(signum, frame):
+    #  future use for config reload.
+    log.info("Received SIGHUP signal. (No action taken)")
+    
 def main():
     signal.signal(signal.SIGINT, handle_shutdown)
     signal.signal(signal.SIGTERM, handle_shutdown)
-    
+    if hasattr(signal, 'SIGHUP'):  
+        signal.signal(signal.SIGHUP, handle_sighup)    
     log.info("Starting Galaxy SIA Server version %s", __version__)
 
     notification_queue = Queue(maxsize=config.MAX_QUEUE_SIZE)
