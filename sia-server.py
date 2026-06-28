@@ -246,12 +246,19 @@ async def handle_connection(notification_queue: Queue, reader, writer):
                 if config.REJECT_POLICY == 'respond':
                     log.warning("Invalid frame header from %r - rejected. "
                                 "Buffer: %r", addr, bytes(buffer))
+                else:
+                    log.debug("Invalid frame header from %r - rejected. "
+                              "Buffer: %r", addr, bytes(buffer))
                 await policy_reject(writer, crypto)
                 return
 
             if received_len > expected_len:
-                log.warning("Protocol violation from %r: expected %d bytes, got %d. "
-                            "Buffer: %r", addr, expected_len, received_len, bytes(buffer))
+                if config.REJECT_POLICY == 'respond':
+                    log.warning("Protocol violation from %r: expected %d bytes, got %d. "
+                                "Buffer: %r", addr, expected_len, received_len, bytes(buffer))
+                else:
+                    log.debug("Protocol violation from %r: expected %d bytes, got %d. "
+                              "Buffer: %r", addr, expected_len, received_len, bytes(buffer))
                 await policy_reject(writer, crypto)
                 return
 
@@ -267,6 +274,9 @@ async def handle_connection(notification_queue: Queue, reader, writer):
             if command_byte is None:
                 if config.REJECT_POLICY == 'respond':
                     log.warning("Bad checksum or malformed block from %r - rejected. "
+                                "Raw: %r", addr, data)
+                else:
+                    log.debug("Bad checksum or malformed block from %r - rejected. "
                                 "Raw: %r", addr, data)
                 await policy_reject(writer, crypto)
                 return
@@ -286,6 +296,9 @@ async def handle_connection(notification_queue: Queue, reader, writer):
                 if config.REJECT_POLICY == 'respond':
                     log.warning("Invalid or unexpected frame '%s' from %r - rejected.",
                                 command_name, addr)
+                else:
+                     log.debug("Invalid or unexpected frame '%s' from %r - rejected.",
+                               command_name, addr)                    
                 await policy_reject(writer, crypto=crypto)
                 return
 
