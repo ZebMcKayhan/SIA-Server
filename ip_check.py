@@ -405,7 +405,10 @@ def handle_sighup(signum, frame):
     log.info("Received SIGHUP signal. (No action taken)")
 
 if __name__ == '__main__':
-    signal.signal(signal.SIGINT, handle_shutdown)
+    if sys.stdout.isatty():
+        signal.signal(signal.SIGINT, handle_shutdown)
+    else:
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
     signal.signal(signal.SIGTERM, handle_shutdown)
     if hasattr(signal, 'SIGHUP'):
         signal.signal(signal.SIGHUP, handle_sighup)
