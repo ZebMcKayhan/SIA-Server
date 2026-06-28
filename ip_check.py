@@ -397,7 +397,8 @@ async def start_ip_check_server(): # Renamed from 'main' to be an async function
 
 def handle_shutdown(signum, frame):
     log.info("Received shutdown signal (%d), stopping IP Check server...", signum)
-    sys.exit(0)
+    loop = asyncio.get_event_loop()
+    loop.stop()
 
 def handle_sighup(signum, frame):
     # future use for config reload.
