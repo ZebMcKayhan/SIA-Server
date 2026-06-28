@@ -365,27 +365,76 @@ async def handle_connection(notification_queue: Queue, reader, writer):
         except Exception as e:
             log.error("Error closing connection: %s", e)
 
-async def monitor_subprocess(process, name):
-    """Monitors a subprocess, parses its log level, and logs its output."""
-    log.info("Monitoring subprocess '%s' (PID: %d)", name, process.pid)
-    LEVEL_MAP = {'DEBUG': logging.DEBUG, 'INFO': logging.INFO, 'WARNING': logging.WARNING, 'ERROR': logging.ERROR, 'CRITICAL': logging.CRITICAL}
-    async def log_stream(stream, default_level):
-        while not stream.at_eof():
-            line = await stream.readline()
-            if line:
-                line_str = line.decode(errors='replace').strip()
-                try:
-                    level_name, logger_name, msg = line_str.split(':', 2)
-                    log_level = LEVEL_MAP.get(level_name, default_level)
-                    subprocess_logger = logging.getLogger(logger_name)
-                    subprocess_logger.log(log_level, msg)
-                except ValueError:
-                    # Fallback for malformed lines
-                    log.log(default_level, "[%s] %s", name, line_str)
-    await asyncio.gather(log_stream(process.stdout, logging.INFO), log_stream(process.stderr, logging.ERROR))
-    await process.wait()
-    log.warning("Subprocess '%s' (PID: %d) has exited with code %d.", name, process.pid, process.returncode)
+async def _log_stream(stream, default_level, name):
+    """Reads and logs lines from a subprocess stream."""
+    LEVEL_MAP = {
+        'DEBUG': logging.DEBUG, 'INFO': logging.INFO,
+        'WARNING': logging.WARNING, 'ERROR': logging.ERROR,
+        'CRITICAL': logging.CRITICAL
+    }
+    while not stream.at_eof():
+        line = await stream.readline()
+        if line:
+            line_str = line.decode(errors='replace').strip()
+            try:
+                level_name, logger_name, msg = line_str.split(':', 2)
+                log_level = LEVEL_MAP.get(level_name, default_level)
+                subprocess_logger = logging.getLogger(logger_name)
+                subprocess_logger.log(log_level, msg)
+            except ValueError:
+                log.log(default_level, "[%s] %s", name, line_str)
 
+async def supervise_ip_check(shutdown_event: asyncio.Event):
+    """Launches and supervises the IP Check subprocess, restarting on failure."""
+    BACKOFF = [5, 60, 120, 240, 480, 960, 1920]  # seconds
+    HEALTHY_THRESHOLD = 60  # seconds - reset backoff if process ran this long
+    attempt = 0
+
+    while not shutdown_event.is_set():
+        command = [sys.executable, 'ip_check.py', '--config', args.config]
+        log.info("Launching IP Check server (attempt %d): %s",
+                 attempt + 1, " ".join(command))
+
+        start_time = asyncio.get_event_loop().time()
+        process = None
+
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            await asyncio.gather(
+                _log_stream(process.stdout, logging.INFO, 'ip_check.py'),
+                _log_stream(process.stderr, logging.ERROR, 'ip_check.py')
+            )
+            await process.wait()
+        except Exception as e:
+            log.error("Failed to launch IP Check server: %s", e)
+
+        if shutdown_event.is_set():
+            log.info("IP Check server stopped (shutdown requested).")
+            return
+
+        elapsed = asyncio.get_event_loop().time() - start_time
+        exit_code = process.returncode if process else -1
+        log.warning("IP Check server exited with code %d after %.0fs.",
+                    exit_code, elapsed)
+
+        if elapsed >= HEALTHY_THRESHOLD:
+            attempt = 0
+
+        delay = BACKOFF[min(attempt, len(BACKOFF) - 1)]
+        attempt += 1
+        log.info("Restarting IP Check server in %ds (attempt %d)...", delay, attempt)
+
+        try:
+            await asyncio.wait_for(shutdown_event.wait(), timeout=delay)
+            log.info("IP Check server restart cancelled (shutdown requested).")
+            return
+        except asyncio.TimeoutError:
+            pass
+            
 async def start_servers(notification_queue: Queue):
     """Starts the main SIA server and launches the IP Check server as a subprocess."""
     
@@ -415,29 +464,22 @@ async def start_servers(notification_queue: Queue):
         # We must return here to stop the program from continuing.
         raise # this triggers the OSError in the main loop
 
-    # --- Launch the optional IP Check Server as a Subprocess ---
-    ip_check_process = None
-    ip_check_monitor_task = None
+    # Shutdown event shared between the server and the ip_check supervisor
+    shutdown_event = asyncio.Event()
+    
+    # --- Launch the optional IP Check Server as a supervised subprocess ---
+    ip_check_task = None
     if config.IP_CHECK_ENABLED:
-        try:
-            command = [sys.executable, 'ip_check.py', '--config', args.config]
-            log.info("Launching IP Check server as a subprocess: %s", " ".join(command))
-            ip_check_process = await asyncio.create_subprocess_exec(
-                *command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-            )
-            ip_check_monitor_task = asyncio.create_task(monitor_subprocess(ip_check_process, 'ip_check.py'))
-        except Exception as e:
-            log.error("Failed to launch IP Check server subprocess: %s", e)
+        ip_check_task = asyncio.create_task(supervise_ip_check(shutdown_event))
     
     log.info('='*60)
     
-    # Prefer loop-level signal handlers so the finally block (which
-    # terminates the IP Check subprocess) always runs on SIGINT/SIGTERM.
     loop = asyncio.get_running_loop()
     serve_task = asyncio.ensure_future(sia_server.serve_forever())
 
     def _handle_signal(sig):
         log.info("Received signal %s, shutting down...", sig)
+        shutdown_event.set() # Signal the supervisor to stop
         serve_task.cancel()
 
     for sig in (signal.SIGINT, signal.SIGTERM):
@@ -453,11 +495,11 @@ async def start_servers(notification_queue: Queue):
         log.info("Server shutdown requested.")
     finally:
         # When the main server is shut down, also terminate the subprocess
-        if ip_check_process and ip_check_process.returncode is None:
-            log.info("Terminating IP Check server subprocess...")
-            ip_check_process.terminate()
-            await ip_check_process.wait()
-            log.info("IP Check subprocess terminated.")
+        shutdown_event.set()  # Ensure supervisor stops if not already set
+        if ip_check_task and not ip_check_task.done():
+            log.info("Waiting for IP Check supervisor to stop...")
+            await ip_check_task
+            log.info("IP Check supervisor stopped.")
 
 def handle_shutdown(signum, frame):
     log.info("Received shutdown signal (%d), stopping server...", signum)
