@@ -147,6 +147,8 @@ from galaxy.constants import COMMANDS, COMMAND_BYTES, EVENT_CODE_DESCRIPTIONS
 
 VALID_COMMANDS = set(COMMANDS.keys())
 
+ip_check_process = None  # Current ip_check subprocess, used for clean shutdown
+
 # --- END INITIALIZATION ---
 
 async def build_and_send(writer, command: str, payload: bytes = b'', crypto: CryptoContext | None = None):
@@ -386,6 +388,7 @@ async def _log_stream(stream, default_level, name):
 
 async def supervise_ip_check(shutdown_event: asyncio.Event):
     """Launches and supervises the IP Check subprocess, restarting on failure."""
+    global ip_check_process
     BACKOFF = [5, 60, 120, 240, 480, 960, 1920]  # seconds
     HEALTHY_THRESHOLD = 60  # seconds - reset backoff if process ran this long
     attempt = 0
@@ -404,6 +407,7 @@ async def supervise_ip_check(shutdown_event: asyncio.Event):
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
+            ip_check_process = process
             await asyncio.gather(
                 _log_stream(process.stdout, logging.INFO, 'ip_check.py'),
                 _log_stream(process.stderr, logging.ERROR, 'ip_check.py')
@@ -411,6 +415,8 @@ async def supervise_ip_check(shutdown_event: asyncio.Event):
             await process.wait()
         except Exception as e:
             log.error("Failed to launch IP Check server: %s", e)
+        finally:
+            ip_check_process = None
 
         if shutdown_event.is_set():
             log.info("IP Check server stopped (shutdown requested).")
@@ -479,7 +485,9 @@ async def start_servers(notification_queue: Queue):
 
     def _handle_signal(sig):
         log.info("Received signal %s, shutting down...", sig)
-        shutdown_event.set() # Signal the supervisor to stop
+        shutdown_event.set()
+        if ip_check_process and ip_check_process.returncode is None:
+            ip_check_process.terminate()
         serve_task.cancel()
 
     for sig in (signal.SIGINT, signal.SIGTERM):
