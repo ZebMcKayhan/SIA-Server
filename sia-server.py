@@ -395,8 +395,11 @@ async def supervise_ip_check(shutdown_event: asyncio.Event):
 
     while not shutdown_event.is_set():
         command = [sys.executable, 'ip_check.py', '--config', args.config]
-        log.info("Launching IP Check server (attempt %d): %s",
-                 attempt + 1, " ".join(command))
+        if attempt == 0:
+            log.info("Starting IP Check server: %s", " ".join(command))
+        else:
+            log.info("Restarting IP Check server (attempt %d): %s",
+                     attempt, " ".join(command))
 
         start_time = asyncio.get_event_loop().time()
         process = None
