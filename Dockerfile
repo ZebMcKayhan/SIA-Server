@@ -13,12 +13,12 @@ RUN apt-get update && apt-get install -y \
 
 # Install Python dependencies
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -r requirements.txt && pip install uvloop pycryptodome
 
 # Copy application files
 COPY *.py ./
-COPY galaxy/*.py ./galaxy/
-COPY providers/*.py ./providers/
+COPY galaxy/ ./galaxy/
+COPY providers/ ./providers/
 
 # Optional config mount location
 VOLUME ["/config"]
