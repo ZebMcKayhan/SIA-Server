@@ -148,6 +148,7 @@ from galaxy.constants import COMMANDS, COMMAND_BYTES, EVENT_CODE_DESCRIPTIONS
 VALID_COMMANDS = set(COMMANDS.keys())
 
 ip_check_process = None  # Current ip_check subprocess, used for clean shutdown
+_serve_task = None       # Current serve task, used for clean shutdown on Windows
 
 # --- END INITIALIZATION ---
 
@@ -483,8 +484,10 @@ async def start_servers(notification_queue: Queue):
     
     log.info('='*60)
     
-    loop = asyncio.get_running_loop()
+    global _serve_task
     serve_task = asyncio.ensure_future(sia_server.serve_forever())
+    _serve_task = serve_task
+    loop = asyncio.get_running_loop()
 
     def _handle_signal(sig):
         log.info("Received signal %s, shutting down...", sig)
@@ -514,7 +517,12 @@ async def start_servers(notification_queue: Queue):
 
 def handle_shutdown(signum, frame):
     log.info("Received shutdown signal (%d), stopping server...", signum)
-    sys.exit(0)
+    if _serve_task is not None:
+        if ip_check_process and ip_check_process.returncode is None:
+            ip_check_process.terminate()
+        _serve_task.cancel()
+    else:
+        sys.exit(0)  # Fallback if called before event loop is running
 
 def handle_sighup(signum, frame):
     #  future use for config reload.
