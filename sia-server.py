@@ -8,7 +8,7 @@ Honeywell Galaxy Flex alarm systems. It sends notifications via ntfy.sh.
 This server is configured via 'sia-server.conf' and 'configuration.py'.
 """
 # --- Application Version ---
-__version__ = "2.5.0-beta3"
+__version__ = "2.5.0-beta4"
 
 import argparse
 import asyncio
@@ -146,9 +146,6 @@ from notification import NotificationDispatcher, enqueue_notification
 from galaxy.constants import COMMANDS, COMMAND_BYTES, EVENT_CODE_DESCRIPTIONS
 
 VALID_COMMANDS = set(COMMANDS.keys())
-
-ip_check_process = None  # Current ip_check subprocess, used for clean shutdown
-_serve_task = None       # Current serve task, used for clean shutdown on Windows
 
 # --- END INITIALIZATION ---
 
@@ -368,83 +365,27 @@ async def handle_connection(notification_queue: Queue, reader, writer):
         except Exception as e:
             log.error("Error closing connection: %s", e)
 
-async def _log_stream(stream, default_level, name):
-    """Reads and logs lines from a subprocess stream."""
-    LEVEL_MAP = {
-        'DEBUG': logging.DEBUG, 'INFO': logging.INFO,
-        'WARNING': logging.WARNING, 'ERROR': logging.ERROR,
-        'CRITICAL': logging.CRITICAL
-    }
-    while not stream.at_eof():
-        line = await stream.readline()
-        if line:
-            line_str = line.decode(errors='replace').strip()
-            try:
-                level_name, logger_name, msg = line_str.split(':', 2)
-                log_level = LEVEL_MAP.get(level_name, default_level)
-                subprocess_logger = logging.getLogger(logger_name)
-                subprocess_logger.log(log_level, msg)
-            except ValueError:
-                log.log(default_level, "[%s] %s", name, line_str)
+async def monitor_subprocess(process, name):
+    """Monitors a subprocess, parses its log level, and logs its output."""
+    log.info("Monitoring subprocess '%s' (PID: %d)", name, process.pid)
+    LEVEL_MAP = {'DEBUG': logging.DEBUG, 'INFO': logging.INFO, 'WARNING': logging.WARNING, 'ERROR': logging.ERROR, 'CRITICAL': logging.CRITICAL}
+    async def log_stream(stream, default_level):
+        while not stream.at_eof():
+            line = await stream.readline()
+            if line:
+                line_str = line.decode(errors='replace').strip()
+                try:
+                    level_name, logger_name, msg = line_str.split(':', 2)
+                    log_level = LEVEL_MAP.get(level_name, default_level)
+                    subprocess_logger = logging.getLogger(logger_name)
+                    subprocess_logger.log(log_level, msg)
+                except ValueError:
+                    # Fallback for malformed lines
+                    log.log(default_level, "[%s] %s", name, line_str)
+    await asyncio.gather(log_stream(process.stdout, logging.INFO), log_stream(process.stderr, logging.ERROR))
+    await process.wait()
+    log.warning("Subprocess '%s' (PID: %d) has exited with code %d.", name, process.pid, process.returncode)
 
-async def supervise_ip_check(shutdown_event: asyncio.Event):
-    """Launches and supervises the IP Check subprocess, restarting on failure."""
-    global ip_check_process
-    BACKOFF = [5, 60, 120, 240, 480, 960, 1920]  # seconds
-    HEALTHY_THRESHOLD = 60  # seconds - reset backoff if process ran this long
-    attempt = 0
-
-    while not shutdown_event.is_set():
-        command = [sys.executable, 'ip_check.py', '--config', args.config]
-        if attempt == 0:
-            log.info("Starting IP Check server: %s", " ".join(command))
-        else:
-            log.info("Restarting IP Check server (attempt %d): %s",
-                     attempt, " ".join(command))
-
-        start_time = asyncio.get_event_loop().time()
-        process = None
-
-        try:
-            process = await asyncio.create_subprocess_exec(
-                *command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            ip_check_process = process
-            await asyncio.gather(
-                _log_stream(process.stdout, logging.INFO, 'ip_check.py'),
-                _log_stream(process.stderr, logging.ERROR, 'ip_check.py')
-            )
-            await process.wait()
-        except Exception as e:
-            log.error("Failed to launch IP Check server: %s", e)
-        finally:
-            ip_check_process = None
-
-        if shutdown_event.is_set():
-            log.info("IP Check server stopped (shutdown requested).")
-            return
-
-        elapsed = asyncio.get_event_loop().time() - start_time
-        exit_code = process.returncode if process else -1
-        log.warning("IP Check server exited with code %d after %.0fs.",
-                    exit_code, elapsed)
-
-        if elapsed >= HEALTHY_THRESHOLD:
-            attempt = 0
-
-        delay = BACKOFF[min(attempt, len(BACKOFF) - 1)]
-        attempt += 1
-        log.info("Restarting IP Check server in %ds (attempt %d)...", delay, attempt)
-
-        try:
-            await asyncio.wait_for(shutdown_event.wait(), timeout=delay)
-            log.info("IP Check server restart cancelled (shutdown requested).")
-            return
-        except asyncio.TimeoutError:
-            pass
-            
 async def start_servers(notification_queue: Queue):
     """Starts the main SIA server and launches the IP Check server as a subprocess."""
     
@@ -474,26 +415,29 @@ async def start_servers(notification_queue: Queue):
         # We must return here to stop the program from continuing.
         raise # this triggers the OSError in the main loop
 
-    # Shutdown event shared between the server and the ip_check supervisor
-    shutdown_event = asyncio.Event()
-    
-    # --- Launch the optional IP Check Server as a supervised subprocess ---
-    ip_check_task = None
+    # --- Launch the optional IP Check Server as a Subprocess ---
+    ip_check_process = None
+    ip_check_monitor_task = None
     if config.IP_CHECK_ENABLED:
-        ip_check_task = asyncio.create_task(supervise_ip_check(shutdown_event))
+        try:
+            command = [sys.executable, 'ip_check.py', '--config', args.config]
+            log.info("Launching IP Check server as a subprocess: %s", " ".join(command))
+            ip_check_process = await asyncio.create_subprocess_exec(
+                *command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+            ip_check_monitor_task = asyncio.create_task(monitor_subprocess(ip_check_process, 'ip_check.py'))
+        except Exception as e:
+            log.error("Failed to launch IP Check server subprocess: %s", e)
     
     log.info('='*60)
     
-    global _serve_task
-    serve_task = asyncio.ensure_future(sia_server.serve_forever())
-    _serve_task = serve_task
+    # Prefer loop-level signal handlers so the finally block (which
+    # terminates the IP Check subprocess) always runs on SIGINT/SIGTERM.
     loop = asyncio.get_running_loop()
+    serve_task = asyncio.ensure_future(sia_server.serve_forever())
 
     def _handle_signal(sig):
         log.info("Received signal %s, shutting down...", sig)
-        shutdown_event.set()
-        if ip_check_process and ip_check_process.returncode is None:
-            ip_check_process.terminate()
         serve_task.cancel()
 
     for sig in (signal.SIGINT, signal.SIGTERM):
@@ -509,20 +453,15 @@ async def start_servers(notification_queue: Queue):
         log.info("Server shutdown requested.")
     finally:
         # When the main server is shut down, also terminate the subprocess
-        shutdown_event.set()  # Ensure supervisor stops if not already set
-        if ip_check_task and not ip_check_task.done():
-            log.info("Waiting for IP Check supervisor to stop...")
-            await ip_check_task
-            log.info("IP Check supervisor stopped.")
+        if ip_check_process and ip_check_process.returncode is None:
+            log.info("Terminating IP Check server subprocess...")
+            ip_check_process.terminate()
+            await ip_check_process.wait()
+            log.info("IP Check subprocess terminated.")
 
 def handle_shutdown(signum, frame):
     log.info("Received shutdown signal (%d), stopping server...", signum)
-    if _serve_task is not None:
-        if ip_check_process and ip_check_process.returncode is None:
-            ip_check_process.terminate()
-        _serve_task.cancel()
-    else:
-        sys.exit(0)  # Fallback if called before event loop is running
+    sys.exit(0)
 
 def handle_sighup(signum, frame):
     #  future use for config reload.
