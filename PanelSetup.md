@@ -10,15 +10,15 @@
 
 `56.3.3.3 Gateway IP` - Set Gateway IP Address if not using DHCP, or if needed.
 
-`56.3.3.4 Network Mask` - Set size of your network if not using DHCP. Typically 255.255.255.0 if you dont know.
+`56.3.3.4 Network Mask` - Set size of your network if not using DHCP. Typically 255.255.255.0 if you don't know.
 
-`56.3.3.5 Encrypt` - `Alarm Report[1]` - set to 0 = Disabled and `IP Check[3]` to 0 = Disabled.
+`56.3.3.5 Encrypt` - `Alarm Report[1]` - set to 0 = Disabled and `IP Check[3]` to 0 = Disabled. If you have the optional encryption module installed you can set these to 1.
 
 `56.3.3.6 Line Fail` - Enable if you want the panel to monitor the network.
 
 `56.3.3.7 IP Check Cfg` - Set `intervals[1]` for heartbeat check if you want to use this feature (00:00 = disabled). Set `Acknowledge[2]` to Data if you want a fault if it fails.
 
-**Setup the Notification Reciever under Communications[56] -> ARC Notify[56.1] -> Recievers[56.1.1] -> Receiver 1[56.1.1.1] -> Ethernet[56.1.1.1.4]:**
+**Setup the Notification Receiver under Communications[56] -> ARC Notify[56.1] -> Receivers[56.1.1] -> Receiver 1[56.1.1.1] -> Ethernet[56.1.1.1.4]:**
 
 `56.1.1.1.4.1 Destination` - Point this to your SIA-Server local address. Note, use < (B) to erase, and * to place a 'dot'.
 
@@ -32,7 +32,7 @@
 
 `56.1.2.1.2 Triggers` - Select the events you want notification on.
 
-`56.1.2.1.3 Rx Sequence` - Select recievers and sequence this report should go to, if you have more than one, add them as a list. if you only have setup a single sia-server on reciever 1 then set this just to 1. if you have a backup sia-server, you could set this to 12 to use reciever 1 first and reciever 2 if nr 1 fails.
+`56.1.2.1.3 Rx Sequence` - Select receivers and sequence this report should go to, if you have more than one, add them as a list. if you only have setup a single sia-server on receiver 1 then set this just to 1. if you have a backup sia-server, you could set this to 12 to use receiver 1 first and receiver 2 if nr 1 fails.
 
 `56.1.2.1.5 IP Check (ARC Report only)` - Enable or disable the heartbeat check.
 
@@ -46,7 +46,7 @@
 
 `56.4.1.3 Gateway IP` - Your router IP, or gateway to internet.
 
-`56.4.1.4 Network Mask` - The size of your network. set to 255.255.255.0 if you dont know.
+`56.4.1.4 Network Mask` - The size of your network. set to 255.255.255.0 if you don't know.
 
 **Setup the Notification Communications[56] -> Ethernet/GPRS[56.4] -> Alarm Reporting[56.4.2]:**
 
@@ -56,9 +56,9 @@
 
 `56.4.2.3 Secondary IP` - `[1]IP Address` Optional second server. If you are running SIA-Server on another instance it could be added here. `[2]Port No.` The port for the secondary server (10000).
 
-`56.4.2.4 Account No.` - An arbitrary account number that you can use for site identification in SIA-Server. Select a number of your choice.
+`56.4.2.4 Account No.` - An arbitrary account number that you can use for site identification in SIA-Server. Select a 6 digit number of your choice.
 
-`56.4.2.5 Reciever` - Select if you are using a single SIA-Server or dual.
+`56.4.2.5 Receiver` - Select if you are using a single SIA-Server or dual.
 
 `56.4.2.6 Alarm Mon.` - This option does not need to be used.
 
@@ -70,6 +70,6 @@
 
 `56.4.5 Engineer Test` - Use this option when all is setup to send a test notification.
 
-`56.4.9 Encryption` - `[1] Alarm Reports` Needs to be set to `0 = Off`
+`56.4.9 Encryption` - `[1] Alarm Reports` set to `0 = Off`. If you have the optional encryption module installed you can set these to 1.
 
 
