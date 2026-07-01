@@ -366,6 +366,8 @@ environment:
   - TZ=Europe/London    # Change to your local timezone
 ```
 
+# Security & privacy guidelines
+
 **1. Local Network Communication (Panel to Server)**
 
 The communication between your alarm panel and this server is **unencrypted** by default. 
