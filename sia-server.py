@@ -144,8 +144,11 @@ from galaxy.protocol import build_block, validate_and_strip, check_block, INCOMP
 from galaxy.parser import parse_sia_frame, FrameResult, GalaxyEvent
 from notification import NotificationDispatcher, enqueue_notification
 from galaxy.constants import COMMANDS, COMMAND_BYTES, EVENT_CODE_DESCRIPTIONS
+import ip_check
 
 VALID_COMMANDS = set(COMMANDS.keys())
+
+_serve_task = None  # Current serve task, used for clean shutdown on Windows
 
 # --- END INITIALIZATION ---
 
@@ -365,33 +368,11 @@ async def handle_connection(notification_queue: Queue, reader, writer):
         except Exception as e:
             log.error("Error closing connection: %s", e)
 
-async def monitor_subprocess(process, name):
-    """Monitors a subprocess, parses its log level, and logs its output."""
-    log.info("Monitoring subprocess '%s' (PID: %d)", name, process.pid)
-    LEVEL_MAP = {'DEBUG': logging.DEBUG, 'INFO': logging.INFO, 'WARNING': logging.WARNING, 'ERROR': logging.ERROR, 'CRITICAL': logging.CRITICAL}
-    async def log_stream(stream, default_level):
-        while not stream.at_eof():
-            line = await stream.readline()
-            if line:
-                line_str = line.decode(errors='replace').strip()
-                try:
-                    level_name, logger_name, msg = line_str.split(':', 2)
-                    log_level = LEVEL_MAP.get(level_name, default_level)
-                    subprocess_logger = logging.getLogger(logger_name)
-                    subprocess_logger.log(log_level, msg)
-                except ValueError:
-                    # Fallback for malformed lines
-                    log.log(default_level, "[%s] %s", name, line_str)
-    await asyncio.gather(log_stream(process.stdout, logging.INFO), log_stream(process.stderr, logging.ERROR))
-    await process.wait()
-    log.warning("Subprocess '%s' (PID: %d) has exited with code %d.", name, process.pid, process.returncode)
-
 async def start_servers(notification_queue: Queue):
-    """Starts the main SIA server and launches the IP Check server as a subprocess."""
-    
+    """Starts the main SIA Event Server and optionally the IP Check Service."""
     try:
         handler_with_queue = functools.partial(handle_connection, notification_queue)
-        # --- Start the main SIA Event Server ---
+        # --- Start the SIA Event Server ---
         sia_server = await asyncio.start_server(
             handler_with_queue, config.LISTEN_ADDR, config.LISTEN_PORT
         )
@@ -409,32 +390,31 @@ async def start_servers(notification_queue: Queue):
             log.critical("STARTUP FAILED: The address '%s' is not a valid IP address or hostname.", config.LISTEN_ADDR)
             log.critical("Please check for typos in your sia-server.conf file.")
         else:
-            log.critical("A critical OS error occurred starting the SIA server: %s", e)
-        
+            log.critical("A critical OS error occurred starting the SIA Event Server: %s", e)
         log.critical("="*60)
-        # We must return here to stop the program from continuing.
-        raise # this triggers the OSError in the main loop
+        raise
 
-    # --- Launch the optional IP Check Server as a Subprocess ---
-    ip_check_process = None
-    ip_check_monitor_task = None
+    # --- Start the optional IP Check Service ---
     if config.IP_CHECK_ENABLED:
         try:
-            command = [sys.executable, 'ip_check.py', '--config', args.config]
-            log.info("Launching IP Check server as a subprocess: %s", " ".join(command))
-            ip_check_process = await asyncio.create_subprocess_exec(
-                *command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            ip_check.init(config, accounts)
+            handler = functools.partial(ip_check.handle_ip_check,
+                                        notification_queue=notification_queue)
+            ip_check_server = await asyncio.start_server(
+                handler, config.IP_CHECK_ADDR, config.IP_CHECK_PORT
             )
-            ip_check_monitor_task = asyncio.create_task(monitor_subprocess(ip_check_process, 'ip_check.py'))
-        except Exception as e:
-            log.error("Failed to launch IP Check server subprocess: %s", e)
-    
+            ip_check_addrs = ', '.join(str(sock.getsockname()) for sock in ip_check_server.sockets)
+            log.info('IP Check Service started, listening on: %s', ip_check_addrs)
+            asyncio.create_task(ip_check.watchdog_task(notification_queue))
+        except OSError as e:
+            log.warning("IP Check Service failed to start: %s. Continuing without it.", e)
+
     log.info('='*60)
-    
-    # Prefer loop-level signal handlers so the finally block (which
-    # terminates the IP Check subprocess) always runs on SIGINT/SIGTERM.
-    loop = asyncio.get_running_loop()
+
+    global _serve_task
     serve_task = asyncio.ensure_future(sia_server.serve_forever())
+    _serve_task = serve_task
+    loop = asyncio.get_running_loop()
 
     def _handle_signal(sig):
         log.info("Received signal %s, shutting down...", sig)
@@ -444,24 +424,19 @@ async def start_servers(notification_queue: Queue):
         try:
             loop.add_signal_handler(sig, lambda s=sig: _handle_signal(s))
         except (NotImplementedError, RuntimeError):
-            pass  # Windows: falls back to signal.signal() handlers in main()
+            pass
 
-    # Run the main SIA server
     try:
         await serve_task
     except asyncio.CancelledError:
         log.info("Server shutdown requested.")
-    finally:
-        # When the main server is shut down, also terminate the subprocess
-        if ip_check_process and ip_check_process.returncode is None:
-            log.info("Terminating IP Check server subprocess...")
-            ip_check_process.terminate()
-            await ip_check_process.wait()
-            log.info("IP Check subprocess terminated.")
-
+        
 def handle_shutdown(signum, frame):
     log.info("Received shutdown signal (%d), stopping server...", signum)
-    sys.exit(0)
+    if _serve_task is not None:
+        _serve_task.cancel()
+    else:
+        sys.exit(0)  # Fallback if called before event loop is running
 
 def handle_sighup(signum, frame):
     #  future use for config reload.
