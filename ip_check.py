@@ -8,6 +8,7 @@ Intended to be imported and run as part of sia-server.py.
 
 import asyncio
 import logging
+import sys
 import time
 import datetime
 from queue import Queue
@@ -16,14 +17,31 @@ from typing import Optional, Tuple
 from galaxy.protocol import INCOMPLETE_BLOCK_TIMEOUT, INTER_COMMAND_TIMEOUT
 from notification import enqueue_message_notification
 
+log = logging.getLogger('ip_check')
+
+# --- Optional Encryption Support ---
+ENCRYPTION_AVAILABLE = False
+START_ENC_HEADER = b'\x05\x01'
+CryptoContext = None
+do_handshake = None
+try:
+    from galaxy.encryption import do_handshake, CryptoContext
+    ENCRYPTION_AVAILABLE = True
+    enc_version = getattr(sys.modules.get('galaxy.encryption'), '__version__', None)
+    log.debug("Encryption modules loaded (version %s).", enc_version)
+except ModuleNotFoundError:
+    log.debug("Encryption modules not found. Encrypted sessions will be rejected.")
+except ImportError:
+    log.debug("Encryption modules failed to import. Encrypted sessions will be rejected.")
+except Exception as e:
+    log.debug("Encryption modules failed to load: %s. Encrypted sessions will be rejected.", e)
+
 # --- Watchdog Configuration ---
 PANEL_EPOCH_OFFSET = 54000  # 15 hours - converts panel timestamp to local time
 
 # --- Module-level config and accounts, set by init() ---
 config = None
 accounts = None
-
-log = logging.getLogger('ip_check')
 
 def init(cfg, accts):
     """Initialise the IP Check module with shared config and accounts."""
@@ -170,9 +188,7 @@ def extract_account(data: bytes) -> str:
     """Extract account number from IP Check packet bytes 1-8."""
     return data[1:9].decode('ascii', errors='ignore').lstrip('0') or '0'
 
-async def handle_ip_check(reader, writer, notification_queue: Queue,
-                          crypto_available: bool, start_enc_header: bytes,
-                          do_handshake, crypto_context):
+async def handle_ip_check(reader, writer, notification_queue: Queue):
     """Handles an incoming IP Check connection by echoing the received data."""
     addr = writer.get_extra_info('peername')
     crypto = None
@@ -202,11 +218,11 @@ async def handle_ip_check(reader, writer, notification_queue: Queue,
                 continue
 
             # --- Encryption detection ---
-            if crypto is None and buffer.startswith(start_enc_header):
+            if crypto is None and buffer.startswith(START_ENC_HEADER):
                 if len(buffer) < 5:
                     log.debug("Encrypted header incomplete from %r, waiting for more.", addr)
                     continue
-                if crypto_available:
+                if ENCRYPTION_AVAILABLE:
                     log.debug("Encrypted header detected from %s", addr[0])
                     crypto = await do_handshake(reader, writer, bytes(buffer), log)
                     if crypto is None:
