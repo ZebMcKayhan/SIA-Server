@@ -2,83 +2,34 @@
 """
 Galaxy IP Check (Heartbeat) Server
 
-Listens on a dedicated port for the proprietary Honeywell "Path Viability Check"
-ping. It echoes the received data back to the panel and closes the connection.
-This script is intended to be run as a subprocess by sia-server.py.
+Handles the proprietary Honeywell "Path Viability Check" heartbeat protocol.
+Intended to be imported and run as part of sia-server.py.
 """
 
-import argparse
 import asyncio
 import logging
-import signal
-import sys
 import time
 import datetime
 from queue import Queue
 from typing import Optional, Tuple
 
+from galaxy.protocol import INCOMPLETE_BLOCK_TIMEOUT, INTER_COMMAND_TIMEOUT
+from notification import enqueue_message_notification
+
 # --- Watchdog Configuration ---
 PANEL_EPOCH_OFFSET = 54000  # 15 hours - converts panel timestamp to local time
 
-# --- SCRIPT INITIALIZATION ---
-# 1. Parse arguments
-parser = argparse.ArgumentParser(description='Galaxy IP Check Server')
-parser.add_argument(
-    '--config',
-    default='sia-server.conf',
-    help='Path to configuration file (default: sia-server.conf)'
-)
-args = parser.parse_args()
-
-# 2. Import configuration loader
-from configuration import load_logging_config, load_application_config, load_accounts
-
-# 3. Load ONLY logging config first 
-logging_config = load_logging_config(args.config)
-
-# --- Logging Setup for Subprocess ---
-# 4. Configure the ROOT logger so all modules (including notification.py)
-# automatically inherit the same handler and format.
-# Format transports level, logger name and message to sia-server.py for formatting.
-root_logger = logging.getLogger()
-root_logger.setLevel(getattr(logging, logging_config.LOG_LEVEL, 'INFO'))
-root_logger.handlers.clear()
-handler = logging.StreamHandler(sys.stdout)
-handler.setFormatter(logging.Formatter('%(levelname)s:%(name)s:%(message)s'))
-root_logger.addHandler(handler)
+# --- Module-level config and accounts, set by init() ---
+config = None
+accounts = None
 
 log = logging.getLogger('ip_check')
 
-# 5. NOW load application and account config - logging is ready so all warnings/errors are captured
-config = load_application_config(args.config)
-accounts = load_accounts(args.config)
-
-# 6. Now, import the rest of our modules.
-from galaxy.protocol import INCOMPLETE_BLOCK_TIMEOUT, INTER_COMMAND_TIMEOUT
-from notification import NotificationDispatcher, enqueue_message_notification
-try:
-    import uvloop
-    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-except ImportError:
-    pass # uvloop is optional
-
-# --- Optional Encryption Support ---
-ENCRYPTION_AVAILABLE = False
-START_ENC_HEADER = b'\x05\x01'
-CryptoContext = None
-do_handshake = None
-try:
-    from galaxy.encryption import do_handshake, CryptoContext, START_ENC_HEADER
-    ENCRYPTION_AVAILABLE = True
-    log.debug("Encryption modules loaded.")
-except ModuleNotFoundError:
-    log.debug("Encryption modules not found. Encrypted sessions will be rejected.")
-except ImportError:
-    log.debug("Encryption modules failed to import. Encrypted sessions will be rejected.")
-except Exception as e:
-    log.debug("Encryption modules failed to load: %s. Encrypted sessions will be rejected.", e)
-    
-# --- END INITIALIZATION ---
+def init(cfg, accts):
+    """Initialise the IP Check module with shared config and accounts."""
+    global config, accounts
+    config = cfg
+    accounts = accts
 
 # Watchdog state per account
 # { account: { 'state': 'UNKNOWN'|'CONNECTED'|'DISCONNECTED'|'DISABLED',
@@ -147,7 +98,7 @@ def update_watchdog(account_number: str, site_name: str,
 async def watchdog_task(notification_queue: Queue):
     """
     Async task that checks for missed heartbeats every minute.
-    Started alongside the ip_check server.
+    Started alongside the IP Check server.
     """
     log.debug("Watchdog task started.")
     while True:
@@ -218,13 +169,15 @@ def validate_ip_check_packet(data: bytes) -> Tuple[bool, Optional[int], int]:
 def extract_account(data: bytes) -> str:
     """Extract account number from IP Check packet bytes 1-8."""
     return data[1:9].decode('ascii', errors='ignore').lstrip('0') or '0'
-    
-async def handle_ip_check(reader, writer, notification_queue: Queue):
+
+async def handle_ip_check(reader, writer, notification_queue: Queue,
+                          crypto_available: bool, start_enc_header: bytes,
+                          do_handshake, crypto_context):
     """Handles an incoming IP Check connection by echoing the received data."""
     addr = writer.get_extra_info('peername')
     crypto = None
     buffer = bytearray()  # TCP reassembly buffer
-    
+
     try:
         while True:
             timeout = INCOMPLETE_BLOCK_TIMEOUT if buffer else INTER_COMMAND_TIMEOUT
@@ -247,19 +200,18 @@ async def handle_ip_check(reader, writer, notification_queue: Queue):
             if len(buffer) < 2:
                 log.debug("Only 1 byte in buffer from %r, waiting for more.", addr)
                 continue
-                
+
             # --- Encryption detection ---
-            if crypto is None and buffer.startswith(START_ENC_HEADER):
+            if crypto is None and buffer.startswith(start_enc_header):
                 if len(buffer) < 5:
                     log.debug("Encrypted header incomplete from %r, waiting for more.", addr)
                     continue
-                if ENCRYPTION_AVAILABLE:
+                if crypto_available:
                     log.debug("Encrypted header detected from %s", addr[0])
                     crypto = await do_handshake(reader, writer, bytes(buffer), log)
                     if crypto is None:
                         log.debug("IP Check handshake failed from %s - ignored.", addr[0])
                         return
-                    # Read the actual ping after handshake
                     log.debug("Encrypted session established from %r", addr)
                     buffer.clear()
                     continue
@@ -275,9 +227,9 @@ async def handle_ip_check(reader, writer, notification_queue: Queue):
                     continue
             else:
                 data = bytes(buffer)
-            
+
             log.debug("Ping HEX: %s", data.hex())
-        
+
             # Validate the packet before responding
             valid_header, expected_len, received_len = validate_ip_check_packet(data)
             if not valid_header:
@@ -289,8 +241,8 @@ async def handle_ip_check(reader, writer, notification_queue: Queue):
                 continue
             if received_len > expected_len:
                 log.debug("Oversized IP Check packet from %r: got %d bytes, expected 26. "
-                         "Ignoring.", addr, received_len)
-                return            
+                          "Ignoring.", addr, received_len)
+                return
 
             buffer.clear()
 
@@ -311,12 +263,11 @@ async def handle_ip_check(reader, writer, notification_queue: Queue):
             log.debug("IP Check account '%s' policy satisfied.", account_number)
             site_name = account.site_name if account else account_number
             update_watchdog(account_number, site_name, data, notification_queue)
-        
+
             log.debug("Received ping from site: %s (Account: %s) from %s. Echoing response.",
-                     site_name, account_number, addr[0])
+                      site_name, account_number, addr[0])
 
             response = crypto.encrypt(data) if crypto else data
-            # Echo the exact same data back to the panel.
             writer.write(response)
             await writer.drain()
 
@@ -325,11 +276,11 @@ async def handle_ip_check(reader, writer, notification_queue: Queue):
             await reader.read(-1)
             log.debug("Panel at %r has closed the connection.", addr)
             break
-    
+
     except asyncio.IncompleteReadError:
         log.debug("Panel at %r has closed the connection (IncompleteReadError).", addr)
     except (ConnectionResetError, BrokenPipeError):
-        log.debug("Client disconnected abruptly (%r)", addr)    
+        log.debug("Client disconnected abruptly (%r)", addr)
     except Exception as e:
         log.error("Error in IP Check handler for %s: %s", addr[0], e)
     finally:
@@ -337,78 +288,6 @@ async def handle_ip_check(reader, writer, notification_queue: Queue):
         try:
             await writer.wait_closed()
         except (ConnectionResetError, BrokenPipeError, OSError):
-            pass  # Client already closed the connection
+            pass
         except Exception:
             pass
-
-async def start_ip_check_server(): # Renamed from 'main' to be an async function
-    """The main async function to start the server."""
-    
-    if not config.IP_CHECK_ENABLED:
-        if sys.stdout.isatty():
-            # This print is for when a user tries to run it directly while disabled
-            print("IP Check server is disabled in sia-server.conf. Exiting.")
-        return
-
-    # --- Start notification dispatcher ---
-    notification_queue = Queue(maxsize=config.MAX_QUEUE_SIZE)
-    dispatcher = NotificationDispatcher(
-        notification_queue,
-        accounts,
-        config.EVENT_PRIORITIES,
-        config.DEFAULT_PRIORITY,
-        config.MAX_RETRIES,
-        config.MAX_RETRY_TIME
-    )
-    dispatcher.start()
-    
-    log.info("="*50)
-    log.info("Starting Galaxy IP Check (Heartbeat) Server")
-    
-    # We move the try...except block here, inside the async function
-    try:
-        server = await asyncio.start_server(
-            lambda r, w: handle_ip_check(r, w, notification_queue),
-            config.IP_CHECK_ADDR,
-            config.IP_CHECK_PORT
-        )
-    except OSError as e:
-        # This is the same robust error handling from the main server
-        if "Address already in use" in str(e):
-            log.critical("STARTUP FAILED: The port %d is already in use.", config.IP_CHECK_PORT)
-        elif "Cannot assign requested address" in str(e) or "could not bind" in str(e):
-            log.critical("STARTUP FAILED: The IP address '%s' is not valid for this machine.", config.IP_CHECK_ADDR)
-        elif "getaddrinfo failed" in str(e):
-            log.critical("STARTUP FAILED: The address '%s' is not a valid IP address or hostname.", config.IP_CHECK_ADDR)
-        else:
-            log.critical("A critical OS error occurred starting the IP Check server: %s", e)
-        log.critical("="*50)
-        dispatcher.stop()
-        dispatcher.join()        
-        return # Gracefully exit the async function
-
-    addrs = ', '.join(str(sock.getsockname()) for sock in server.sockets)
-    log.info('Listening for heartbeats on: %s', addrs)
-    log.info("="*50)
-
-    async with server:
-        asyncio.create_task(watchdog_task(notification_queue))
-        await server.serve_forever()
-
-def handle_shutdown(signum, frame):
-    log.info("Received shutdown signal (%d), stopping IP Check server...", signum)
-    sys.exit(0)
-
-def handle_sighup(signum, frame):
-    # future use for config reload.
-    log.info("Received SIGHUP signal. (No action taken)")
-
-if __name__ == '__main__':
-    signal.signal(signal.SIGINT, handle_shutdown)
-    signal.signal(signal.SIGTERM, handle_shutdown)
-    if hasattr(signal, 'SIGHUP'):
-        signal.signal(signal.SIGHUP, handle_sighup)
-    try:
-        asyncio.run(start_ip_check_server())
-    except (KeyboardInterrupt, SystemExit):
-        log.info("IP Check server stopped.")
