@@ -11,7 +11,31 @@ This setup consists of two scripts:
 -   An Asus router running [Asuswrt-Merlin](https://www.asuswrt-merlin.net/).
 -   [Entware](https://github.com/RMerl/asuswrt-merlin.ng/wiki/Entware) installed on a USB drive.
 -   The `sia-server` project files.
--   The required Python packages (`python3`, `python3-requests`, etc.) installed via `opkg`.
+-   The required Python packages installed via `opkg` (see below).
+
+## Python and Package Installation
+
+Before installing the service scripts, ensure Python 3 and the required packages
+are installed via Entware:
+
+```bash
+opkg update
+opkg install python3 python3-requests python3-uvloop
+```
+
+For optional encryption support, also install:
+
+```bash
+opkg install python3-cryptodome
+```
+
+> **Note:** The package is named `python3-cryptodome` in Entware (not
+> `python3-pycryptodome` as in apt). The server automatically handles this
+> difference and works correctly with either installation.
+
+> **Note:** `python3-uvloop` is optional but recommended for better performance.
+> If it is not available for your platform, the server will fall back to the
+> standard asyncio event loop automatically.
 
 ## Installation
 
@@ -49,7 +73,7 @@ chmod +x /jffs/addons/sia-server/asuswrt-merlin/check-sia.sh
 
 ### Step 4: Start the Service
 
-You can now start the service manually. This will launch the `sia-server.py` and `ip_check.py` processes and set up the monitoring cron job.
+You can now start the service manually. This will launch `sia-server.py` and set up the monitoring cron job.
 
 ```bash
 /opt/etc/init.d/S99siaserver start
@@ -76,6 +100,11 @@ You can manage the service from the command line using the `init.d` script:
     /opt/etc/init.d/S99siaserver restart
     ```
 
+-   **Reload configuration (accounts and log level):**
+    ```bash
+    kill -HUP $(ps | grep "[s]ia-server.py" | awk '{print $1}')
+    ```
+
 ## Running on Other Embedded Devices (e.g., OpenWrt)
 
 While this project provides specific instructions for standard Linux (using `systemd`) and Asuswrt-Merlin (using `init.d`), it is possible to run the server on other embedded Linux systems like **OpenWrt**.
@@ -83,9 +112,9 @@ While this project provides specific instructions for standard Linux (using `sys
 This is an advanced topic that will require familiarity with your specific platform. The general requirements are:
 
 1.  **Python 3:** You must have a working Python 3 interpreter.
-2.  **Dependencies:** You must be able to install the `requests` library (and `pyopenssl` stack if needed) via your platform's package manager (e.g., `opkg` on OpenWrt).
+2.  **Dependencies:** You must be able to install the `requests` library via your platform's package manager (e.g., `opkg` on OpenWrt). For optional encryption support, also install `python3-cryptodome` (the package name may vary by platform).
 3.  **Service Management:** You will need to create your own service/init script that is compatible with your system's init process.
     -   For **OpenWrt**, this means creating a `procd` init script in `/etc/init.d/`. The logic will be similar to the `systemd` or `S99siaserver` examples, but the syntax is different.
-    -   You will need to ensure the script starts the `sia-server.py` process. The IP Check Service, if enabled, runs as an integrated part of `sia-server.py` and does not need to be started separately.
+    -   You will need to ensure the script starts `sia-server.py`. The IP Check Service, if enabled, runs as an integrated part of `sia-server.py` and does not need to be started separately.
 
 The `asuswrt-merlin/check-sia.sh` watchdog script is written in POSIX-compliant shell and can likely be adapted with minor changes to provide self-healing capabilities on other platforms that use `cron`.
