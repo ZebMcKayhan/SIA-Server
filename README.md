@@ -40,7 +40,7 @@ setup with no guarantees of uptime or longevity.
 -   **Advanced Notification Routing:** Route notifications for different accounts to different channels or topics, each with its own optional authentication (Bearer Token or User/Pass).
 -   **Robust Protocol Handling:** Correctly parses the multi-message protocol used by Galaxy Flex panels.
 -   **Broad SIA Level Support:** The flexible parser can correctly handle event data from SIA Levels 0, 1, 2, and 3.
--   **Optional Heartbeat Server:** Includes an optional server to handle the proprietary Honeywell "IP Check" heartbeat, with connection watchdog monitoring that sends notifications when a panel stops sending heartbeats.
+-   **Optional IP Check Service:** Handles the proprietary Honeywell "IP Check" heartbeat protocol as an integrated service, with connection watchdog monitoring that sends notifications when a panel stops sending heartbeats.
 -   **Connection Security Policies:** Per-account `ENABLED` policy (`Yes`/`No`/`Secure`) and a configurable `REJECT_POLICY` (`respond`/`drop`) to control how invalid connections are handled.
 -   **Protocol State Machine:** Enforces correct SIA message ordering. Any connection that does not start with a valid `ACCOUNT_ID` is immediately rejected or silently dropped.
 -   **Character Encoding Fixes:** Decodes the proprietary character set used by Galaxy panels (e.g., Å, Ä, Ö).
@@ -65,7 +65,7 @@ The project is structured to separate the server logic, protocol parsing, and co
 ├── sia-server.conf         # Main user configuration file.
 ├── configuration.py        # Loads and validates all configuration.
 ├── notification.py         # Handles formatting and sending of notifications.
-├── ip_check.py             # Optional subprocess for answering heartbeats.
+├── ip_check.py             # IP Check Service module for heartbeat handling and watchdog monitoring.
 ├── sia_server_tester.py    # Test client for sending SIA packets to the server.
 ├── Dockerfile              # Docker container definition for portable deployment.
 ├── docker-compose.yml      # Docker Compose configuration for easy container management.
@@ -143,9 +143,9 @@ This server requires Python 3. The installation steps are different for Linux an
     > **Note:** The extra package `pyopenssl` are optional but recommended to avoid potential HTTPS/SSL errors when sending notifications from Windows.
 
 ### Step 3: Get the Notification App and Topic
-Before configuring the server, get the ntfy.sh app on your phone or computer.
+Before configuring the server, get the notification app on your phone or computer. The instructions below are for ntfy.sh — the recommended default provider. For other providers, see the configuration file examples or [providers/README.md](providers/README.md).
 1.  Follow the instructions at the [ntfy.sh documentation](https://docs.ntfy.sh/subscribe/phone/) to get the app.
-2.  Inside the app, subscribe to a new topic. **Choose a long, random, unguessable name** for your topic to keep it private (e.g., `alarm-skUHvisapP2J382MDI2`).
+2.  Inside the app, add a new topic. **Choose a long, random, unguessable name** for your topic to keep it private (e.g., `alarm-skUHvisapP2J382MDI2`).
 3.  You will use the full URL of this topic (e.g., `https://ntfy.sh/alarm-skUHvisapP2J382MDI2`) in the configuration file.
 
 ### Step 4: Configure Your Alarm Panel
@@ -194,15 +194,17 @@ The primary configuration is done in `sia-server.conf`. This file is designed to
     -   `NTFY_AUTH`: Set to `None`, `Token`, or `Userpass` for private topics and provide the corresponding `NTFY_TOKEN` or `NTFY_USER`/`NTFY_PASS` keys.
 -   **`[Default]` Section:** A special section for events from account numbers not specifically listed.
 -   **`[SIA-Server]` Section:** Configure the ports and addresses for the main server.
+    -   `ENABLED`: Controls whether the SIA Event Server starts. Set to `No` if you only want to run the IP Check Service. Default: `Yes`.
     -   `REJECT_POLICY`: Controls how invalid or unauthorised connections are handled. Accepts `respond` or `drop`.
         -   `respond` — Send a SIA REJECT frame to the client (default).
         -   `drop` — Silently close the connection without sending anything.
--   **`[IP-Check]` Section:** Configure the ports and addresses for the optional heartbeat server.
+-   **`[IP-Check]` Section:** Configure the ports and addresses for the optional IP Check Service.
     > **Note:** The IP Check server validates all incoming heartbeat packets before responding.
     > It verifies the packet length and header. Invalid packets are dropped.
+    -   `ENABLED`: Controls whether the IP Check Service starts. Default: `No`.
     -   `WATCHDOG_THRESHOLD`: Controls how many missed pings trigger a lost-connection notification. 
         `2.1` means 2 missed pings + 10% buffer. Set to `0` to disable watchdog alerts entirely.
-    -   `WATCHDOG_LOST_PRIO` / `WATCHDOG_RESTORE_PRIO`: The ntfy.sh priority (1-5) for lost and 
+    -   `WATCHDOG_LOST_PRIO` / `WATCHDOG_RESTORE_PRIO`: The notification priority (1-5) for lost and 
         restored connection notifications respectively.
 
 -   **`[Logging]` Section:** Control the log level and output destination.
@@ -287,6 +289,7 @@ You can specify a different path using the `--config` argument:
     -   **Start the service:** `sudo systemctl start sia-server.service`
     -   **Restart the service:** `sudo systemctl restart sia-server.service`
     -   **View live logs:** `journalctl -u sia-server.service -f` (if not logging to a file) or `tail -f /path/to/your/log/file.log` (if logging to a file).
+    -   **Reload configuration (accounts and log level):** `kill -HUP $(pgrep -f sia-server.py)` or `systemctl kill -s HUP sia-server.service`
 
 ### For Windows
 
@@ -349,6 +352,12 @@ docker compose logs -f
 docker compose down
 ```
 
+#### Reload Configuration
+To reload accounts and log level without restarting the container:
+```bash
+docker compose kill --signal=HUP sia-server
+```
+
 #### File Logging (Optional)
 By default the server logs to screen, which is captured by Docker and visible via `docker compose logs`.
 If you prefer a persistent log file, set the following in `sia-server.conf`:
@@ -366,7 +375,7 @@ environment:
   - TZ=Europe/London    # Change to your local timezone
 ```
 
-# Security & privacy guidelines
+## Security & privacy guidelines
 
 **1. Local Network Communication (Panel to Server)**
 
