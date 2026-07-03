@@ -114,7 +114,12 @@ def load_logging_config(config_file: str = 'sia-server.conf') -> LoggingConfig:
 
     return logging_config
 
-
+def load_log_level(config_file: str = 'sia-server.conf') -> str:
+    """Read just the log level from the config file for SIGHUP reload."""
+    config = configparser.ConfigParser(inline_comment_prefixes=('#', ';'))
+    config.read(config_file)
+    return config.get('Logging', 'log_level', fallback='INFO').upper()
+  
 # ===================================================================
 # PHASE 2: Application Configuration
 # ===================================================================
