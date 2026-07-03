@@ -369,30 +369,39 @@ async def handle_connection(notification_queue: Queue, reader, writer):
             log.error("Error closing connection: %s", e)
 
 async def start_servers(notification_queue: Queue):
-    """Starts the main SIA Event Server and optionally the IP Check Service."""
-    try:
-        handler_with_queue = functools.partial(handle_connection, notification_queue)
-        # --- Start the SIA Event Server ---
-        sia_server = await asyncio.start_server(
-            handler_with_queue, config.LISTEN_ADDR, config.LISTEN_PORT
-        )
-        sia_addrs = ', '.join(str(sock.getsockname()) for sock in sia_server.sockets)
-        log.info('='*60)
-        log.info('Galaxy SIA Event Server Started')
-        log.info('Listening for events on: %s', sia_addrs)
-    except OSError as e:
-        if "Address already in use" in str(e):
-            log.critical("STARTUP FAILED: The port %d is already in use.", config.LISTEN_PORT)
-        elif "Cannot assign requested address" in str(e) or "could not bind" in str(e):
-            log.critical("STARTUP FAILED: The IP address '%s' is not valid for this machine.", config.LISTEN_ADDR)
-            log.critical("Please use '0.0.0.0' or a specific IP address that this server owns.")
-        elif "getaddrinfo failed" in str(e):
-            log.critical("STARTUP FAILED: The address '%s' is not a valid IP address or hostname.", config.LISTEN_ADDR)
-            log.critical("Please check for typos in your sia-server.conf file.")
-        else:
-            log.critical("A critical OS error occurred starting the SIA Event Server: %s", e)
-        log.critical("="*60)
-        raise
+    """Starts the main SIA Event Server and the IP Check Service each if enabled."""
+
+    # --- Exit early if nothing is enabled ---
+    if not config.SIA_SERVER_ENABLED and not config.IP_CHECK_ENABLED:
+        log.warning("Both SIA Event Server and IP Check Service are disabled. Nothing to do, exiting.")
+        return
+        
+    sia_server = None
+    
+    # --- Start the optional SIA Event Server ---
+    if config.SIA_SERVER_ENABLED:
+        try:
+            handler_with_queue = functools.partial(handle_connection, notification_queue)
+            sia_server = await asyncio.start_server(
+                handler_with_queue, config.LISTEN_ADDR, config.LISTEN_PORT
+            )
+            sia_addrs = ', '.join(str(sock.getsockname()) for sock in sia_server.sockets)
+            log.info('='*60)
+            log.info('Galaxy SIA Event Server Started')
+            log.info('Listening for events on: %s', sia_addrs)
+        except OSError as e:
+            if "Address already in use" in str(e):
+                log.critical("STARTUP FAILED: The port %d is already in use.", config.LISTEN_PORT)
+            elif "Cannot assign requested address" in str(e) or "could not bind" in str(e):
+                log.critical("STARTUP FAILED: The IP address '%s' is not valid for this machine.", config.LISTEN_ADDR)
+                log.critical("Please use '0.0.0.0' or a specific IP address that this server owns.")
+            elif "getaddrinfo failed" in str(e):
+                log.critical("STARTUP FAILED: The address '%s' is not a valid IP address or hostname.", config.LISTEN_ADDR)
+                log.critical("Please check for typos in your sia-server.conf file.")
+            else:
+                log.critical("A critical OS error occurred starting the SIA Event Server: %s", e)
+            log.critical("="*60)
+            raise
 
     # --- Start the optional IP Check Service ---
     if config.IP_CHECK_ENABLED:
@@ -412,9 +421,15 @@ async def start_servers(notification_queue: Queue):
     log.info('='*60)
 
     global _serve_task
-    serve_task = asyncio.ensure_future(sia_server.serve_forever())
-    _serve_task = serve_task
     loop = asyncio.get_running_loop()
+
+    if sia_server:
+        serve_task = asyncio.ensure_future(sia_server.serve_forever())
+        _serve_task = serve_task
+    else:
+        # Only IP Check is running — keep alive with a forever task
+        serve_task = loop.create_future()
+        _serve_task = serve_task
 
     def _handle_signal(sig):
         log.info("Received signal %s, shutting down...", sig)
