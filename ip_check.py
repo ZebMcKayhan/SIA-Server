@@ -138,7 +138,16 @@ async def watchdog_task(notification_queue: Queue):
                 # Connection lost!
                 watchdog_state[account_number]['state'] = 'DISCONNECTED'
                 last_panel_time = state['last_panel_time']
-                site_name = accounts.get(account_number).site_name if accounts.get(account_number) else account_number
+                account = accounts.get(account_number)
+                site_name = account.site_name if account else account_number
+                policy = account.policy if account else 'yes'
+                
+                # Check account policy before firing notification
+                if policy == 'no':
+                    log.debug("Watchdog: Site: %s (Account: %s) - heartbeat lost but account is disabled, skipping notification.",
+                              site_name, account_number)
+                    continue
+                    
                 # Format elapsed time as hh:mm:ss
                 elapsed_int = int(elapsed)
                 e_hours = elapsed_int // 3600
