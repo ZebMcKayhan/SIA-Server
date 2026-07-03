@@ -29,7 +29,7 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-from configuration import load_logging_config, load_application_config, load_accounts
+from configuration import load_logging_config, load_application_config, load_accounts, load_log_level
 
 # Load and validate all configuration from files.
 # This single 'config' object now holds all settings for the application.
@@ -149,6 +149,7 @@ import ip_check
 VALID_COMMANDS = set(COMMANDS.keys())
 
 _serve_task = None  # Current serve task, used for clean shutdown on Windows
+_dispatcher = None  # Reference to NotificationDispatcher for SIGHUP reload
 
 # --- END INITIALIZATION ---
 
@@ -456,8 +457,20 @@ def handle_shutdown(signum, frame):
         sys.exit(0)  # Fallback if called before event loop is running
 
 def handle_sighup(signum, frame):
-    #  future use for config reload.
-    log.info("Received SIGHUP signal. (No action taken)")
+    log.info("Received SIGHUP signal. Reloading configuration...")
+    global accounts
+    
+    # Reload log level
+    new_level = load_log_level(args.config)
+    logging.getLogger().setLevel(getattr(logging, new_level, logging.INFO))
+    log.info("Log level set to %s.", new_level)
+    
+    # Reload accounts
+    new_accounts = load_accounts(args.config)
+    accounts = new_accounts
+    ip_check.accounts = new_accounts
+    if _dispatcher:
+        _dispatcher.reload_accounts(new_accounts)
     
 def main():
     signal.signal(signal.SIGINT, handle_shutdown)
@@ -466,6 +479,7 @@ def main():
         signal.signal(signal.SIGHUP, handle_sighup)    
     log.info("Starting Galaxy SIA Server version %s", __version__)
 
+    global _dispatcher
     notification_queue = Queue(maxsize=config.MAX_QUEUE_SIZE)
     dispatcher = NotificationDispatcher(
         notification_queue,
@@ -475,6 +489,7 @@ def main():
         config.MAX_RETRIES,
         config.MAX_RETRY_TIME
     )
+    _dispatcher = dispatcher
     dispatcher.start()
     
     exit_code = 0 # Assume success
