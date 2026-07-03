@@ -122,6 +122,7 @@ def load_logging_config(config_file: str = 'sia-server.conf') -> LoggingConfig:
 class AppConfig:
     """Holds the complete, validated application configuration."""
     def __init__(self):
+        self.SIA_SERVER_ENABLED    = True
         self.LISTEN_ADDR           = '0.0.0.0'
         self.LISTEN_PORT           = 10000
         self.REJECT_POLICY         = 'respond'
@@ -176,16 +177,26 @@ def load_application_config(config_file: str = 'sia-server.conf') -> AppConfig:
         log.critical("Configuration error: [SIA-Server] section is missing in '%s'.", config_file)
         is_valid = False
 
-    try:
-        app_config.LISTEN_ADDR = config.get('SIA-Server', 'listen_addr', fallback='0.0.0.0')
-        sia_port = config.getint('SIA-Server', 'listen_port', fallback=10000)
-        if _validate_port(sia_port, 'SIA-Server', 'listen_port'):
-            app_config.LISTEN_PORT = sia_port
-        else:
+    sia_enabled = config.get('SIA-Server', 'enabled', fallback='yes').lower()
+    if sia_enabled in ('yes', 'true'):
+        app_config.SIA_SERVER_ENABLED = True
+    elif sia_enabled in ('no', 'false'):
+        app_config.SIA_SERVER_ENABLED = False
+    else:
+        log.warning("Invalid ENABLED value '%s' in [SIA-Server]. Defaulting to 'yes'.", sia_enabled)
+        app_config.SIA_SERVER_ENABLED = True
+
+    if app_config.SIA_SERVER_ENABLED:
+        try:
+            app_config.LISTEN_ADDR = config.get('SIA-Server', 'listen_addr', fallback='0.0.0.0')
+            sia_port = config.getint('SIA-Server', 'listen_port', fallback=10000)
+            if _validate_port(sia_port, 'SIA-Server', 'listen_port'):
+                app_config.LISTEN_PORT = sia_port
+            else:
+                is_valid = False
+        except ValueError:
+            log.critical("Configuration Error in [SIA-Server]: listen_port must be a number.")
             is_valid = False
-    except ValueError:
-        log.critical("Configuration Error in [SIA-Server]: listen_port must be a number.")
-        is_valid = False
 
     # --- Parse REJECT_POLICY ---
     reject_policy = config.get('SIA-Server', 'reject_policy', fallback='respond').lower()
@@ -258,7 +269,8 @@ def load_application_config(config_file: str = 'sia-server.conf') -> AppConfig:
                             "Using default %d.", app_config.IP_CHECK_RESTORE_PRIO)
 
     # --- Check for port conflicts ---
-    if app_config.IP_CHECK_ENABLED and app_config.LISTEN_PORT == app_config.IP_CHECK_PORT:
+    if app_config.SIA_SERVER_ENABLED and app_config.IP_CHECK_ENABLED and \
+       app_config.LISTEN_PORT == app_config.IP_CHECK_PORT:
         log.critical("Configuration Error: The listen_port for [SIA-Server] and [IP-Check] "
                      "cannot be the same (%d).", app_config.LISTEN_PORT)
         is_valid = False
