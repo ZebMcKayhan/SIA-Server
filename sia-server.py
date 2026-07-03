@@ -389,6 +389,7 @@ async def start_servers(notification_queue: Queue):
             log.info('='*60)
             log.info('Galaxy SIA Event Server Started')
             log.info('Listening for events on: %s', sia_addrs)
+            log.info('='*60)
         except OSError as e:
             if "Address already in use" in str(e):
                 log.critical("STARTUP FAILED: The port %d is already in use.", config.LISTEN_PORT)
@@ -413,12 +414,13 @@ async def start_servers(notification_queue: Queue):
                 handler, config.IP_CHECK_ADDR, config.IP_CHECK_PORT
             )
             ip_check_addrs = ', '.join(str(sock.getsockname()) for sock in ip_check_server.sockets)
-            log.info('IP Check Service started, listening on: %s', ip_check_addrs)
+            log.info('='*60)
+            log.info('IP Check Service Started')
+            log.info('Listening for heartbeats on: %s', ip_check_addrs)
+            log.info('='*60)
             asyncio.create_task(ip_check.watchdog_task(notification_queue))
         except OSError as e:
             log.warning("IP Check Service failed to start: %s. Continuing without it.", e)
-
-    log.info('='*60)
 
     global _serve_task
     loop = asyncio.get_running_loop()
