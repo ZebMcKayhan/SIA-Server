@@ -200,6 +200,7 @@ def extract_account(data: bytes) -> str:
 async def handle_ip_check(reader, writer, notification_queue: Queue):
     """Handles an incoming IP Check connection by echoing the received data."""
     addr = writer.get_extra_info('peername')
+    log.debug("Connection from %r", addr)
     crypto = None
     buffer = bytearray()  # TCP reassembly buffer
 
