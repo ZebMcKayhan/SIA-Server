@@ -299,13 +299,9 @@ async def handle_ip_check(reader, writer, notification_queue: Queue):
 
             # Wait for the panel to close the connection.
             # Note: The panel closes the connection after 15s:
-            #await reader.read(-1)
-            #log.debug("Panel at %r has closed the connection.", addr)
+            await reader.read(-1)
+            log.debug("Panel at %r has closed the connection.", addr)
 
-            # Close the connection immediately after sending response
-            # rather than waiting for the panel to close (which takes ~15s)
-            log.debug("Response sent to %r, closing connection.", addr)
-            
             break
 
     except asyncio.IncompleteReadError:
