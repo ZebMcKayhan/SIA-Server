@@ -8,7 +8,7 @@ Honeywell Galaxy Flex alarm systems. It sends notifications via ntfy.sh.
 This server is configured via 'sia-server.conf' and 'configuration.py'.
 """
 # --- Application Version ---
-__version__ = "2.5.0"
+__version__ = "2.6.0-Beta5"
 
 import argparse
 import asyncio
@@ -29,7 +29,7 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-from configuration import load_logging_config, load_application_config, load_accounts
+from configuration import load_logging_config, load_application_config, load_accounts, load_log_level
 
 # Load and validate all configuration from files.
 # This single 'config' object now holds all settings for the application.
@@ -144,8 +144,12 @@ from galaxy.protocol import build_block, validate_and_strip, check_block, INCOMP
 from galaxy.parser import parse_sia_frame, FrameResult, GalaxyEvent
 from notification import NotificationDispatcher, enqueue_notification
 from galaxy.constants import COMMANDS, COMMAND_BYTES, EVENT_CODE_DESCRIPTIONS
+import ip_check
 
 VALID_COMMANDS = set(COMMANDS.keys())
+
+_serve_task = None  # Current serve task, used for clean shutdown on Windows
+_dispatcher = None  # Reference to NotificationDispatcher for SIGHUP reload
 
 # --- END INITIALIZATION ---
 
@@ -365,76 +369,70 @@ async def handle_connection(notification_queue: Queue, reader, writer):
         except Exception as e:
             log.error("Error closing connection: %s", e)
 
-async def monitor_subprocess(process, name):
-    """Monitors a subprocess, parses its log level, and logs its output."""
-    log.info("Monitoring subprocess '%s' (PID: %d)", name, process.pid)
-    LEVEL_MAP = {'DEBUG': logging.DEBUG, 'INFO': logging.INFO, 'WARNING': logging.WARNING, 'ERROR': logging.ERROR, 'CRITICAL': logging.CRITICAL}
-    async def log_stream(stream, default_level):
-        while not stream.at_eof():
-            line = await stream.readline()
-            if line:
-                line_str = line.decode(errors='replace').strip()
-                try:
-                    level_name, logger_name, msg = line_str.split(':', 2)
-                    log_level = LEVEL_MAP.get(level_name, default_level)
-                    subprocess_logger = logging.getLogger(logger_name)
-                    subprocess_logger.log(log_level, msg)
-                except ValueError:
-                    # Fallback for malformed lines
-                    log.log(default_level, "[%s] %s", name, line_str)
-    await asyncio.gather(log_stream(process.stdout, logging.INFO), log_stream(process.stderr, logging.ERROR))
-    await process.wait()
-    log.warning("Subprocess '%s' (PID: %d) has exited with code %d.", name, process.pid, process.returncode)
-
 async def start_servers(notification_queue: Queue):
-    """Starts the main SIA server and launches the IP Check server as a subprocess."""
-    
-    try:
-        handler_with_queue = functools.partial(handle_connection, notification_queue)
-        # --- Start the main SIA Event Server ---
-        sia_server = await asyncio.start_server(
-            handler_with_queue, config.LISTEN_ADDR, config.LISTEN_PORT
-        )
-        sia_addrs = ', '.join(str(sock.getsockname()) for sock in sia_server.sockets)
-        log.info('='*60)
-        log.info('Galaxy SIA Event Server Started')
-        log.info('Listening for events on: %s', sia_addrs)
-    except OSError as e:
-        if "Address already in use" in str(e):
-            log.critical("STARTUP FAILED: The port %d is already in use.", config.LISTEN_PORT)
-        elif "Cannot assign requested address" in str(e) or "could not bind" in str(e):
-            log.critical("STARTUP FAILED: The IP address '%s' is not valid for this machine.", config.LISTEN_ADDR)
-            log.critical("Please use '0.0.0.0' or a specific IP address that this server owns.")
-        elif "getaddrinfo failed" in str(e):
-            log.critical("STARTUP FAILED: The address '%s' is not a valid IP address or hostname.", config.LISTEN_ADDR)
-            log.critical("Please check for typos in your sia-server.conf file.")
-        else:
-            log.critical("A critical OS error occurred starting the SIA server: %s", e)
-        
-        log.critical("="*60)
-        # We must return here to stop the program from continuing.
-        raise # this triggers the OSError in the main loop
+    """Starts the main SIA Event Server and the IP Check Service each if enabled."""
 
-    # --- Launch the optional IP Check Server as a Subprocess ---
-    ip_check_process = None
-    ip_check_monitor_task = None
+    # --- Exit early if nothing is enabled ---
+    if not config.SIA_SERVER_ENABLED and not config.IP_CHECK_ENABLED:
+        log.warning("Both SIA Event Server and IP Check Service are disabled. Nothing to do, exiting.")
+        return
+        
+    sia_server = None
+    
+    # --- Start the optional SIA Event Server ---
+    if config.SIA_SERVER_ENABLED:
+        try:
+            handler_with_queue = functools.partial(handle_connection, notification_queue)
+            sia_server = await asyncio.start_server(
+                handler_with_queue, config.LISTEN_ADDR, config.LISTEN_PORT
+            )
+            sia_addrs = ', '.join(str(sock.getsockname()) for sock in sia_server.sockets)
+            log.info('='*60)
+            log.info('Galaxy SIA Event Server Started')
+            log.info('Listening for events on: %s', sia_addrs)
+            log.info('='*60)
+        except OSError as e:
+            if "Address already in use" in str(e):
+                log.critical("STARTUP FAILED: The port %d is already in use.", config.LISTEN_PORT)
+            elif "Cannot assign requested address" in str(e) or "could not bind" in str(e):
+                log.critical("STARTUP FAILED: The IP address '%s' is not valid for this machine.", config.LISTEN_ADDR)
+                log.critical("Please use '0.0.0.0' or a specific IP address that this server owns.")
+            elif "getaddrinfo failed" in str(e):
+                log.critical("STARTUP FAILED: The address '%s' is not a valid IP address or hostname.", config.LISTEN_ADDR)
+                log.critical("Please check for typos in your sia-server.conf file.")
+            else:
+                log.critical("A critical OS error occurred starting the SIA Event Server: %s", e)
+            log.critical("="*60)
+            raise
+
+    # --- Start the optional IP Check Service ---
     if config.IP_CHECK_ENABLED:
         try:
-            command = [sys.executable, 'ip_check.py', '--config', args.config]
-            log.info("Launching IP Check server as a subprocess: %s", " ".join(command))
-            ip_check_process = await asyncio.create_subprocess_exec(
-                *command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            ip_check.init(config, accounts)
+            handler = functools.partial(ip_check.handle_ip_check,
+                                        notification_queue=notification_queue)
+            ip_check_server = await asyncio.start_server(
+                handler, config.IP_CHECK_ADDR, config.IP_CHECK_PORT
             )
-            ip_check_monitor_task = asyncio.create_task(monitor_subprocess(ip_check_process, 'ip_check.py'))
-        except Exception as e:
-            log.error("Failed to launch IP Check server subprocess: %s", e)
-    
-    log.info('='*60)
-    
-    # Prefer loop-level signal handlers so the finally block (which
-    # terminates the IP Check subprocess) always runs on SIGINT/SIGTERM.
+            ip_check_addrs = ', '.join(str(sock.getsockname()) for sock in ip_check_server.sockets)
+            log.info('='*60)
+            log.info('IP Check Service Started')
+            log.info('Listening for heartbeats on: %s', ip_check_addrs)
+            log.info('='*60)
+            asyncio.create_task(ip_check.watchdog_task(notification_queue))
+        except OSError as e:
+            log.warning("IP Check Service failed to start: %s. Continuing without it.", e)
+
+    global _serve_task
     loop = asyncio.get_running_loop()
-    serve_task = asyncio.ensure_future(sia_server.serve_forever())
+
+    if sia_server:
+        serve_task = asyncio.ensure_future(sia_server.serve_forever())
+        _serve_task = serve_task
+    else:
+        # Only IP Check is running — keep alive with a forever task
+        serve_task = loop.create_future()
+        _serve_task = serve_task
 
     def _handle_signal(sig):
         log.info("Received signal %s, shutting down...", sig)
@@ -444,28 +442,35 @@ async def start_servers(notification_queue: Queue):
         try:
             loop.add_signal_handler(sig, lambda s=sig: _handle_signal(s))
         except (NotImplementedError, RuntimeError):
-            pass  # Windows: falls back to signal.signal() handlers in main()
+            pass
 
-    # Run the main SIA server
     try:
         await serve_task
     except asyncio.CancelledError:
         log.info("Server shutdown requested.")
-    finally:
-        # When the main server is shut down, also terminate the subprocess
-        if ip_check_process and ip_check_process.returncode is None:
-            log.info("Terminating IP Check server subprocess...")
-            ip_check_process.terminate()
-            await ip_check_process.wait()
-            log.info("IP Check subprocess terminated.")
-
+        
 def handle_shutdown(signum, frame):
     log.info("Received shutdown signal (%d), stopping server...", signum)
-    sys.exit(0)
+    if _serve_task is not None:
+        _serve_task.cancel()
+    else:
+        sys.exit(0)  # Fallback if called before event loop is running
 
 def handle_sighup(signum, frame):
-    #  future use for config reload.
-    log.info("Received SIGHUP signal. (No action taken)")
+    log.info("Received SIGHUP signal. Reloading configuration...")
+    global accounts
+    
+    # Reload log level
+    new_level = load_log_level(args.config)
+    logging.getLogger().setLevel(getattr(logging, new_level, logging.INFO))
+    log.info("Log level set to %s.", new_level)
+    
+    # Reload accounts
+    new_accounts = load_accounts(args.config)
+    accounts = new_accounts
+    ip_check.accounts = new_accounts
+    if _dispatcher:
+        _dispatcher.reload_accounts(new_accounts)
     
 def main():
     signal.signal(signal.SIGINT, handle_shutdown)
@@ -474,6 +479,7 @@ def main():
         signal.signal(signal.SIGHUP, handle_sighup)    
     log.info("Starting Galaxy SIA Server version %s", __version__)
 
+    global _dispatcher
     notification_queue = Queue(maxsize=config.MAX_QUEUE_SIZE)
     dispatcher = NotificationDispatcher(
         notification_queue,
@@ -483,6 +489,7 @@ def main():
         config.MAX_RETRIES,
         config.MAX_RETRY_TIME
     )
+    _dispatcher = dispatcher
     dispatcher.start()
     
     exit_code = 0 # Assume success

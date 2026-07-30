@@ -170,8 +170,7 @@ def _build_provider_cache(accounts: AccountsConfig,
             cache[account_number] = None
 
     return cache
-
-
+  
 # ===================================================================
 # Notification formatting
 # ===================================================================
@@ -325,8 +324,8 @@ class NotificationDispatcher(Thread):
 
     def start(self):
         """Discover providers and build cache before starting the thread."""
-        registry = _discover_providers()
-        self._provider_cache = _build_provider_cache(self.accounts, registry)
+        self._registry = _discover_providers()
+        self._provider_cache = _build_provider_cache(self.accounts, self._registry)
         super().start()
 
     def get_retry_delay(self, retry_count: int) -> int:
@@ -339,6 +338,19 @@ class NotificationDispatcher(Thread):
         final_delay   = min(current_delay, self.max_retry_time_minutes)
         return final_delay * 60
 
+    def reload_accounts(self, new_accounts: AccountsConfig):
+        """
+        Reload account configuration and rebuild the provider cache.
+        Called on SIGHUP to pick up account changes without restarting.
+        Providers are not re-discovered — only the per-account cache is rebuilt.
+        """
+        log.info("Reloading account configuration...")
+        old_count = len(self.accounts.accounts)
+        self.accounts = new_accounts
+        self._provider_cache = _build_provider_cache(self.accounts, self._registry)
+        new_count = len(self.accounts.accounts)
+        log.info("Account configuration reloaded. Accounts: %d → %d.", old_count, new_count)
+    
     def run(self):
         log.info("NotificationDispatcher thread started.")
         pending_retries = []  # items not yet due: list of (event, retry_count, next_attempt_time)
