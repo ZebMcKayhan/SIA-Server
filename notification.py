@@ -181,7 +181,10 @@ def get_event_priority(event_code: str, priority_map: Dict, default_priority: in
     return priority_map.get(event_code, default_priority)
 
 
-def format_notification_text(event: Union[GalaxyEvent, MessageEvent]) -> str:
+def format_notification_text(event: Union[GalaxyEvent, MessageEvent],
+                             notification_format_ascii: str,
+                             notification_format_data: str
+                             ) -> str:
     """
     Formats the notification message according to the configured format.
 
@@ -196,9 +199,9 @@ def format_notification_text(event: Union[GalaxyEvent, MessageEvent]) -> str:
         return event.action_text
 
     if event.action_text:
-        template = config.NOTIFICATION_FORMAT_ASCII
+        template = notification_format_ascii
     else:
-        template = config.NOTIFICATION_FORMAT_DATA
+        template = notification_format_data
 
     # Process optional sections first.
     # A section is included only if all fields referenced within it have a value.
@@ -233,9 +236,12 @@ def format_notification_text(event: Union[GalaxyEvent, MessageEvent]) -> str:
 # ===================================================================
 
 def _dispatch_notification(event: Union[GalaxyEvent, MessageEvent],
-                            provider_cache: Dict[str, Optional[NotificationProvider]],
-                            priority_map: Dict,
-                            default_priority: int) -> bool | None:
+         provider_cache: Dict[str, Optional[NotificationProvider]],
+         priority_map: Dict,
+         default_priority: int,
+         notification_format_ascii: str,
+         notification_format_data: str,
+) -> bool | None:
     """
     Dispatch a notification to the appropriate provider for this event's account.
 
@@ -265,7 +271,8 @@ def _dispatch_notification(event: Union[GalaxyEvent, MessageEvent],
             return None
         priority = get_event_priority(event.event_code, priority_map, default_priority)
 
-    message = format_notification_text(event)
+    message = format_notification_text(event, notification_format_ascii,
+                                      notification_format_data)
 
     # Build display name for logging - site_name if available, otherwise just account number
     site_name = getattr(event, 'site_name', None)
@@ -323,7 +330,8 @@ class NotificationDispatcher(Thread):
     Supports both GalaxyEvent (SIA events) and MessageEvent (custom notifications).
     """
     def __init__(self, queue: Queue, accounts: AccountsConfig, priority_map: Dict,
-                 default_priority: int, max_retries: int, max_retry_time: int):
+                 default_priority: int, max_retries: int, max_retry_time: int,
+                 notification_format_ascii: str, notification_format_data: str):
         super().__init__(daemon=True)
         self.name              = "NotificationDispatcher"
         self.queue             = queue
@@ -332,6 +340,8 @@ class NotificationDispatcher(Thread):
         self.default_priority  = default_priority
         self.max_retries       = max_retries
         self.max_retry_time_minutes = max_retry_time
+        self.notification_format_ascii = notification_format_ascii
+        self.notification_format_data  = notification_format_data                   
         self.shutdown_event    = ThreadEvent()
         self._provider_cache: Dict[str, Optional[NotificationProvider]] = {}
 
@@ -396,9 +406,9 @@ class NotificationDispatcher(Thread):
                 self.queue.task_done()
                 continue
 
-            success = _dispatch_notification(
-                event, self._provider_cache, self.priority_map, self.default_priority
-            )
+            success = _dispatch_notification(event, self._provider_cache, self.priority_map,
+                                 self.default_priority, self.notification_format_ascii,
+                                self.notification_format_data)
 
             if success is None:
                 log.debug("Notification skipped for account %s.", event.account)
