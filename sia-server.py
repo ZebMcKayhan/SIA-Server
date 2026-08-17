@@ -487,7 +487,9 @@ def main():
         config.EVENT_PRIORITIES,
         config.DEFAULT_PRIORITY,
         config.MAX_RETRIES,
-        config.MAX_RETRY_TIME
+        config.MAX_RETRY_TIME,
+        config.NOTIFICATION_FORMAT_ASCII,
+        config.NOTIFICATION_FORMAT_DATA,
     )
     _dispatcher = dispatcher
     dispatcher.start()
