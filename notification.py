@@ -19,6 +19,7 @@ Backwards compatibility:
 import importlib
 import logging
 import pkgutil
+import re
 import sys
 import time
 from typing import Dict, Optional, Union
@@ -182,37 +183,49 @@ def get_event_priority(event_code: str, priority_map: Dict, default_priority: in
 
 def format_notification_text(event: Union[GalaxyEvent, MessageEvent]) -> str:
     """
-    Formats the notification message text.
-    For MessageEvent, uses action_text directly.
-    For GalaxyEvent, intelligently chooses between the rich ASCII block text
-    or constructs a message from the Data block fields.
+    Formats the notification message according to the configured format.
+
+    Format syntax:
+      %field          Replaced with the corresponding GalaxyEvent attribute.
+      [ ... ]         Optional section; omitted if any referenced field is missing.
+
+    For GalaxyEvent, the ASCII format is used when action_text is available,
+    otherwise the data format is used.
     """
     if isinstance(event, MessageEvent):
         return event.action_text
 
-    event_time = event.time or "??"
-
     if event.action_text:
-        notification = f"{event_time} {event.action_text}"
-        # Group info is not shown much in ASCII block, so append it to notification if it exist:
-        if event.group:
-            notification += f" (Group {event.group})"
+        template = config.NOTIFICATION_FORMAT_ASCII
     else:
-        notification = f"{event_time}"
-        if event.event_code:
-            notification += f" Event: {event.event_code} ({event.event_description})"
-        if event.user_id:
-            notification += f" User: {event.user_id}"
-        if event.zone:
-            notification += f" Zone: {event.zone}"
-        if event.group:
-            notification += f" Group: {event.group}"
-        if event.peripheral:
-            notification += f" Peripheral: {event.peripheral}"
-        if event.value:
-            notification += f" Value: {event.value}"
+        template = config.NOTIFICATION_FORMAT_DATA
 
-    return notification.strip()
+    # Process optional sections first.
+    # A section is included only if all fields referenced within it have a value.
+    def render_optional(match: re.Match) -> str:
+        section = match.group(1)
+
+        fields = re.findall(r"%([a-zA-Z_][a-zA-Z0-9_]*)", section)
+
+        if any(not getattr(event, field, None) for field in fields):
+            return ""
+
+        return re.sub(
+            r"%([a-zA-Z_][a-zA-Z0-9_]*)",
+            lambda m: str(getattr(event, m.group(1), "")),
+            section,
+        )
+
+    template = re.sub(r"\[([^\[\]]*)\]", render_optional, template)
+
+    # Replace normal %field tokens.
+    template = re.sub(
+        r"%([a-zA-Z_][a-zA-Z0-9_]*)",
+        lambda m: str(getattr(event, m.group(1), "") or ""),
+        template,
+    )
+
+    return template
 
 
 # ===================================================================
