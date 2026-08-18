@@ -227,7 +227,7 @@ def format_notification_text(event: Union[GalaxyEvent, MessageEvent],
     # Replace normal %field tokens.
     template = re.sub(
         r"%([a-zA-Z_][a-zA-Z0-9_]*)",
-        lambda m: str(getattr(event, m.group(1))) if has value(event, m.group(1)) else "",
+        lambda m: str(getattr(event, m.group(1))) if has_value(event, m.group(1)) else "",
         template,
     )
 
