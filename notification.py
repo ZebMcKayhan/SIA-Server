@@ -175,7 +175,10 @@ def _build_provider_cache(accounts: AccountsConfig,
 # ===================================================================
 # Notification formatting
 # ===================================================================
-
+def has_value(event, field):
+    return getattr(event, field, None) is not None
+  
+  
 def get_event_priority(event_code: str, priority_map: Dict, default_priority: int) -> int:
     """Gets the notification priority for a given event code from the defaults map."""
     return priority_map.get(event_code, default_priority)
@@ -210,7 +213,7 @@ def format_notification_text(event: Union[GalaxyEvent, MessageEvent],
 
         fields = re.findall(r"%([a-zA-Z_][a-zA-Z0-9_]*)", section)
 
-        if any(not getattr(event, field, None) for field in fields):
+        if any(not has_value(event, field) for field in fields):
             return ""
 
         return re.sub(
@@ -224,7 +227,7 @@ def format_notification_text(event: Union[GalaxyEvent, MessageEvent],
     # Replace normal %field tokens.
     template = re.sub(
         r"%([a-zA-Z_][a-zA-Z0-9_]*)",
-        lambda m: str(getattr(event, m.group(1), "") or ""),
+        lambda m: str(getattr(event, m.group(1), None)) if getattr(event, m.group(1), None) is not None else ""
         template,
     )
 
