@@ -30,6 +30,11 @@ INCOMPLETE_BLOCK_TIMEOUT = 0.5   # seconds
 # (between complete blocks within a session)
 INTER_COMMAND_TIMEOUT = 5.0      # seconds
 
+# Time to wait for the panel to close the TCP connection after an IP Check
+# echo has been sent. The panel normally closes after ~15 s; 30 s gives
+# enough headroom for a slow network while still bounding the worst case.
+IP_CHECK_CLOSE_TIMEOUT = 30.0    # seconds
+
 
 def xor_checksum(data: bytes) -> int:
     """
