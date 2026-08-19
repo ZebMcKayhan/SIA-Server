@@ -25,7 +25,14 @@ class FrameResult(Enum):
     
 @dataclass
 class GalaxyEvent:
-    """Structured data for a complete Galaxy SIA event."""
+    """Structured data for a complete Galaxy SIA event.
+
+    NOTE: The field names below are mirrored in `configuration.py`
+    (NOTIFICATION_FIELDS) for validating custom notification format strings
+    without creating an import dependency.
+    If any field names here are modified, added, or removed, remember to update
+    `NOTIFICATION_FIELDS` in `configuration.py` accordingly.
+    """
     # Raw Payloads for debugging
     account_payload: Optional[bytes] = None
     data_payload: Optional[bytes] = None
