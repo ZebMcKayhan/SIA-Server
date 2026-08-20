@@ -188,12 +188,13 @@ def format_notification_text(event: Union[GalaxyEvent, MessageEvent],
                              notification_format_ascii: str,
                              notification_format_data: str
                              ) -> str:
-    """
+    r"""
     Formats the notification message according to the configured format.
 
     Format syntax:
       %field          Replaced with the corresponding GalaxyEvent attribute.
       [ ... ]         Optional section; omitted if any referenced field is missing.
+      \n              Replaced with a newline character.
 
     For GalaxyEvent, the ASCII format is used when action_text is available,
     otherwise the data format is used.
@@ -230,6 +231,9 @@ def format_notification_text(event: Union[GalaxyEvent, MessageEvent],
         lambda m: str(getattr(event, m.group(1))) if has_value(event, m.group(1)) else "",
         template,
     )
+
+    # Replace escape sequences with real newlines.
+    template = template.replace(r"\r\n", "\n").replace(r"\n", "\n")
 
     return template
 
