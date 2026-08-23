@@ -14,7 +14,7 @@ import datetime
 from queue import Queue
 from typing import Optional, Tuple
 
-from galaxy.protocol import INCOMPLETE_BLOCK_TIMEOUT, INTER_COMMAND_TIMEOUT
+from galaxy.protocol import INCOMPLETE_BLOCK_TIMEOUT, INTER_COMMAND_TIMEOUT, IP_CHECK_CLOSE_TIMEOUT
 from notification import enqueue_message_notification
 
 log = logging.getLogger('ip_check')
@@ -298,9 +298,16 @@ async def handle_ip_check(reader, writer, notification_queue: Queue):
             await writer.drain()
 
             # Wait for the panel to close the connection.
-            # Note: The panel closes the connection after 15s:
-            await reader.read(-1)
-            log.debug("Panel at %r has closed the connection.", addr)
+            # The panel normally closes after ~15 s; we give it 30 s so a slow
+            # network doesn't trigger the timeout under normal conditions.
+            # If the timeout fires (network fault / panel hung), we log at debug
+            # and fall through to the finally block which closes the writer.
+            try:
+                await asyncio.wait_for(reader.read(1024), timeout=IP_CHECK_CLOSE_TIMEOUT)
+                log.debug("Panel at %r has closed the connection.", addr)
+            except asyncio.TimeoutError:
+                log.debug("Panel at %r did not close within %.0fs; closing from server side.",
+                          addr, IP_CHECK_CLOSE_TIMEOUT)
 
             break
 

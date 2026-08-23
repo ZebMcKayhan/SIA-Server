@@ -8,7 +8,7 @@ Honeywell Galaxy Flex alarm systems. It sends notifications via ntfy.sh.
 This server is configured via 'sia-server.conf' and 'configuration.py'.
 """
 # --- Application Version ---
-__version__ = "2.6.0"  #
+__version__ = "2.7.0-beta_3"  #
 
 import argparse
 import asyncio
@@ -148,8 +148,9 @@ import ip_check
 
 VALID_COMMANDS = set(COMMANDS.keys())
 
-_serve_task = None  # Current serve task, used for clean shutdown on Windows
-_dispatcher = None  # Reference to NotificationDispatcher for SIGHUP reload
+_serve_task = None   # Current serve task, cancelled to trigger shutdown
+_event_loop = None   # The running event loop; used by signal handlers to call_soon_threadsafe
+_dispatcher = None   # Reference to NotificationDispatcher for SIGHUP reload
 
 # --- END INITIALIZATION ---
 
@@ -423,24 +424,27 @@ async def start_servers(notification_queue: Queue):
         except OSError as e:
             log.warning("IP Check Service failed to start: %s. Continuing without it.", e)
 
-    global _serve_task
+    global _serve_task, _event_loop
     loop = asyncio.get_running_loop()
+    _event_loop = loop
 
     if sia_server:
         serve_task = asyncio.ensure_future(sia_server.serve_forever())
         _serve_task = serve_task
     else:
-        # Only IP Check is running — keep alive with a forever task
+        # Only IP Check is running — keep alive with a never-completing future
         serve_task = loop.create_future()
         _serve_task = serve_task
 
-    def _handle_signal(sig):
-        log.info("Received signal %s, shutting down...", sig)
-        serve_task.cancel()
-
+    # Register asyncio-native signal handlers (Linux/macOS only).
+    # On Windows loop.add_signal_handler raises NotImplementedError; we fall
+    # back to the signal.signal handlers registered in main() instead.
     for sig in (signal.SIGINT, signal.SIGTERM):
         try:
-            loop.add_signal_handler(sig, lambda s=sig: _handle_signal(s))
+            loop.add_signal_handler(
+                sig,
+                functools.partial(_cancel_serve_task, sig)
+            )
         except (NotImplementedError, RuntimeError):
             pass
 
@@ -449,34 +453,78 @@ async def start_servers(notification_queue: Queue):
     except asyncio.CancelledError:
         log.info("Server shutdown requested.")
         
-def handle_shutdown(signum, frame):
-    log.info("Received shutdown signal (%d), stopping server...", signum)
+def _cancel_serve_task(sig):
+    """Cancel the serve task from any context (loop callback or signal handler)."""
+    log.info("Received signal %s, shutting down...", sig)
     if _serve_task is not None:
         _serve_task.cancel()
-    else:
-        sys.exit(0)  # Fallback if called before event loop is running
 
-def handle_sighup(signum, frame):
-    log.info("Received SIGHUP signal. Reloading configuration...")
+def handle_shutdown(signum, frame):
+    """Synchronous signal handler (fallback for Windows / pre-loop signals).
+
+    signal.signal() handlers run in the main thread outside the asyncio event
+    loop, so it is NOT safe to call asyncio objects directly from here.
+    We use call_soon_threadsafe() to schedule the cancellation on the loop.
+    If the loop is not yet running (very early signal), we exit immediately.
+    """
+    if _event_loop is not None and _event_loop.is_running():
+        _event_loop.call_soon_threadsafe(
+            functools.partial(_cancel_serve_task, signum)
+        )
+    else:
+        sys.exit(0)  # Loop not started yet — nothing to cancel
+
+def _apply_sighup_reload(new_level: str, new_accounts):
+    """
+    Apply a reloaded configuration. Must run on the event loop thread so that
+    mutations to shared asyncio state (ip_check.accounts) are never interleaved
+    with a running coroutine (e.g. watchdog_task).
+    Scheduled via call_soon_threadsafe from handle_sighup.
+    """
     global accounts
-    
-    # Reload log level
-    new_level = load_log_level(args.config)
+
+    # Apply log level
     logging.getLogger().setLevel(getattr(logging, new_level, logging.INFO))
     log.info("Log level set to %s.", new_level)
-    
-    # Reload accounts
-    new_accounts = load_accounts(args.config)
+
+    # Apply accounts — safe here because we are between coroutine steps
     accounts = new_accounts
     ip_check.accounts = new_accounts
     if _dispatcher:
         _dispatcher.reload_accounts(new_accounts)
-    
+    log.info("SIGHUP reload complete.")
+
+def handle_sighup(signum, frame):
+    """Synchronous SIGHUP handler.
+
+    File I/O (reading the config) is done here in the signal handler because
+    it does not touch any asyncio or shared mutable state.
+    The actual mutations are then scheduled on the event loop via
+    call_soon_threadsafe so they run between coroutine steps, not inside one.
+    """
+    log.info("Received SIGHUP signal. Reloading configuration...")
+
+    # Heavy I/O — safe to do here, no shared state touched yet
+    new_level   = load_log_level(args.config)
+    new_accounts = load_accounts(args.config)
+
+    if _event_loop is not None and _event_loop.is_running():
+        _event_loop.call_soon_threadsafe(
+            functools.partial(_apply_sighup_reload, new_level, new_accounts)
+        )
+    else:
+        # Loop not running yet — apply directly (startup edge case)
+        _apply_sighup_reload(new_level, new_accounts)
 def main():
+    # Register synchronous signal handlers as a baseline.
+    # On Linux/macOS these will be overridden by loop.add_signal_handler()
+    # once the event loop starts (inside start_servers). On Windows,
+    # loop.add_signal_handler is not supported so these remain active and use
+    # call_soon_threadsafe to interact with the loop safely.
     signal.signal(signal.SIGINT, handle_shutdown)
     signal.signal(signal.SIGTERM, handle_shutdown)
-    if hasattr(signal, 'SIGHUP'):  
-        signal.signal(signal.SIGHUP, handle_sighup)    
+    if hasattr(signal, 'SIGHUP'):
+        signal.signal(signal.SIGHUP, handle_sighup)
     log.info("Starting Galaxy SIA Server version %s", __version__)
 
     global _dispatcher
@@ -487,7 +535,9 @@ def main():
         config.EVENT_PRIORITIES,
         config.DEFAULT_PRIORITY,
         config.MAX_RETRIES,
-        config.MAX_RETRY_TIME
+        config.MAX_RETRY_TIME,
+        config.NOTIFICATION_FORMAT_ASCII,
+        config.NOTIFICATION_FORMAT_DATA,
     )
     _dispatcher = dispatcher
     dispatcher.start()

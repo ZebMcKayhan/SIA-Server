@@ -25,6 +25,24 @@ from galaxy.constants import UNKNOWN_CHAR_MAP
 
 log = logging.getLogger(__name__)
 
+# Allowed placeholder tokens for custom notification format strings (%field).
+# NOTE: This set mirrors the attributes of `GalaxyEvent` in `galaxy/parser.py`.
+# Kept here to avoid importing galaxy.parser early during configuration loading.
+NOTIFICATION_FIELDS = {
+    'time',
+    'action_text',
+    'account',
+    'site_name',
+    'event_type',
+    'user_id',
+    'peripheral',
+    'group',
+    'value',
+    'event_code',
+    'event_description',
+    'zone',
+}
+
 # ===================================================================
 # PHASE 1: Logging Configuration
 # ===================================================================
@@ -140,6 +158,17 @@ class AppConfig:
         self.MAX_QUEUE_SIZE        = 50
         self.MAX_RETRIES           = 10
         self.MAX_RETRY_TIME        = 30
+        self.NOTIFICATION_FORMAT_ASCII = (
+            "%time %action_text [(Group: %group)]"
+        )
+        self.NOTIFICATION_FORMAT_DATA = (
+            "%time Event: %event_code [(%event_description)]"
+            "[ User: %user_id]"
+            "[ Zone: %zone]"
+            "[ Group: %group]"
+            "[ Peripheral: %peripheral]"
+            "[ Value: %value]"
+        )
         self.EVENT_PRIORITIES      = {}
         self.DEFAULT_PRIORITY      = 5
         self.UNKNOWN_CHAR_MAP      = UNKNOWN_CHAR_MAP
@@ -156,14 +185,62 @@ def _validate_port(port: int, section: str, key: str) -> bool:
                     "This may require running the server as a root user.", section, port)
     return True
 
+def _validate_notification_format(template: str, name: str) -> bool:
+    """Validate a notification format string."""
+    is_valid = True
+    bracket_depth = 0
 
+    for char in template:
+        if char == '[':
+            bracket_depth += 1
+            if bracket_depth > 1:
+                log.warning(
+                    "Invalid %s: nested optional sections are not supported.",
+                    name
+                )
+                is_valid = False
+                break
+
+        elif char == ']':
+            bracket_depth -= 1
+            if bracket_depth < 0:
+                log.warning(
+                    "Invalid %s: unexpected ']' in format.",
+                    name
+                )
+                is_valid = False
+                break
+
+    if bracket_depth != 0:
+        log.warning(
+            "Invalid %s: unmatched '[' or ']'.",
+            name
+        )
+        is_valid = False
+
+    fields = re.findall(r'%([a-zA-Z_][a-zA-Z0-9_]*)', template)
+
+    for field_name in fields:
+        if field_name not in NOTIFICATION_FIELDS:
+            log.warning(
+                "Invalid %s: unknown field '%%%s'.",
+                name,
+                field_name
+            )
+            is_valid = False
+
+    return is_valid
+  
 def load_application_config(config_file: str = 'sia-server.conf') -> AppConfig:
     """
     Phase 2: Reads and validates server/infrastructure configuration.
     Logging is fully available at this point.
     Account configuration is handled separately by load_accounts().
     """
-    config = configparser.ConfigParser(inline_comment_prefixes=('#', ';'))
+    config = configparser.ConfigParser(
+        inline_comment_prefixes=('#', ';'),
+        interpolation=None,
+    )
 
     try:
         if not config.read(config_file):
@@ -283,6 +360,39 @@ def load_application_config(config_file: str = 'sia-server.conf') -> AppConfig:
     # --- Validate and load [Notification] section ---
     if config.has_section('Notification'):
         try:
+            # --- Parse Notification Formats ---
+            notification_format_ascii = config.get(
+                'Notification',
+                'notification_format_ascii',
+                fallback=app_config.NOTIFICATION_FORMAT_ASCII
+            )
+
+            if _validate_notification_format(
+                notification_format_ascii,
+                'NOTIFICATION_FORMAT_ASCII'
+            ):
+                app_config.NOTIFICATION_FORMAT_ASCII = notification_format_ascii
+            else:
+                log.warning(
+                    "Invalid NOTIFICATION_FORMAT_ASCII. Using default format."
+                )
+
+            notification_format_data = config.get(
+                'Notification',
+                'notification_format_data',
+                fallback=app_config.NOTIFICATION_FORMAT_DATA
+            )
+
+            if _validate_notification_format(
+                notification_format_data,
+                'NOTIFICATION_FORMAT_DATA'
+            ):
+                app_config.NOTIFICATION_FORMAT_DATA = notification_format_data
+            else:
+                log.warning(
+                    "Invalid NOTIFICATION_FORMAT_DATA. Using default format."
+                )
+            # --- Parse queue config ---
             app_config.MAX_QUEUE_SIZE = config.getint('Notification', 'max_que_size', fallback=50)
             app_config.MAX_RETRIES    = config.getint('Notification', 'max_retries', fallback=10)
             app_config.MAX_RETRY_TIME = config.getint('Notification', 'max_retry_time', fallback=30)

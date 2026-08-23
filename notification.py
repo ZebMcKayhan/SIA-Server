@@ -19,6 +19,7 @@ Backwards compatibility:
 import importlib
 import logging
 import pkgutil
+import re
 import sys
 import time
 from typing import Dict, Optional, Union
@@ -174,45 +175,67 @@ def _build_provider_cache(accounts: AccountsConfig,
 # ===================================================================
 # Notification formatting
 # ===================================================================
-
+def has_value(event, field):
+    return getattr(event, field, None) is not None
+  
+  
 def get_event_priority(event_code: str, priority_map: Dict, default_priority: int) -> int:
     """Gets the notification priority for a given event code from the defaults map."""
     return priority_map.get(event_code, default_priority)
 
 
-def format_notification_text(event: Union[GalaxyEvent, MessageEvent]) -> str:
-    """
-    Formats the notification message text.
-    For MessageEvent, uses action_text directly.
-    For GalaxyEvent, intelligently chooses between the rich ASCII block text
-    or constructs a message from the Data block fields.
+def format_notification_text(event: Union[GalaxyEvent, MessageEvent],
+                             notification_format_ascii: str,
+                             notification_format_data: str
+                             ) -> str:
+    r"""
+    Formats the notification message according to the configured format.
+
+    Format syntax:
+      %field          Replaced with the corresponding GalaxyEvent attribute.
+      [ ... ]         Optional section; omitted if any referenced field is missing.
+      \n              Replaced with a newline character.
+
+    For GalaxyEvent, the ASCII format is used when action_text is available,
+    otherwise the data format is used.
     """
     if isinstance(event, MessageEvent):
         return event.action_text
 
-    event_time = event.time or "??"
-
     if event.action_text:
-        notification = f"{event_time} {event.action_text}"
-        # Group info is not shown much in ASCII block, so append it to notification if it exist:
-        if event.group:
-            notification += f" (Group {event.group})"
+        template = notification_format_ascii
     else:
-        notification = f"{event_time}"
-        if event.event_code:
-            notification += f" Event: {event.event_code} ({event.event_description})"
-        if event.user_id:
-            notification += f" User: {event.user_id}"
-        if event.zone:
-            notification += f" Zone: {event.zone}"
-        if event.group:
-            notification += f" Group: {event.group}"
-        if event.peripheral:
-            notification += f" Peripheral: {event.peripheral}"
-        if event.value:
-            notification += f" Value: {event.value}"
+        template = notification_format_data
 
-    return notification.strip()
+    # Process optional sections first.
+    # A section is included only if all fields referenced within it have a value.
+    def render_optional(match: re.Match) -> str:
+        section = match.group(1)
+
+        fields = re.findall(r"%([a-zA-Z_][a-zA-Z0-9_]*)", section)
+
+        if any(not has_value(event, field) for field in fields):
+            return ""
+
+        return re.sub(
+            r"%([a-zA-Z_][a-zA-Z0-9_]*)",
+            lambda m: str(getattr(event, m.group(1), "")),
+            section,
+        )
+
+    template = re.sub(r"\[([^\[\]]*)\]", render_optional, template)
+
+    # Replace normal %field tokens.
+    template = re.sub(
+        r"%([a-zA-Z_][a-zA-Z0-9_]*)",
+        lambda m: str(getattr(event, m.group(1))) if has_value(event, m.group(1)) else "",
+        template,
+    )
+
+    # Replace escape sequences with real newlines.
+    template = template.replace(r"\r\n", "\n").replace(r"\n", "\n")
+
+    return template
 
 
 # ===================================================================
@@ -220,9 +243,12 @@ def format_notification_text(event: Union[GalaxyEvent, MessageEvent]) -> str:
 # ===================================================================
 
 def _dispatch_notification(event: Union[GalaxyEvent, MessageEvent],
-                            provider_cache: Dict[str, Optional[NotificationProvider]],
-                            priority_map: Dict,
-                            default_priority: int) -> bool | None:
+         provider_cache: Dict[str, Optional[NotificationProvider]],
+         priority_map: Dict,
+         default_priority: int,
+         notification_format_ascii: str,
+         notification_format_data: str,
+) -> bool | None:
     """
     Dispatch a notification to the appropriate provider for this event's account.
 
@@ -252,7 +278,8 @@ def _dispatch_notification(event: Union[GalaxyEvent, MessageEvent],
             return None
         priority = get_event_priority(event.event_code, priority_map, default_priority)
 
-    message = format_notification_text(event)
+    message = format_notification_text(event, notification_format_ascii,
+                                      notification_format_data)
 
     # Build display name for logging - site_name if available, otherwise just account number
     site_name = getattr(event, 'site_name', None)
@@ -310,7 +337,8 @@ class NotificationDispatcher(Thread):
     Supports both GalaxyEvent (SIA events) and MessageEvent (custom notifications).
     """
     def __init__(self, queue: Queue, accounts: AccountsConfig, priority_map: Dict,
-                 default_priority: int, max_retries: int, max_retry_time: int):
+                 default_priority: int, max_retries: int, max_retry_time: int,
+                 notification_format_ascii: str, notification_format_data: str):
         super().__init__(daemon=True)
         self.name              = "NotificationDispatcher"
         self.queue             = queue
@@ -319,6 +347,8 @@ class NotificationDispatcher(Thread):
         self.default_priority  = default_priority
         self.max_retries       = max_retries
         self.max_retry_time_minutes = max_retry_time
+        self.notification_format_ascii = notification_format_ascii
+        self.notification_format_data  = notification_format_data                   
         self.shutdown_event    = ThreadEvent()
         self._provider_cache: Dict[str, Optional[NotificationProvider]] = {}
 
@@ -383,9 +413,9 @@ class NotificationDispatcher(Thread):
                 self.queue.task_done()
                 continue
 
-            success = _dispatch_notification(
-                event, self._provider_cache, self.priority_map, self.default_priority
-            )
+            success = _dispatch_notification(event, self._provider_cache, self.priority_map,
+                                 self.default_priority, self.notification_format_ascii,
+                                self.notification_format_data)
 
             if success is None:
                 log.debug("Notification skipped for account %s.", event.account)
