@@ -26,7 +26,8 @@ from galaxy.constants import UNKNOWN_CHAR_MAP
 log = logging.getLogger(__name__)
 
 # Allowed placeholder tokens for custom notification format strings (%field).
-# NOTE: This set mirrors the attributes of `GalaxyEvent` in `galaxy/parser.py`.
+# NOTE: This set includes the attributes of `GalaxyEvent` in `galaxy/parser.py`,
+# as well as server date/time placeholders (%YY, %YYYY, %MM, %DD, %hh, %mm, %ss).
 # Kept here to avoid importing galaxy.parser early during configuration loading.
 NOTIFICATION_FIELDS = {
     'time',
@@ -41,6 +42,14 @@ NOTIFICATION_FIELDS = {
     'event_code',
     'event_description',
     'zone',
+    # Server Date & Time fields (server local time):
+    'YY',
+    'YYYY',
+    'MM',
+    'DD',
+    'hh',
+    'mm',
+    'ss',
 }
 
 # ===================================================================

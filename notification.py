@@ -175,10 +175,6 @@ def _build_provider_cache(accounts: AccountsConfig,
 # ===================================================================
 # Notification formatting
 # ===================================================================
-def has_value(event, field):
-    return getattr(event, field, None) is not None
-  
-  
 def get_event_priority(event_code: str, priority_map: Dict, default_priority: int) -> int:
     """Gets the notification priority for a given event code from the defaults map."""
     return priority_map.get(event_code, default_priority)
@@ -192,7 +188,7 @@ def format_notification_text(event: Union[GalaxyEvent, MessageEvent],
     Formats the notification message according to the configured format.
 
     Format syntax:
-      %field          Replaced with the corresponding GalaxyEvent attribute.
+      %field          Replaced with the corresponding GalaxyEvent attribute or server date/time.
       [ ... ]         Optional section; omitted if any referenced field is missing.
       \n              Replaced with a newline character.
 
@@ -207,6 +203,24 @@ def format_notification_text(event: Union[GalaxyEvent, MessageEvent],
     else:
         template = notification_format_data
 
+    # Sample server local time once to ensure consistency across all tokens
+    server_time = time.localtime()
+    server_time_fields = {
+        'YYYY': time.strftime('%Y', server_time),
+        'YY':   time.strftime('%y', server_time),
+        'MM':   time.strftime('%m', server_time),
+        'DD':   time.strftime('%d', server_time),
+        'hh':   time.strftime('%H', server_time),
+        'mm':   time.strftime('%M', server_time),
+        'ss':   time.strftime('%S', server_time),
+    }
+
+    def get_field_val(field: str) -> Optional[str]:
+        if field in server_time_fields:
+            return server_time_fields[field]
+        val = getattr(event, field, None)
+        return str(val) if val is not None else None
+
     # Process optional sections first.
     # A section is included only if all fields referenced within it have a value.
     def render_optional(match: re.Match) -> str:
@@ -214,12 +228,12 @@ def format_notification_text(event: Union[GalaxyEvent, MessageEvent],
 
         fields = re.findall(r"%([a-zA-Z_][a-zA-Z0-9_]*)", section)
 
-        if any(not has_value(event, field) for field in fields):
+        if any(get_field_val(field) is None for field in fields):
             return ""
 
         return re.sub(
             r"%([a-zA-Z_][a-zA-Z0-9_]*)",
-            lambda m: str(getattr(event, m.group(1), "")),
+            lambda m: get_field_val(m.group(1)) or "",
             section,
         )
 
@@ -228,7 +242,7 @@ def format_notification_text(event: Union[GalaxyEvent, MessageEvent],
     # Replace normal %field tokens.
     template = re.sub(
         r"%([a-zA-Z_][a-zA-Z0-9_]*)",
-        lambda m: str(getattr(event, m.group(1))) if has_value(event, m.group(1)) else "",
+        lambda m: get_field_val(m.group(1)) if get_field_val(m.group(1)) is not None else "",
         template,
     )
 
