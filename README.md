@@ -237,9 +237,9 @@ Setting `LOG_TO = Syslog` integrates the server's logging with the native operat
 -   **`[Notification]` Section:** Configures notification formatting, event priorities, and the resilient retry queue.
     -   **Custom Notification Formats:**
         -   `NOTIFICATION_FORMAT_ASCII`: Format used for SIA Level 3 events where human-readable `action_text` is available from the panel (default: `%time %action_text [(Group: %group)]`).
-        -   `NOTIFICATION_FORMAT_DATA`: Format used for SIA Levels 0–2 where only raw event data fields are available (default: `%time Event: %event_code [(%event_description)][ User: %user_id][ Zone: %zone][ Group: %group][ Peripheral: %peripheral][ Value: %value]`).
-        -   **Available Placeholders (`%field`):** `%time`, `%action_text`, `%account`, `%site_name`, `%event_type`, `%event_code`, `%event_description`, `%user_id`, `%zone`, `%group`, `%peripheral`, `%value`.
-        -   **Optional Sections (`[ ... ]`):** Any text enclosed in `[ ]` is optional and is omitted completely if any `%field` referenced inside that bracket is not available for the event.
+        -   **Available Placeholders (`%field`):**
+            -   *Panel fields:* `%time` (panel time if present), `%action_text`, `%account`, `%site_name`, `%event_type`, `%event_code`, `%event_description`, `%user_id`, `%zone`, `%group`, `%peripheral`, `%value`.
+            -   *Server date/time fields (local):* `%YYYY` (4-digit year), `%YY` (2-digit year), `%MM` (month), `%DD` (day), `%hh` (hour), `%mm` (minute), `%ss` (second).
         -   **Newlines (`\n`):** Use `\n` to insert line breaks in the notification message (can also be placed inside optional sections, e.g. `[\nGroup: %group]`).
     -   `MAX_QUE_SIZE`, `MAX_RETRIES`, `MAX_RETRY_TIME`: Control the queue capacity and retry behavior for network outages.
     -   `PRIORITY_1` through `PRIORITY_5`: Assign SIA Event Codes to different priority levels (1 = lowest, 5 = urgent).
