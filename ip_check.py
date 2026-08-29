@@ -338,8 +338,7 @@ def update_watchdog(account_number: str, site_name: str,
                 'new_threshold': new_threshold,
             }
             msg = format_ip_check_notification(fmt, ctx)
-            prio = getattr(config, 'IP_CHECK_CONNECTION_RESTORED_PRIO',
-                           getattr(config, 'IP_CHECK_RESTORE_PRIO', 2))
+            prio = getattr(config, 'IP_CHECK_CONNECTION_RESTORED_PRIO', 2)
             enqueue_message_notification(
                 account_number,
                 site_name,
@@ -487,8 +486,7 @@ async def watchdog_task(notification_queue: Queue):
                         'new_threshold': None,
                     }
                     msg = format_ip_check_notification(fmt, ctx)
-                    prio = getattr(config, 'IP_CHECK_WATCHDOG_TIMEOUT_PRIO',
-                                   getattr(config, 'IP_CHECK_LOST_PRIO', 4))
+                    prio = getattr(config, 'IP_CHECK_WATCHDOG_TIMEOUT_PRIO', 4)
                     enqueue_message_notification(
                         account_number,
                         site_name,
