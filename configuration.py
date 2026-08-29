@@ -191,9 +191,6 @@ class AppConfig:
         self.IP_CHECK_CONNECTION_RESTORED_PRIO = 2
         self.IP_CHECK_INTERVAL_CHANGED_PRIO = 3
         self.IP_CHECK_WATCHDOG_TIMEOUT_PRIO = 4
-        # Backwards compatibility aliases
-        self.IP_CHECK_LOST_PRIO             = self.IP_CHECK_WATCHDOG_TIMEOUT_PRIO
-        self.IP_CHECK_RESTORE_PRIO          = self.IP_CHECK_CONNECTION_RESTORED_PRIO
         self.IP_CHECK_MONITORING_STARTED    = None
         self.IP_CHECK_CONNECTION_RESTORED   = (
             "Heartbeat received at %new_panel_time, connection restored"
@@ -472,7 +469,6 @@ def load_application_config(config_file: str = 'sia-server.conf') -> AppConfig:
                                 restore_prio, app_config.IP_CHECK_CONNECTION_RESTORED_PRIO)
                 else:
                     app_config.IP_CHECK_CONNECTION_RESTORED_PRIO = restore_prio
-                    app_config.IP_CHECK_RESTORE_PRIO = restore_prio
             except ValueError:
                 log.warning("Invalid CONNECTION_RESTORED_PRIO in [IP-Check]. Must be a number. "
                             "Using default %d.", app_config.IP_CHECK_CONNECTION_RESTORED_PRIO)
@@ -503,7 +499,6 @@ def load_application_config(config_file: str = 'sia-server.conf') -> AppConfig:
                                 lost_prio, app_config.IP_CHECK_WATCHDOG_TIMEOUT_PRIO)
                 else:
                     app_config.IP_CHECK_WATCHDOG_TIMEOUT_PRIO = lost_prio
-                    app_config.IP_CHECK_LOST_PRIO = lost_prio
             except ValueError:
                 log.warning("Invalid WATCHDOG_TIMEOUT_PRIO in [IP-Check]. Must be a number. "
                             "Using default %d.", app_config.IP_CHECK_WATCHDOG_TIMEOUT_PRIO)
