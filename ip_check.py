@@ -12,7 +12,7 @@ import sys
 import time
 import datetime
 from queue import Queue
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 from galaxy.protocol import INCOMPLETE_BLOCK_TIMEOUT, INTER_COMMAND_TIMEOUT, IP_CHECK_CLOSE_TIMEOUT
 from notification import enqueue_message_notification
