@@ -318,12 +318,42 @@ Setting `LOG_TO = Syslog` integrates the server's logging with the native operat
 
 -   **`[Notification]` Section:** Configures notification formatting, event priorities, and the resilient retry queue.
     -   **Custom Notification Formats:**
-        -   `NOTIFICATION_FORMAT_ASCII`: Format used for SIA Level 3 events where human-readable `action_text` is available from the panel (default: `%time %action_text [(Group: %group)]`).
-        -   **Available Placeholders (`%field`):**
-            -   *Panel fields:* `%time` (panel time if present), `%action_text`, `%account`, `%site_name`, `%event_type`, `%event_code`, `%event_description`, `%user_id`, `%zone`, `%group`, `%peripheral`, `%value`.
-            -   *Server date/time fields (local):* `%YYYY` (4-digit year), `%YY` (2-digit year), `%MM` (month), `%DD` (day), `%hh` (hour), `%mm` (minute), `%ss` (second).
-        -   **Newlines (`\n`):** Use `\n` to insert line breaks in the notification message (can also be placed inside optional sections, e.g. `[\nGroup: %group]`).
-    -   `MAX_QUE_SIZE`, `MAX_RETRIES`, `MAX_RETRY_TIME`: Control the queue capacity and retry behavior for network outages.
+        -   Notification formats use %field to insert information from the GalaxyEvent or optionally server date & time.
+        -   **Available placeholders:**
+            -   **GalaxyEvent fields:**
+                -   `%account`: Account number.
+                -   `%site_name`: Site name.
+                -   `%time`: Event time (from panel, if present).
+                -   `%action_text`: Human-readable text from the SIA ASCII block.
+                -   `%event_type`: Event type (New/Old).
+                -   `%event_code`: SIA event code (e.g. OP, BA, RX).
+                -   `%event_description`: Description of the event code.
+                -   `%user_id`: User ID.
+                -   `%zone`: Zone address.
+                -   `%group`: Group number.
+                -   `%peripheral`: Peripheral/module number.
+                -   `%value`: Event value.
+            -   **Server Date & Time fields (server local time when event is processed):**
+                -   `%YYYY`: 4-digit server year (e.g. 2026).
+                -   `%YY`: 2-digit server year (e.g. 26).
+                -   `%MM`: 2-digit server month (01-12).
+                -   `%DD`: 2-digit server day (01-31).
+                -   `%hh`: 2-digit server hour (00-23).
+                -   `%mm`: 2-digit server minute (00-59)
+                -   `%ss`: 2-digit server second (00-59)
+            -   Sections enclosed in [ ] are optional. The entire section is omitted if any field used inside the section is unavailable.
+            -   Use \n to insert a newline in the notification (can also be used inside optional sections, e.g. [\nGroup: %group]).
+            -   Examples
+                ```text
+                NOTIFICATION_FORMAT_ASCII = %hh:%mm %action_text[\t(Group: %group)]
+                NOTIFICATION_FORMAT_DATA = %YYYY-%MM-%DD %hh:%mm:%ss %event_type event: %event_code (%event_description)[\tUser: %user_id][\tZone: %zone][\tGroup: %group][\tPeripheral: %peripheral][\tValue: %value]
+                ```
+    -   `NOTIFICATION_FORMAT_ASCII`: Format used for SIA Level 3 events where human-readable `action_text` is available from the panel (default: `%time %action_text [(Group: %group)]`).
+    -   `NOTIFICATION_FORMAT_DATA`: Format used for SIA Level 0-2 events where human-readable `action_text` is not available (default: `%time Event: %event_code [(%event_description)][ User: %user_id][ Zone: %zone][ Group: %group][ Peripheral: %peripheral][ Value: %value]
+`).
+    -   `MAX_QUE_SIZE`: Number between 1 and 1000 Maximum number of events to queue up if failed to send.
+    -   `MAX_RETRIES`: 0 = infinite, Maximum number of times to retry to send.
+    -   `MAX_RETRY_TIME`: Number between 1-1000, Max minutes between retries. Retries will always be after 1, 2, 4, 8, 16 minutes but this puts a limit on how much it can be increased.
     -   `PRIORITY_1` through `PRIORITY_5`: Assign SIA Event Codes to different priority levels (1 = lowest, 5 = urgent).
     -   `DEFAULT_PRIORITY`: The priority to use for any unlisted or unknown event code.
 
