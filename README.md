@@ -268,7 +268,6 @@ The primary configuration is done in `sia-server.conf`. This file is designed to
             -   `%hh`: Server hour (`00`–`23`).
             -   `%mm`: Server minute (`00`–`59`).
             -   `%ss`: Server second (`00`–`59`).
-            -   `%time`: Server time in the default `HH:MM` representation.
  
         The `last_*` and `new_*` naming describes the heartbeat data involved in the event:
         -   `last_*` refers to the most recently known heartbeat before the current event.
