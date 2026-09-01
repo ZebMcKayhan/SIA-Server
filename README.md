@@ -198,14 +198,95 @@ The primary configuration is done in `sia-server.conf`. This file is designed to
     -   `REJECT_POLICY`: Controls how invalid or unauthorised connections are handled. Accepts `respond` or `drop`.
         -   `respond` — Send a SIA REJECT frame to the client (default).
         -   `drop` — Silently close the connection without sending anything.
--   **`[IP-Check]` Section:** Configure the ports and addresses for the optional IP Check Service.
+-   **`[IP-Check]` Section:** Configure the optional IP Check (Heartbeat) Service.
     > **Note:** The IP Check server validates all incoming heartbeat packets before responding.
     > It verifies the packet length and header. Invalid packets are dropped.
+ 
     -   `ENABLED`: Controls whether the IP Check Service starts. Default: `No`.
-    -   `WATCHDOG_THRESHOLD`: Controls how many missed pings trigger a lost-connection notification. 
-        `2.1` means 2 missed pings + 10% buffer. Set to `0` to disable watchdog alerts entirely.
-    -   `WATCHDOG_LOST_PRIO` / `WATCHDOG_RESTORE_PRIO`: The notification priority (1-5) for lost and 
-        restored connection notifications respectively.
+    -   `LISTEN_ADDR`, `LISTEN_PORT`: Configure the address and TCP port used by the IP Check Service. The default port is `10001`.
+    -   `WATCHDOG_THRESHOLD`: Controls how long the server waits after a missed heartbeat before declaring the connection lost.
+        The timeout is calculated as: `WATCHDOG_THRESHOLD × heartbeat interval`.
+        For example, with a heartbeat interval of 10 minutes:
+        -   `2.1` results in a timeout after 21 minutes.
+        -   `1.1` results in a timeout after 11 minutes.
+        
+        This allows occasional missed heartbeats without immediately generating an alert. Values between `1.1` and `10.0` are supported. Set the value to `0` (or any value `<= 1.0`) to disable the watchdog entirely.
+ 
+    -   **Notification Priorities:** IP Check events have independent notification priorities:
+        -   `MONITORING_STARTED_PRIO`: Notification priority when monitoring starts for an account. Default: `2`.
+        -   `CONNECTION_RESTORED_PRIO`: Notification priority when a previously disconnected heartbeat connection is restored. Default: `2`.
+        -   `INTERVAL_CHANGED_PRIO`: Notification priority when the panel changes its heartbeat interval. Default: `3`.
+        -   `WATCHDOG_TIMEOUT_PRIO`: Notification priority when the watchdog detects a lost connection. Default: `4`.
+        
+        Notification priorities range from `1` (lowest) to `5` (highest/urgent).
+ 
+    -   **Custom IP Check Notifications:** The four IP Check events can have independently configurable notification messages:
+        -   `MONITORING_STARTED`: Generated when the first valid heartbeat is received for an account.
+        -   `CONNECTION_RESTORED`: Generated when a previously timed-out connection receives a heartbeat again.
+        -   `INTERVAL_CHANGED`: Generated when a connected panel changes its heartbeat interval.
+        -   `WATCHDOG_TIMEOUT`: Generated when the watchdog determines that a heartbeat has been missed for longer than the configured threshold.
+        
+        `MONITORING_STARTED` and `INTERVAL_CHANGED` have no notification by default. `CONNECTION_RESTORED` and `WATCHDOG_TIMEOUT` retain their original notification messages for backwards compatibility.
+ 
+        Notification formats use `%field` placeholders. Fields that represent timestamps or durations can additionally use `{format}` to control their representation, for example:
+        
+        ```text
+        %new_panel_time{%YYYY-%MM-%DD %hh:%mm:%ss}
+        %elapsed{%DDd %hh:%mm:%ss}
+        %new_interval{%hh:%mm:%ss}
+        ```
+        
+        The formatting rules are:
+        -   **Timestamp fields** use `%YYYY`, `%YY`, `%MM`, `%DD`, `%hh`, `%mm`, and `%ss`.
+        -   **Duration fields** use `%DD`, `%hh`, `%mm`, and `%ss`.
+        -   For durations, units are calculated from the largest unit requested to the smallest, regardless of the order in which the placeholders appear in the format. Omitted higher-order units are folded into the next requested unit. For example, `2 hours 15 minutes` formatted as `%mm:%ss` becomes `135:00`.
+        -   For duration `%DD`, leading zeroes are removed, but `0` is retained when the value is zero. The other duration fields always use minimum two digits. This allows formats such as `2d 05h 02m 25s` or `2d 05:02:25`.
+        -   If no format is specified, each field uses its default representation.
+ 
+        **Available placeholders:**
+        
+        -   **General fields:**
+            -   `%account`: Account number.
+            -   `%site_name`: Configured site name.
+            -   `%current_state`: State before the current IP Check event.
+            -   `%new_state`: State after the current IP Check event.
+        -   **Last heartbeat fields:**
+            -   `%last_panel_time`: Panel time from the last received heartbeat.
+            -   `%last_interval`: Heartbeat interval from the last received heartbeat, in seconds.
+            -   `%last_threshold`: Watchdog timeout calculated from the last heartbeat interval.
+            -   `%last_seen`: Server time when the last heartbeat was received.
+            -   `%elapsed`: Time elapsed since the last heartbeat.
+        -   **New heartbeat fields:**
+            -   `%new_panel_time`: Panel time from the heartbeat currently being processed.
+            -   `%new_interval`: Heartbeat interval from the heartbeat currently being processed, in seconds.
+            -   `%new_threshold`: Watchdog timeout calculated from the new heartbeat interval.
+        -   **Server date/time fields:**
+            -   `%YYYY`: Four-digit server year.
+            -   `%YY`: Two-digit server year.
+            -   `%MM`: Server month (`01`–`12`).
+            -   `%DD`: Server day (`01`–`31`).
+            -   `%hh`: Server hour (`00`–`23`).
+            -   `%mm`: Server minute (`00`–`59`).
+            -   `%ss`: Server second (`00`–`59`).
+ 
+        The `last_*` and `new_*` naming describes the heartbeat data involved in the event:
+        -   `last_*` refers to the most recently known heartbeat before the current event.
+        -   `new_*` refers to the heartbeat currently being processed.
+        
+        Therefore, a normal heartbeat event can contain both `last_*` and `new_*` values. A `WATCHDOG_TIMEOUT` has no `new_*` values because no new heartbeat was received. Conversely, `MONITORING_STARTED` has no `last_*` values because it is the first heartbeat received.
+ 
+        Fields that are not applicable to a particular event are left empty. Optional sections using [ ... ] are also supported, following the same syntax as SIA notification formats, but are generally less useful for IP Check notifications because field availability is fixed for each event type.
+ 
+        For example:
+        
+        ```text
+        MONITORING_STARTED = Monitoring started at %new_panel_time{%YYYY-%MM-%DD %hh:%mm:%ss}, interval: %new_interval{%hh:%mm:%ss}
+        CONNECTION_RESTORED = Monitoring restored at %new_panel_time{%YYYY-%MM-%DD %hh:%mm:%ss}, after %elapsed{%DDd %hh:%mm:%ss}
+        INTERVAL_CHANGED = Heartbeat interval changed from %last_interval{%hh:%mm:%ss} to %new_interval{%hh:%mm:%ss}
+        WATCHDOG_TIMEOUT = Heartbeat lost. Last heartbeat: %last_panel_time{%hh:%mm:%ss}. Last seen: %last_seen{%YYYY-%MM-%DD %hh:%mm:%ss}
+        ```
+        
+        `\n` can be used to insert a line break into a notification, just like in the SIA notification formats.
 
 -   **`[Logging]` Section:** Control the log level and output destination.
     -   `LOG_LEVEL`: Set the verbosity of logs (`DEBUG`, `INFO`, `WARNING`, `ERROR`). `INFO` is recommended for normal use.
@@ -236,12 +317,42 @@ Setting `LOG_TO = Syslog` integrates the server's logging with the native operat
 
 -   **`[Notification]` Section:** Configures notification formatting, event priorities, and the resilient retry queue.
     -   **Custom Notification Formats:**
-        -   `NOTIFICATION_FORMAT_ASCII`: Format used for SIA Level 3 events where human-readable `action_text` is available from the panel (default: `%time %action_text [(Group: %group)]`).
-        -   **Available Placeholders (`%field`):**
-            -   *Panel fields:* `%time` (panel time if present), `%action_text`, `%account`, `%site_name`, `%event_type`, `%event_code`, `%event_description`, `%user_id`, `%zone`, `%group`, `%peripheral`, `%value`.
-            -   *Server date/time fields (local):* `%YYYY` (4-digit year), `%YY` (2-digit year), `%MM` (month), `%DD` (day), `%hh` (hour), `%mm` (minute), `%ss` (second).
-        -   **Newlines (`\n`):** Use `\n` to insert line breaks in the notification message (can also be placed inside optional sections, e.g. `[\nGroup: %group]`).
-    -   `MAX_QUE_SIZE`, `MAX_RETRIES`, `MAX_RETRY_TIME`: Control the queue capacity and retry behavior for network outages.
+        -   Notification formats use %field to insert information from the GalaxyEvent or optionally server date & time.
+        -   **Available placeholders:**
+            -   **GalaxyEvent fields:**
+                -   `%account`: Account number.
+                -   `%site_name`: Site name.
+                -   `%time`: Event time (from panel, if present).
+                -   `%action_text`: Human-readable text from the SIA ASCII block.
+                -   `%event_type`: Event type (New/Old).
+                -   `%event_code`: SIA event code (e.g. OP, BA, RX).
+                -   `%event_description`: Description of the event code.
+                -   `%user_id`: User ID.
+                -   `%zone`: Zone address.
+                -   `%group`: Group number.
+                -   `%peripheral`: Peripheral/module number.
+                -   `%value`: Event value.
+            -   **Server Date & Time fields (server local time when event is processed):**
+                -   `%YYYY`: 4-digit server year (e.g. 2026).
+                -   `%YY`: 2-digit server year (e.g. 26).
+                -   `%MM`: 2-digit server month (01-12).
+                -   `%DD`: 2-digit server day (01-31).
+                -   `%hh`: 2-digit server hour (00-23).
+                -   `%mm`: 2-digit server minute (00-59)
+                -   `%ss`: 2-digit server second (00-59)
+            -   Sections enclosed in [ ] are optional. The entire section is omitted if any field used inside the section is unavailable.
+            -   Use \n to insert a newline in the notification (can also be used inside optional sections, e.g. [\nGroup: %group]).
+            -   Examples
+                ```text
+                NOTIFICATION_FORMAT_ASCII = %hh:%mm %action_text[\t(Group: %group)]
+                NOTIFICATION_FORMAT_DATA = %YYYY-%MM-%DD %hh:%mm:%ss %event_type event: %event_code (%event_description)[\tUser: %user_id][\tZone: %zone][\tGroup: %group][\tPeripheral: %peripheral][\tValue: %value]
+                ```
+    -   `NOTIFICATION_FORMAT_ASCII`: Format used for SIA Level 3 events where human-readable `action_text` is available from the panel (default: `%time %action_text [(Group: %group)]`).
+    -   `NOTIFICATION_FORMAT_DATA`: Format used for SIA Level 0-2 events where human-readable `action_text` is not available (default: `%time Event: %event_code [(%event_description)][ User: %user_id][ Zone: %zone][ Group: %group][ Peripheral: %peripheral][ Value: %value]
+`).
+    -   `MAX_QUE_SIZE`: Number between 1 and 1000 Maximum number of events to queue up if failed to send.
+    -   `MAX_RETRIES`: 0 = infinite, Maximum number of times to retry to send.
+    -   `MAX_RETRY_TIME`: Number between 1-1000, Max minutes between retries. Retries will always be after 1, 2, 4, 8, 16 minutes but this puts a limit on how much it can be increased.
     -   `PRIORITY_1` through `PRIORITY_5`: Assign SIA Event Codes to different priority levels (1 = lowest, 5 = urgent).
     -   `DEFAULT_PRIORITY`: The priority to use for any unlisted or unknown event code.
 

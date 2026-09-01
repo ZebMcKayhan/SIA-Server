@@ -12,7 +12,7 @@ import sys
 import time
 import datetime
 from queue import Queue
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 from galaxy.protocol import INCOMPLETE_BLOCK_TIMEOUT, INTER_COMMAND_TIMEOUT, IP_CHECK_CLOSE_TIMEOUT
 from notification import enqueue_message_notification
@@ -36,6 +36,8 @@ except ImportError:
 except Exception as e:
     log.debug("Encryption modules failed to load: %s. Encrypted sessions will be rejected.", e)
 
+import re
+
 # --- Watchdog Configuration ---
 PANEL_EPOCH_OFFSET = 54000  # 15 hours - converts panel timestamp to local time
 
@@ -53,6 +55,7 @@ def init(cfg, accts):
 # { account: { 'state': 'UNKNOWN'|'CONNECTED'|'DISCONNECTED'|'DISABLED',
 #              'last_seen': float,      # server time (time.time())
 #              'last_panel_time': str,  # formatted panel local time
+#              'last_panel_ts': float,  # panel epoch timestamp with offset
 #              'interval': int } }      # seconds
 watchdog_state = {}
 
@@ -64,27 +67,250 @@ def panel_timestamp_to_str(data: bytes) -> str:
         unix_ts, datetime.timezone.utc
     ).strftime('%Y-%m-%d %H:%M')
 
+
+# ===================================================================
+# IP Check Notification Formatting
+# ===================================================================
+
+def format_duration(seconds: Union[int, float], fmt: str) -> str:
+    """
+    Format a duration in seconds according to duration format tokens (%DD, %hh, %mm, %ss).
+
+    Rules:
+      - Units are calculated from largest to smallest unit requested in the format string.
+      - Omitted higher-order units fold into the next lower unit.
+      - %DD: Days, leading zeroes stripped, 0 is '0'.
+      - %hh: Hours, minimum 2 digits (does not wrap at 24).
+      - %mm: Minutes, minimum 2 digits.
+      - %ss: Seconds, minimum 2 digits.
+      - The calculation is independent of the order tokens appear in the string.
+    """
+    total_seconds = max(0, int(round(seconds)))
+    has_days = '%DD' in fmt
+    has_hours = '%hh' in fmt
+    has_minutes = '%mm' in fmt
+    has_seconds = '%ss' in fmt
+
+    rem = total_seconds
+    if has_days:
+        days = rem // 86400
+        rem %= 86400
+    else:
+        days = 0
+
+    if has_hours:
+        hours = rem // 3600
+        rem %= 3600
+    else:
+        hours = 0
+
+    if has_minutes:
+        minutes = rem // 60
+        rem %= 60
+    else:
+        minutes = 0
+
+    if has_seconds:
+        secs = rem
+    else:
+        secs = 0
+
+    result = fmt
+    if has_days:
+        result = result.replace('%DD', str(days))
+    if has_hours:
+        result = result.replace('%hh', f"{hours:02d}")
+    if has_minutes:
+        result = result.replace('%mm', f"{minutes:02d}")
+    if has_seconds:
+        result = result.replace('%ss', f"{secs:02d}")
+
+    return result
+
+
+def format_timestamp_dt(dt: datetime.datetime, fmt: str) -> str:
+    """Format a datetime object using %YYYY, %YY, %MM, %DD, %hh, %mm, %ss tokens."""
+    res = fmt
+    res = res.replace('%YYYY', dt.strftime('%Y'))
+    res = res.replace('%YY', dt.strftime('%y'))
+    res = res.replace('%MM', dt.strftime('%m'))
+    res = res.replace('%DD', dt.strftime('%d'))
+    res = res.replace('%hh', dt.strftime('%H'))
+    res = res.replace('%mm', dt.strftime('%M'))
+    res = res.replace('%ss', dt.strftime('%S'))
+    return res
+
+
+def format_timestamp_struct(st: time.struct_time, fmt: str) -> str:
+    """Format a time struct using %YYYY, %YY, %MM, %DD, %hh, %mm, %ss tokens."""
+    res = fmt
+    res = res.replace('%YYYY', time.strftime('%Y', st))
+    res = res.replace('%YY', time.strftime('%y', st))
+    res = res.replace('%MM', time.strftime('%m', st))
+    res = res.replace('%DD', time.strftime('%d', st))
+    res = res.replace('%hh', time.strftime('%H', st))
+    res = res.replace('%mm', time.strftime('%M', st))
+    res = res.replace('%ss', time.strftime('%S', st))
+    return res
+
+
+def _render_ip_check_field(field_name: str, fmt: Optional[str],
+                           context: dict, server_time_st: time.struct_time) -> Optional[str]:
+    """
+    Render a single field token (%field or %field{format}) for an IP Check event.
+    Returns None if the field is unavailable for the current event.
+    """
+    # Server time fields
+    if field_name == 'time':
+        return time.strftime('%H:%M', server_time_st)
+    if field_name == 'YYYY':
+        return time.strftime('%Y', server_time_st)
+    if field_name == 'YY':
+        return time.strftime('%y', server_time_st)
+    if field_name == 'MM':
+        return time.strftime('%m', server_time_st)
+    if field_name == 'DD':
+        return time.strftime('%d', server_time_st)
+    if field_name == 'hh':
+        return time.strftime('%H', server_time_st)
+    if field_name == 'mm':
+        return time.strftime('%M', server_time_st)
+    if field_name == 'ss':
+        return time.strftime('%S', server_time_st)
+
+    # String fields (always available)
+    if field_name in ('account', 'site_name', 'current_state', 'new_state'):
+        val = context.get(field_name)
+        return str(val) if val is not None else None
+
+    # Duration fields
+    if field_name in ('last_interval', 'new_interval', 'last_threshold',
+                      'new_threshold', 'elapsed'):
+        val = context.get(field_name)
+        if val is None:
+            return None
+        if fmt:
+            return format_duration(val, fmt)
+        else:
+            return format_duration(val, '%hh:%mm:%ss')
+
+    # Timestamp fields
+    if field_name == 'last_seen':
+        ts = context.get('last_seen')
+        if ts is None:
+            return None
+        st = time.localtime(ts)
+        if fmt:
+            return format_timestamp_struct(st, fmt)
+        else:
+            return time.strftime('%Y-%m-%d %H:%M:%S', st)
+
+    if field_name in ('last_panel_time', 'new_panel_time'):
+        ts_key = 'last_panel_ts' if field_name == 'last_panel_time' else 'new_panel_ts'
+        ts = context.get(ts_key)
+        str_val = context.get(field_name)
+        if ts is None and str_val is None:
+            return None
+        if fmt:
+            if ts is not None:
+                dt = datetime.datetime.fromtimestamp(ts, datetime.timezone.utc)
+                return format_timestamp_dt(dt, fmt)
+            elif str_val is not None:
+                try:
+                    dt = datetime.datetime.strptime(str_val, '%Y-%m-%d %H:%M').replace(tzinfo=datetime.timezone.utc)
+                    return format_timestamp_dt(dt, fmt)
+                except Exception:
+                    return str_val
+            return None
+        else:
+            if str_val is not None:
+                return str_val
+            elif ts is not None:
+                return datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).strftime('%Y-%m-%d %H:%M')
+            return None
+
+    return None
+
+
+def format_ip_check_notification(template: str, context: dict) -> str:
+    r"""
+    Format an IP Check notification string according to context.
+
+    Syntax:
+      %field          Value of the field formatted with default representation.
+      %field{format}  Value formatted using the specified timestamp/duration format.
+      [ ... ]         Optional section; omitted if any referenced field is unavailable.
+      \n, \r\n        Replaced with a newline character.
+    """
+    server_time_st = time.localtime()
+
+    # Process optional sections [ ... ]
+    def render_optional(match: re.Match) -> str:
+        section = match.group(1)
+        # Find all %field or %field{format}
+        matches = re.findall(r'%([a-zA-Z_][a-zA-Z0-9_]*)(?:\{([^{}]*)\})?', section)
+        if any(_render_ip_check_field(field_name, fmt if fmt else None, context, server_time_st) is None
+               for field_name, fmt in matches):
+            return ""
+
+        def replace_in_section(m: re.Match) -> str:
+            field_name = m.group(1)
+            fmt = m.group(2) if m.group(2) is not None else None
+            val = _render_ip_check_field(field_name, fmt, context, server_time_st)
+            return val if val is not None else ""
+
+        return re.sub(r'%([a-zA-Z_][a-zA-Z0-9_]*)(?:\{([^{}]*)\})?', replace_in_section, section)
+
+    template = re.sub(r'\[([^\[\]]*)\]', render_optional, template)
+
+    # Process remaining %field or %field{format} tokens
+    def replace_main(m: re.Match) -> str:
+        field_name = m.group(1)
+        fmt = m.group(2) if m.group(2) is not None else None
+        val = _render_ip_check_field(field_name, fmt, context, server_time_st)
+        return val if val is not None else ""
+
+    template = re.sub(r'%([a-zA-Z_][a-zA-Z0-9_]*)(?:\{([^{}]*)\})?', replace_main, template)
+
+    # Replace newline escape sequences
+    template = template.replace(r"\r\n", "\n").replace(r"\n", "\n")
+
+    return template
+
+
 def update_watchdog(account_number: str, site_name: str,
                     data: bytes, notification_queue: Queue):
     """
     Update watchdog state when a valid ping is received.
     Called from handle_ip_check() after successful validation.
     """
-    panel_time = panel_timestamp_to_str(data)
+    ts = data[15] + data[16]*256 + data[17]*65536 + data[18]*16777216
+    unix_ts = ts + PANEL_EPOCH_OFFSET
+    dt = datetime.datetime.fromtimestamp(unix_ts, datetime.timezone.utc)
+    panel_time = dt.strftime('%Y-%m-%d %H:%M')
+
     interval = data[20] + data[21]*256 + data[22]*65536 + data[23]*16777216
     hours = interval // 3600
     minutes = (interval % 3600) // 60
     seconds = interval % 60
     interval_str = f"{hours:02d}:{minutes:02d}:{seconds:02d} ({interval}s)"
 
-    current_state = watchdog_state.get(account_number, {}).get('state', 'UNKNOWN')
-    previous_interval = watchdog_state.get(account_number, {}).get('interval', interval)
+    now = time.time()
+    prev_entry = watchdog_state.get(account_number, {})
+    current_state = prev_entry.get('state', 'UNKNOWN')
+    previous_interval = prev_entry.get('interval')
+    prev_panel_time = prev_entry.get('last_panel_time')
+    prev_panel_ts = prev_entry.get('last_panel_ts')
+    prev_last_seen = prev_entry.get('last_seen')
+    current_threshold = (previous_interval * config.IP_CHECK_WATCHDOG) if previous_interval is not None else None
+    new_threshold = interval * config.IP_CHECK_WATCHDOG
 
     new_state = 'DISABLED' if config.IP_CHECK_WATCHDOG <= 1.0 else 'CONNECTED'
     watchdog_state[account_number] = {
         'state': new_state,
-        'last_seen': time.time(),
+        'last_seen': now,
         'last_panel_time': panel_time,
+        'last_panel_ts': unix_ts,
         'interval': interval,
     }
 
@@ -92,13 +318,34 @@ def update_watchdog(account_number: str, site_name: str,
         # Connection restored - only reachable if watchdog was previously enabled
         log.info("Watchdog: Site: %s (Account: %s) - connection restored, "
                  "interval %s.", site_name, account_number, interval_str)
-        enqueue_message_notification(
-            account_number,
-            site_name,
-            f"Heartbeat received at {panel_time}, connection restored",
-            priority=config.IP_CHECK_RESTORE_PRIO,
-            queue=notification_queue
-        )
+        fmt = getattr(config, 'IP_CHECK_CONNECTION_RESTORED', None)
+        if fmt:
+            elapsed = (now - prev_last_seen) if prev_last_seen is not None else None
+            ctx = {
+                'account': account_number,
+                'site_name': site_name,
+                'current_state': current_state,
+                'new_state': new_state,
+                'last_panel_time': prev_panel_time,
+                'last_panel_ts': prev_panel_ts,
+                'last_interval': previous_interval,
+                'last_threshold': current_threshold,
+                'last_seen': prev_last_seen,
+                'elapsed': elapsed,
+                'new_panel_time': panel_time,
+                'new_panel_ts': unix_ts,
+                'new_interval': interval,
+                'new_threshold': new_threshold,
+            }
+            msg = format_ip_check_notification(fmt, ctx)
+            prio = getattr(config, 'IP_CHECK_CONNECTION_RESTORED_PRIO', 2)
+            enqueue_message_notification(
+                account_number,
+                site_name,
+                msg,
+                priority=prio,
+                queue=notification_queue
+            )
     elif current_state == 'UNKNOWN':
         # First ping ever - log monitoring started or disabled
         if config.IP_CHECK_WATCHDOG <= 1.0:
@@ -107,11 +354,67 @@ def update_watchdog(account_number: str, site_name: str,
         else:
             log.info("Watchdog: Site: %s (Account: %s) - monitoring started, "
                      "interval %s.", site_name, account_number, interval_str)
+
+        fmt = getattr(config, 'IP_CHECK_MONITORING_STARTED', None)
+        if fmt:
+            ctx = {
+                'account': account_number,
+                'site_name': site_name,
+                'current_state': current_state,
+                'new_state': new_state,
+                'last_panel_time': None,
+                'last_panel_ts': None,
+                'last_interval': None,
+                'last_threshold': None,
+                'last_seen': None,
+                'elapsed': None,
+                'new_panel_time': panel_time,
+                'new_panel_ts': unix_ts,
+                'new_interval': interval,
+                'new_threshold': new_threshold,
+            }
+            msg = format_ip_check_notification(fmt, ctx)
+            prio = getattr(config, 'IP_CHECK_MONITORING_STARTED_PRIO', 2)
+            enqueue_message_notification(
+                account_number,
+                site_name,
+                msg,
+                priority=prio,
+                queue=notification_queue
+            )
     else:
         # CONNECTED/DISABLED -> CONNECTED/DISABLED: check if interval changed
-        if previous_interval != interval:
+        if previous_interval is not None and previous_interval != interval:
             log.info("Watchdog: Site: %s (Account: %s) - interval updated to %s.",
                      site_name, account_number, interval_str)
+            fmt = getattr(config, 'IP_CHECK_INTERVAL_CHANGED', None)
+            if fmt:
+                elapsed = (now - prev_last_seen) if prev_last_seen is not None else None
+                ctx = {
+                    'account': account_number,
+                    'site_name': site_name,
+                    'current_state': current_state,
+                    'new_state': new_state,
+                    'last_panel_time': prev_panel_time,
+                    'last_panel_ts': prev_panel_ts,
+                    'last_interval': previous_interval,
+                    'last_threshold': current_threshold,
+                    'last_seen': prev_last_seen,
+                    'elapsed': elapsed,
+                    'new_panel_time': panel_time,
+                    'new_panel_ts': unix_ts,
+                    'new_interval': interval,
+                    'new_threshold': new_threshold,
+                }
+                msg = format_ip_check_notification(fmt, ctx)
+                prio = getattr(config, 'IP_CHECK_INTERVAL_CHANGED_PRIO', 3)
+                enqueue_message_notification(
+                    account_number,
+                    site_name,
+                    msg,
+                    priority=prio,
+                    queue=notification_queue
+                )
 
 async def watchdog_task(notification_queue: Queue):
     """
@@ -136,8 +439,14 @@ async def watchdog_task(notification_queue: Queue):
 
             if elapsed > threshold:
                 # Connection lost!
-                watchdog_state[account_number]['state'] = 'DISCONNECTED'
+                current_state = state['state']
+                new_state = 'DISCONNECTED'
+                watchdog_state[account_number]['state'] = new_state
                 last_panel_time = state['last_panel_time']
+                last_panel_ts = state.get('last_panel_ts')
+                last_seen = state['last_seen']
+                current_threshold = threshold
+
                 account = accounts.get(account_number)
                 site_name = account.site_name if account else account_number
                 policy = account.policy if account else 'yes'
@@ -158,13 +467,33 @@ async def watchdog_task(notification_queue: Queue):
                             "No ping received for %02d:%02d:%02d.",
                             site_name, account_number, e_hours, e_minutes, e_seconds)
 
-                enqueue_message_notification(
-                    account_number,
-                    site_name,
-                    f"Heartbeat lost, last heartbeat received was {last_panel_time}",
-                    priority=config.IP_CHECK_LOST_PRIO,
-                    queue=notification_queue
-                )
+                fmt = getattr(config, 'IP_CHECK_WATCHDOG_TIMEOUT', None)
+                if fmt:
+                    ctx = {
+                        'account': account_number,
+                        'site_name': site_name,
+                        'current_state': current_state,
+                        'new_state': new_state,
+                        'last_panel_time': last_panel_time,
+                        'last_panel_ts': last_panel_ts,
+                        'last_interval': interval,
+                        'last_threshold': current_threshold,
+                        'last_seen': last_seen,
+                        'elapsed': elapsed,
+                        'new_panel_time': None,
+                        'new_panel_ts': None,
+                        'new_interval': None,
+                        'new_threshold': None,
+                    }
+                    msg = format_ip_check_notification(fmt, ctx)
+                    prio = getattr(config, 'IP_CHECK_WATCHDOG_TIMEOUT_PRIO', 4)
+                    enqueue_message_notification(
+                        account_number,
+                        site_name,
+                        msg,
+                        priority=prio,
+                        queue=notification_queue
+                    )
 
 def validate_ip_check_packet(data: bytes) -> Tuple[bool, Optional[int], int]:
     """

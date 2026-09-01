@@ -52,6 +52,31 @@ NOTIFICATION_FIELDS = {
     'ss',
 }
 
+# Allowed placeholder tokens for IP Check notification format strings (%field).
+IP_CHECK_NOTIFICATION_FIELDS = {
+    'account',
+    'site_name',
+    'current_state',
+    'new_state',
+    'last_panel_time',
+    'last_interval',
+    'last_threshold',
+    'last_seen',
+    'elapsed',
+    'new_panel_time',
+    'new_interval',
+    'new_threshold',
+    # Server Date & Time fields (server local time):
+    'YY',
+    'YYYY',
+    'MM',
+    'DD',
+    'hh',
+    'mm',
+    'ss',
+    'time',
+}
+
 # ===================================================================
 # PHASE 1: Logging Configuration
 # ===================================================================
@@ -158,12 +183,22 @@ class AppConfig:
         self.LISTEN_ADDR           = '0.0.0.0'
         self.LISTEN_PORT           = 10000
         self.REJECT_POLICY         = 'respond'
-        self.IP_CHECK_ENABLED      = False
-        self.IP_CHECK_ADDR         = '0.0.0.0'
-        self.IP_CHECK_PORT         = 10001
-        self.IP_CHECK_WATCHDOG     = 2.1
-        self.IP_CHECK_LOST_PRIO    = 4
-        self.IP_CHECK_RESTORE_PRIO = 2
+        self.IP_CHECK_ENABLED               = False
+        self.IP_CHECK_ADDR                  = '0.0.0.0'
+        self.IP_CHECK_PORT                  = 10001
+        self.IP_CHECK_WATCHDOG              = 2.1
+        self.IP_CHECK_MONITORING_STARTED_PRIO = 2
+        self.IP_CHECK_CONNECTION_RESTORED_PRIO = 2
+        self.IP_CHECK_INTERVAL_CHANGED_PRIO = 3
+        self.IP_CHECK_WATCHDOG_TIMEOUT_PRIO = 4
+        self.IP_CHECK_MONITORING_STARTED    = None
+        self.IP_CHECK_CONNECTION_RESTORED   = (
+            "Heartbeat received at %new_panel_time, connection restored"
+        )
+        self.IP_CHECK_INTERVAL_CHANGED      = None
+        self.IP_CHECK_WATCHDOG_TIMEOUT      = (
+            "Heartbeat lost, last heartbeat received was %last_panel_time"
+        )
         self.MAX_QUEUE_SIZE        = 50
         self.MAX_RETRIES           = 10
         self.MAX_RETRY_TIME        = 30
@@ -231,6 +266,80 @@ def _validate_notification_format(template: str, name: str) -> bool:
 
     for field_name in fields:
         if field_name not in NOTIFICATION_FIELDS:
+            log.warning(
+                "Invalid %s: unknown field '%%%s'.",
+                name,
+                field_name
+            )
+            is_valid = False
+
+    return is_valid
+
+
+def _validate_ip_check_format(template: str, name: str) -> bool:
+    """Validate an IP Check notification format string."""
+    is_valid = True
+    bracket_depth = 0
+    brace_depth = 0
+
+    for char in template:
+        if char == '[':
+            bracket_depth += 1
+            if bracket_depth > 1:
+                log.warning(
+                    "Invalid %s: nested optional sections are not supported.",
+                    name
+                )
+                is_valid = False
+                break
+        elif char == ']':
+            bracket_depth -= 1
+            if bracket_depth < 0:
+                log.warning(
+                    "Invalid %s: unexpected ']' in format.",
+                    name
+                )
+                is_valid = False
+                break
+        elif char == '{':
+            brace_depth += 1
+            if brace_depth > 1:
+                log.warning(
+                    "Invalid %s: nested '{' are not supported.",
+                    name
+                )
+                is_valid = False
+                break
+        elif char == '}':
+            brace_depth -= 1
+            if brace_depth < 0:
+                log.warning(
+                    "Invalid %s: unexpected '}' in format.",
+                    name
+                )
+                is_valid = False
+                break
+
+    if bracket_depth != 0:
+        log.warning(
+            "Invalid %s: unmatched '[' or ']'.",
+            name
+        )
+        is_valid = False
+
+    if brace_depth != 0:
+        log.warning(
+            "Invalid %s: unmatched '{' or '}'.",
+            name
+        )
+        is_valid = False
+
+    # Strip {format} specs to get top-level field placeholders
+    cleaned = re.sub(r'\{[^{}]*\}', '', template)
+    fields = re.findall(r'%([a-zA-Z_][a-zA-Z0-9_]*)', cleaned)
+
+    for field_name in fields:
+        if field_name not in IP_CHECK_NOTIFICATION_FIELDS:
             log.warning(
                 "Invalid %s: unknown field '%%%s'.",
                 name,
@@ -333,31 +442,97 @@ def load_application_config(config_file: str = 'sia-server.conf') -> AppConfig:
                 log.warning("Invalid WATCHDOG_THRESHOLD in [IP-Check]. Must be a number. "
                             "Using default %.1f.", app_config.IP_CHECK_WATCHDOG)
 
+            # --- IP Check Event Priorities ---
+            # Monitoring_Started priority (default: 2)
             try:
-                lost_prio = config.getint('IP-Check', 'watchdog_lost_prio',
-                                          fallback=app_config.IP_CHECK_LOST_PRIO)
-                if not 1 <= lost_prio <= 5:
-                    log.warning("Invalid WATCHDOG_LOST_PRIO '%d' in [IP-Check]. "
+                mon_prio = config.getint('IP-Check', 'monitoring_started_prio',
+                                         fallback=app_config.IP_CHECK_MONITORING_STARTED_PRIO)
+                if not 1 <= mon_prio <= 5:
+                    log.warning("Invalid MONITORING_STARTED_PRIO '%d' in [IP-Check]. "
                                 "Must be 1-5. Using default %d.",
-                                lost_prio, app_config.IP_CHECK_LOST_PRIO)
+                                mon_prio, app_config.IP_CHECK_MONITORING_STARTED_PRIO)
                 else:
-                    app_config.IP_CHECK_LOST_PRIO = lost_prio
+                    app_config.IP_CHECK_MONITORING_STARTED_PRIO = mon_prio
             except ValueError:
-                log.warning("Invalid WATCHDOG_LOST_PRIO in [IP-Check]. Must be a number. "
-                            "Using default %d.", app_config.IP_CHECK_LOST_PRIO)
+                log.warning("Invalid MONITORING_STARTED_PRIO in [IP-Check]. Must be a number. "
+                            "Using default %d.", app_config.IP_CHECK_MONITORING_STARTED_PRIO)
 
+            # Connection_Restored priority (default: 2, fallback: watchdog_restore_prio)
             try:
-                restore_prio = config.getint('IP-Check', 'watchdog_restore_prio',
-                                             fallback=app_config.IP_CHECK_RESTORE_PRIO)
+                raw_restore = config.get('IP-Check', 'connection_restored_prio',
+                                         fallback=config.get('IP-Check', 'watchdog_restore_prio',
+                                                             fallback=str(app_config.IP_CHECK_CONNECTION_RESTORED_PRIO)))
+                restore_prio = int(raw_restore)
                 if not 1 <= restore_prio <= 5:
-                    log.warning("Invalid WATCHDOG_RESTORE_PRIO '%d' in [IP-Check]. "
+                    log.warning("Invalid CONNECTION_RESTORED_PRIO '%d' in [IP-Check]. "
                                 "Must be 1-5. Using default %d.",
-                                restore_prio, app_config.IP_CHECK_RESTORE_PRIO)
+                                restore_prio, app_config.IP_CHECK_CONNECTION_RESTORED_PRIO)
                 else:
-                    app_config.IP_CHECK_RESTORE_PRIO = restore_prio
+                    app_config.IP_CHECK_CONNECTION_RESTORED_PRIO = restore_prio
             except ValueError:
-                log.warning("Invalid WATCHDOG_RESTORE_PRIO in [IP-Check]. Must be a number. "
-                            "Using default %d.", app_config.IP_CHECK_RESTORE_PRIO)
+                log.warning("Invalid CONNECTION_RESTORED_PRIO in [IP-Check]. Must be a number. "
+                            "Using default %d.", app_config.IP_CHECK_CONNECTION_RESTORED_PRIO)
+
+            # Interval_Changed priority (default: 3)
+            try:
+                int_prio = config.getint('IP-Check', 'interval_changed_prio',
+                                         fallback=app_config.IP_CHECK_INTERVAL_CHANGED_PRIO)
+                if not 1 <= int_prio <= 5:
+                    log.warning("Invalid INTERVAL_CHANGED_PRIO '%d' in [IP-Check]. "
+                                "Must be 1-5. Using default %d.",
+                                int_prio, app_config.IP_CHECK_INTERVAL_CHANGED_PRIO)
+                else:
+                    app_config.IP_CHECK_INTERVAL_CHANGED_PRIO = int_prio
+            except ValueError:
+                log.warning("Invalid INTERVAL_CHANGED_PRIO in [IP-Check]. Must be a number. "
+                            "Using default %d.", app_config.IP_CHECK_INTERVAL_CHANGED_PRIO)
+
+            # Watchdog_Timeout priority (default: 4, fallback: watchdog_lost_prio)
+            try:
+                raw_lost = config.get('IP-Check', 'watchdog_timeout_prio',
+                                      fallback=config.get('IP-Check', 'watchdog_lost_prio',
+                                                          fallback=str(app_config.IP_CHECK_WATCHDOG_TIMEOUT_PRIO)))
+                lost_prio = int(raw_lost)
+                if not 1 <= lost_prio <= 5:
+                    log.warning("Invalid WATCHDOG_TIMEOUT_PRIO '%d' in [IP-Check]. "
+                                "Must be 1-5. Using default %d.",
+                                lost_prio, app_config.IP_CHECK_WATCHDOG_TIMEOUT_PRIO)
+                else:
+                    app_config.IP_CHECK_WATCHDOG_TIMEOUT_PRIO = lost_prio
+            except ValueError:
+                log.warning("Invalid WATCHDOG_TIMEOUT_PRIO in [IP-Check]. Must be a number. "
+                            "Using default %d.", app_config.IP_CHECK_WATCHDOG_TIMEOUT_PRIO)
+
+            # --- IP Check Notification Formats ---
+            fmt_started = config.get('IP-Check', 'monitoring_started', fallback=None)
+            if fmt_started is not None and fmt_started.strip():
+                if _validate_ip_check_format(fmt_started, 'MONITORING_STARTED'):
+                    app_config.IP_CHECK_MONITORING_STARTED = fmt_started
+                else:
+                    log.warning("Invalid MONITORING_STARTED in [IP-Check]. Notifications disabled for this event.")
+                    app_config.IP_CHECK_MONITORING_STARTED = None
+
+            fmt_restored = config.get('IP-Check', 'connection_restored', fallback=None)
+            if fmt_restored is not None and fmt_restored.strip():
+                if _validate_ip_check_format(fmt_restored, 'CONNECTION_RESTORED'):
+                    app_config.IP_CHECK_CONNECTION_RESTORED = fmt_restored
+                else:
+                    log.warning("Invalid CONNECTION_RESTORED in [IP-Check]. Using default format.")
+
+            fmt_interval = config.get('IP-Check', 'interval_changed', fallback=None)
+            if fmt_interval is not None and fmt_interval.strip():
+                if _validate_ip_check_format(fmt_interval, 'INTERVAL_CHANGED'):
+                    app_config.IP_CHECK_INTERVAL_CHANGED = fmt_interval
+                else:
+                    log.warning("Invalid INTERVAL_CHANGED in [IP-Check]. Notifications disabled for this event.")
+                    app_config.IP_CHECK_INTERVAL_CHANGED = None
+
+            fmt_timeout = config.get('IP-Check', 'watchdog_timeout', fallback=None)
+            if fmt_timeout is not None and fmt_timeout.strip():
+                if _validate_ip_check_format(fmt_timeout, 'WATCHDOG_TIMEOUT'):
+                    app_config.IP_CHECK_WATCHDOG_TIMEOUT = fmt_timeout
+                else:
+                    log.warning("Invalid WATCHDOG_TIMEOUT in [IP-Check]. Using default format.")
 
     # --- Check for port conflicts ---
     if app_config.SIA_SERVER_ENABLED and app_config.IP_CHECK_ENABLED and \
