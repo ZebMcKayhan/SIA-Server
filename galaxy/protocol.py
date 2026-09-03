@@ -28,7 +28,7 @@ INCOMPLETE_BLOCK_TIMEOUT = 0.5   # seconds
 
 # Time to wait for the next command from the panel
 # (between complete blocks within a session)
-INTER_COMMAND_TIMEOUT = 5.0      # seconds
+INTER_COMMAND_TIMEOUT = 20.0      # seconds
 
 # Time to wait for the panel to close the TCP connection after an IP Check
 # echo has been sent. The panel normally closes after ~15 s; 30 s gives
