@@ -1,7 +1,7 @@
 # Honeywell Galaxy SIA Notification Server
 
 SIA-Server is a lightweight, self-hosted Python service that receives SIA protocol messages from 
-Honeywell Galaxy Flex alarm systems and forwards them as prioritized push notifications to your 
+Honeywell Galaxy alarm systems and forwards them as prioritized push notifications to your 
 phone or computer.
 
 It was created as a replacement for the discontinued free Honeywell push notification service, 
@@ -14,10 +14,11 @@ and you're done. No account, no registration, no subscription required. Addition
 integrations. A plugin system also allows adding your own providers — see
 [providers/README.md](providers/README.md) for details.
 
-This project was developed and tested on a Honeywell Galaxy Flex 20. It is likely compatible with 
-other Honeywell Galaxy panels, but this has not been verified.
+The project was originally developed and tested on a Honeywell Galaxy Flex 20. It has since also
+been verified with a Honeywell Galaxy Dimension 48 running firmware 6.93. Other Honeywell Galaxy
+models may be compatible, but have not been verified.
 
-If your Galaxy Flex notifications suddenly stopped working, or you are looking for a simple 
+If your Galaxy notifications suddenly stopped working, or you are looking for a simple 
 self-hosted alternative without installing a full home automation ecosystem, this project is for you.
 
 > **IMPORTANT SECURITY NOTICE**
