@@ -1,22 +1,32 @@
 ## Galaxy SIA Protocol Specification
 
-This project interacts with a proprietary, TCP-based SIA protocol variant used by Honeywell Galaxy Flex alarm systems. The protocol was reverse-engineered from captured network traffic.
+This project interacts with a proprietary, TCP-based SIA protocol variant used by Honeywell Galaxy alarm systems, including Galaxy Flex and Galaxy Dimension panels. The protocol was reverse-engineered from captured network traffic.
 
 ### High-Level Overview
 
-The protocol is a stateful, sequential exchange over a single TCP connection. An "event" is not a single message, but a sequence of message "blocks". During an alarm state, the panel may send multiple complete event sequences over a single TCP connection.
+The protocol is a stateful, sequential exchange over a TCP connection. An "event" is not a single message, but a sequence of message "blocks".
 
-The flow for a single event sequence is:
-1.  Client (Alarm Panel) sends **Block 1 (ACCOUNT_ID)**.
-2.  Server sends an **ACK**.
-3.  Client sends **Block 2 (NEW_EVENT)**.
-4.  Server sends an **ACK**.
-5.  Client sends **Block 3 (ASCII)** (This is optional and may be omitted).
-6.  Server sends an **ACK**.
-7.  (This repeats for any subsequent events in the same connection).
-8.  Client sends a **END_OF_DATA** message.
-9.  Server sends a final **ACK**.
-10. The connection is closed.
+A connection may contain multiple complete event sequences. The panel sends each block and waits for an acknowledgement from the server before continuing.
+
+A typical event sequence is:
+
+1. Client (Alarm Panel) sends **Block 1 (ACCOUNT_ID)**.
+2. Server sends an **ACK**.
+3. Client sends **Block 2 (NEW_EVENT)**.
+4. Server sends an **ACK**.
+5. Client optionally sends **Block 3 (ASCII)**.
+6. Server sends an **ACK**.
+7. Additional event sequences may follow on the same TCP connection.
+8. The transmission is terminated in one of two ways:
+   - The client sends **END_OF_DATA**, followed by a final **ACK** from the server.
+   - The client cleanly closes the TCP connection without sending **END_OF_DATA**.
+
+The latter behaviour has been observed with Galaxy Dimension panels. In this case, the TCP connection close acts as the end of the transmission.
+
+A panel may pause for several seconds after the last event before
+terminating the transmission. 
+
+The server collects all complete event sequences received on the connection and processes them when the transmission ends, either by **END_OF_DATA** or by a clean connection close.
 
 ### Message Block Framing
 
@@ -45,13 +55,14 @@ The `Command Byte` (the second byte of every block) determines the message's mea
 | `0x4E` | `N`   | `NEW_EVENT`       | Client | Contains the core event data (time, codes, zones, etc.).|
 | `0x4F` | `O`   | `OLD_EVENT`       | Client | Same as NEW_EVENT but for previously confirmed events.  |
 | `0x41` | `A`   | `ASCII`           | Client | Contains a human-readable description of the event.     |
-| `0x30` | `0`   | `END_OF_DATA`     | Client | Signals the end of all transmissions for the connection.|
+| `0x30` | `0`   | `END_OF_DATA`     | Client | Signals the end of the transmission for the connection.|
 | `0x38` | `8`   | `ACKNOWLEDGE`     | Server | Sent by the server to confirm a block was received OK.  |
 | `0x39` | `9`   | `REJECT`          | Server | Sent by the server to indicate a block was invalid.     |
 
 ### Payload Structures
 
 #### ACCOUNT_ID (`#`) Payload
+
 -   The payload is simply the account number.
 -   *Example Payload:* `b'012345'`
 
@@ -74,8 +85,8 @@ This is the most information-rich block, containing the core details of the alar
 | :--------- | :----------------------- | :---------------------- |
 | `ti`       | **Time**                 | `ti11:45`               |
 | `ri`       | **Group/Area ID**        | `ri01`                  |
-| `id`       | **User ID**              | `id001`                 |
-| `pi`       | **Peripheral ID**        | `pi010`                 |
+| `id`       | **User ID**              | `id001`                  |
+| `pi`       | **Peripheral ID**        | `pi010`                  |
 | `va`       | **Value** (for tests)    | `va1440`                |
 
 **Event Code Section:**
@@ -118,7 +129,6 @@ The content of this payload is what is used to generate the final notification m
 -   **Original Raw Block:** `b'eA AUTO TEST...Modul\x9a'`
 -   **Clean Payload Sent to Parser:** `b' AUTO TEST...Modul'`
 -   **Final Decoded Text:** `"AUTO TEST...Modul"`
-
 ### Character Encoding
 
 The panel uses the **IBM Code Page 437 (CP437)** character encoding for text in the ASCII block. This is the original IBM PC character set, which includes support for accented characters used in many European languages.
