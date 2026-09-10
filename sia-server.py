@@ -8,7 +8,7 @@ Honeywell Galaxy Flex alarm systems. It sends notifications via ntfy.sh.
 This server is configured via 'sia-server.conf' and 'configuration.py'.
 """
 # --- Application Version ---
-__version__ = "2.7.0"  #
+__version__ = "2.8.0-beta1"  #
 
 import argparse
 import asyncio
@@ -151,6 +151,7 @@ VALID_COMMANDS = set(COMMANDS.keys())
 _serve_task = None   # Current serve task, cancelled to trigger shutdown
 _event_loop = None   # The running event loop; used by signal handlers to call_soon_threadsafe
 _dispatcher = None   # Reference to NotificationDispatcher for SIGHUP reload
+_sia_last_ping_ip = None  # Last PING source IP seen on SIA port (for log deduplication)
 
 # --- END INITIALIZATION ---
 
@@ -177,6 +178,49 @@ async def policy_reject(writer, crypto=None):
         await build_and_send(writer, 'REJECT', crypto=crypto)
     log.debug("Connection rejected (policy: %s)", config.REJECT_POLICY)
     
+
+async def _handle_sia_ping(writer, addr):
+    """
+    Handle a PING healthcheck command received on the SIA Event Server port.
+
+    Response policy:
+      REJECT_POLICY = respond  -> send PONG to any source IP.
+      REJECT_POLICY = drop     -> send PONG only to 127.0.0.1; ignore all others.
+
+    Logging:
+      First PING from a source IP  -> INFO (policy satisfied / rejected).
+      Subsequent PINGs from same IP -> DEBUG only.
+      If a new source IP is seen, the remembered IP is replaced and a new INFO
+      entry is emitted.
+    """
+    global _sia_last_ping_ip
+    source_ip = addr[0]
+
+    if config.REJECT_POLICY == 'respond':
+        allowed = True
+    else:  # 'drop'
+        allowed = (source_ip == '127.0.0.1')
+
+    if source_ip != _sia_last_ping_ip:
+        _sia_last_ping_ip = source_ip
+        if allowed:
+            log.info(
+                "PING Received from IP %s, policy satisfied. "
+                "Consecutive PINGs from this IP will not be logged.", source_ip
+            )
+        else:
+            log.info(
+                "PING Received from IP %s, policy rejected. "
+                "Consecutive PINGs from this IP will not be logged.", source_ip
+            )
+    else:
+        log.debug("PING from %s (duplicate suppressed).", source_ip)
+
+    if allowed:
+        writer.write(b"PONG")
+        await writer.drain()
+        log.debug("PONG sent to %s.", source_ip)
+
 
 async def handle_connection(notification_queue: Queue, reader, writer):
     """Handle an incoming SIA connection."""
@@ -210,7 +254,20 @@ async def handle_connection(notification_queue: Queue, reader, writer):
             if len(buffer) < 2:
                 log.debug("Only 1 byte in buffer from %r, waiting for more.", addr)
                 continue
-            
+
+            # --- PING healthcheck detection ---
+            # Must be an EXACT match of the 4 bytes b"PING" — no prefix, suffix, or framing.
+            # Anything other than exactly b"PING" falls through to normal SIA processing.
+            _buf = bytes(buffer)
+            if _buf == b"PING":
+                await _handle_sia_ping(writer, addr)
+                return
+            # If we have 2-3 bytes that are a valid prefix of "PING", wait for the rest.
+            # This handles TCP chunk delivery without prematurely rejecting the connection.
+            if len(_buf) <= 3 and _buf == b"PING"[:len(_buf)]:
+                log.debug("Partial PING prefix from %r, waiting for more data.", addr)
+                continue
+
             # --- encryption detection ---
             if crypto is None and buffer.startswith(START_ENC_HEADER):
                 if len(buffer) < 5:

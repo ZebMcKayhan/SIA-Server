@@ -51,6 +51,8 @@ def init(cfg, accts):
     config = cfg
     accounts = accts
 
+_ip_check_last_ping_ip = None  # Last PING source IP seen on IP-Check port (for log deduplication)
+
 # Watchdog state per account
 # { account: { 'state': 'UNKNOWN'|'CONNECTED'|'DISCONNECTED'|'DISABLED',
 #              'last_seen': float,      # server time (time.time())
@@ -526,6 +528,50 @@ def extract_account(data: bytes) -> str:
     """Extract account number from IP Check packet bytes 1-8."""
     return data[1:9].decode('ascii', errors='ignore').lstrip('0') or '0'
 
+
+async def _handle_ip_check_ping(writer, addr):
+    """
+    Handle a PING healthcheck command received on the IP-Check port.
+
+    Response policy:
+      REJECT_POLICY = respond  -> send PONG to any source IP.
+      REJECT_POLICY = drop     -> send PONG only to 127.0.0.1; ignore all others.
+
+    Logging:
+      First PING from a source IP   -> INFO (policy satisfied / rejected).
+      Subsequent PINGs from same IP -> DEBUG only.
+      If a new source IP is seen, the remembered IP is replaced and a new INFO
+      entry is emitted.
+    """
+    global _ip_check_last_ping_ip
+    source_ip = addr[0]
+
+    if config.REJECT_POLICY == 'respond':
+        allowed = True
+    else:  # 'drop'
+        allowed = (source_ip == '127.0.0.1')
+
+    if source_ip != _ip_check_last_ping_ip:
+        _ip_check_last_ping_ip = source_ip
+        if allowed:
+            log.info(
+                "PING Received from IP %s, policy satisfied. "
+                "Consecutive PINGs from this IP will not be logged.", source_ip
+            )
+        else:
+            log.info(
+                "PING Received from IP %s, policy rejected. "
+                "Consecutive PINGs from this IP will not be logged.", source_ip
+            )
+    else:
+        log.debug("PING from %s (duplicate suppressed).", source_ip)
+
+    if allowed:
+        writer.write(b"PONG")
+        await writer.drain()
+        log.debug("PONG sent to %s.", source_ip)
+
+
 async def handle_ip_check(reader, writer, notification_queue: Queue):
     """Handles an incoming IP Check connection by echoing the received data."""
     addr = writer.get_extra_info('peername')
@@ -554,6 +600,19 @@ async def handle_ip_check(reader, writer, notification_queue: Queue):
             # We need at least 2 bytes to detect anything meaningful
             if len(buffer) < 2:
                 log.debug("Only 1 byte in buffer from %r, waiting for more.", addr)
+                continue
+
+            # --- PING healthcheck detection ---
+            # Must be an EXACT match of the 4 bytes b"PING" — no prefix, suffix, or framing.
+            # Anything other than exactly b"PING" falls through to normal IP-Check processing.
+            _buf = bytes(buffer)
+            if _buf == b"PING":
+                await _handle_ip_check_ping(writer, addr)
+                return
+            # If we have 2-3 bytes that are a valid prefix of "PING", wait for the rest.
+            # This handles TCP chunk delivery without prematurely dropping the connection.
+            if len(_buf) <= 3 and _buf == b"PING"[:len(_buf)]:
+                log.debug("Partial PING prefix from %r, waiting for more data.", addr)
                 continue
 
             # --- Encryption detection ---

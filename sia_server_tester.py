@@ -136,6 +136,15 @@ Example using raw hex segments:
       --segment 564e746932333a34322f69643032332f70693031332f4347fb \\
       --segment 4e41205041525420534554205553455294 \\
       --segment 40308f
+
+PING healthcheck (both SIA and IP-Check ports active):
+    python sia_server_tester.py --ping 10000 10001
+
+PING healthcheck (only SIA Event server active, IP-Check port set to 0):
+    python sia_server_tester.py --ping 10000 0
+
+PING healthcheck, quiet mode (suitable for Docker HEALTHCHECK):
+    python sia_server_tester.py --ping 10000 10001 --quiet
 """
 
 from __future__ import annotations
@@ -300,6 +309,37 @@ def send_ip_check(host: str, port: int, packet: bytes,
                 print(f'  → No response within {timeout}s.')
 
 
+def ping_port(host: str, port: int, timeout: float, quiet: bool = False) -> bool:
+    """
+    Send a PING healthcheck command to host:port and return True if PONG is received.
+
+    Sends exactly the 4 bytes b"PING" (no framing, no newline).
+    Returns True only when b"PONG" is present in the response.
+    Returns False on timeout, connection error, or any other non-PONG reply.
+    """
+    try:
+        with socket.create_connection((host, port), timeout=timeout) as sock:
+            sock.sendall(b"PING")
+            sock.settimeout(timeout)
+            response = sock.recv(1024)
+            if response and b"PONG" in response:
+                if not quiet:
+                    print(f'  [{port}] PONG received \u2713')
+                return True
+            else:
+                if not quiet:
+                    print(f'  [{port}] No PONG received (response: {response!r})')
+                return False
+    except socket.timeout:
+        if not quiet:
+            print(f'  [{port}] Timeout waiting for PONG')
+        return False
+    except Exception as exc:
+        if not quiet:
+            print(f'  [{port}] Error: {exc}')
+        return False
+
+
 def build_sample_message(account_id: str, event_payload: str,
                          event_command: str = 'NEW_EVENT',
                          ascii_text: str | None = None) -> List[bytes]:
@@ -338,10 +378,42 @@ def main(argv: List[str] | None = None) -> int:
                         help='Send the built-in sample message sequence.')
     parser.add_argument('--segment', action='append', default=[],
                         help='Raw hex segment to send. Can be repeated.')
+    parser.add_argument('--ping', type=int, nargs='+', metavar='PORT',
+                        help='Healthcheck: send PING to one or more ports. '
+                             'Port 0 is treated as inactive and skipped. '
+                             'Cannot be combined with other message-mode arguments.')
     parser.add_argument('--quiet', action='store_true',
                         help='Suppress debug output.')
 
     args = parser.parse_args(argv)
+
+    # --- PING healthcheck mode ---
+    if args.ping is not None:
+        if (args.ip_check or args.send_sample or args.segment
+                or args.account_id or args.new_event or args.old_event
+                or args.ascii_text):
+            parser.error('--ping may not be combined with other message-mode arguments.')
+
+        active_ports = [p for p in args.ping if p != 0]
+
+        if not active_ports:
+            # All supplied ports are 0 — nothing to test, declare success.
+            return 0
+
+        if not args.quiet:
+            print('SIA Server Tester - PING Healthcheck mode')
+            print('------------------------------------------')
+            print(f'Host:    {args.host}')
+            print(f'Ports:   {active_ports}')
+            print(f'Timeout: {args.timeout}s')
+
+        all_ok = True
+        for port in active_ports:
+            ok = ping_port(args.host, port, args.timeout, quiet=args.quiet)
+            if not ok:
+                all_ok = False
+
+        return 0 if all_ok else 1
 
     # --- IP Check mode ---
     if args.ip_check:
