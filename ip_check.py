@@ -605,15 +605,16 @@ async def handle_ip_check(reader, writer, notification_queue: Queue):
             # --- PING healthcheck detection ---
             # Must be an EXACT match of the 4 bytes b"PING" — no prefix, suffix, or framing.
             # Anything other than exactly b"PING" falls through to normal IP-Check processing.
-            _buf = bytes(buffer)
-            if _buf == b"PING":
-                await _handle_ip_check_ping(writer, addr)
-                return
-            # If we have 2-3 bytes that are a valid prefix of "PING", wait for the rest.
-            # This handles TCP chunk delivery without prematurely dropping the connection.
-            if len(_buf) <= 3 and _buf == b"PING"[:len(_buf)]:
-                log.debug("Partial PING prefix from %r, waiting for more data.", addr)
-                continue
+            if crypto is None:
+                _buf = bytes(buffer)
+                if _buf == b"PING":
+                    await _handle_ip_check_ping(writer, addr)
+                    return
+                # If we have 2-3 bytes that are a valid prefix of "PING", wait for the rest.
+                # This handles TCP chunk delivery without prematurely dropping the connection.
+                if len(_buf) <= 3 and _buf == b"PING"[:len(_buf)]:
+                    log.debug("Partial PING prefix from %r, waiting for more data.", addr)
+                    continue
 
             # --- Encryption detection ---
             if crypto is None and buffer.startswith(START_ENC_HEADER):
