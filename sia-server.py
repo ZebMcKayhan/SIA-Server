@@ -8,7 +8,7 @@ Honeywell Galaxy Flex alarm systems. It sends notifications via ntfy.sh.
 This server is configured via 'sia-server.conf' and 'configuration.py'.
 """
 # --- Application Version ---
-__version__ = "2.8.0-beta1"  #
+__version__ = "2.8.0-beta2"  #
 
 import argparse
 import asyncio
@@ -258,15 +258,16 @@ async def handle_connection(notification_queue: Queue, reader, writer):
             # --- PING healthcheck detection ---
             # Must be an EXACT match of the 4 bytes b"PING" — no prefix, suffix, or framing.
             # Anything other than exactly b"PING" falls through to normal SIA processing.
-            _buf = bytes(buffer)
-            if _buf == b"PING":
-                await _handle_sia_ping(writer, addr)
-                return
-            # If we have 2-3 bytes that are a valid prefix of "PING", wait for the rest.
-            # This handles TCP chunk delivery without prematurely rejecting the connection.
-            if len(_buf) <= 3 and _buf == b"PING"[:len(_buf)]:
-                log.debug("Partial PING prefix from %r, waiting for more data.", addr)
-                continue
+            if not account_validated and crypto is None:
+                _buf = bytes(buffer)
+                if _buf == b"PING":
+                    await _handle_sia_ping(writer, addr)
+                    return
+                # If we have 2-3 bytes that are a valid prefix of "PING", wait for the rest.
+                # This handles TCP chunk delivery without prematurely rejecting the connection.
+                if len(_buf) <= 3 and _buf == b"PING"[:len(_buf)]:
+                    log.debug("Partial PING prefix from %r, waiting for more data.", addr)
+                    continue
 
             # --- encryption detection ---
             if crypto is None and buffer.startswith(START_ENC_HEADER):
