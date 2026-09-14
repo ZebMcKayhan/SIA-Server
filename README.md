@@ -541,7 +541,7 @@ The tester sends `PING` to each specified port and verifies the response. It exi
 
 Port numbers set to `0` are skipped, allowing individual checks to be disabled.
 
-For Docker deployments, this functionality is available as an optional Docker health check. See [Using Docker](using-docker).
+For Docker deployments, this functionality is available as an optional Docker health check. See [Using Docker](#using-docker).
 
 ## Security & privacy guidelines
 
