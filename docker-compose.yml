@@ -4,6 +4,8 @@ services:
     image: sia-server:latest
     container_name: sia-server
     environment:
+      - HEALTHCHECK_PORT1=10000 # used for healthcheck if enabled
+      - HEALTHCHECK_PORT2=10001 # optional, set to 0 if not used
       - TZ=Europe/London 
     ports:
       - "10000:10000"
@@ -12,3 +14,10 @@ services:
     volumes:
       - ./sia-server.conf:/config/sia-server.conf:ro
       - ./logs:/logs 
+#      == healthcheck - uncomment if you want it used ==
+#    healthcheck:
+#      test: ["CMD-SHELL", "python3 -u sia_server_tester.py --ping $${HEALTHCHECK_PORT1:-0} $${HEALTHCHECK_PORT2:-0} --quiet"]
+#      interval: 60s
+#      timeout: 5s
+#      retries: 3
+#      start_period: 10s

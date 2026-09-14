@@ -486,12 +486,62 @@ LOG_FILE = /logs/sia-server.log
 The log file will appear as `./logs/sia-server.log` on the host machine.
 The `./logs` directory will be created automatically by Docker if it does not exist.
 
-#### Timezone
+#### Timezone & Health Check
 By default the container runs in UTC. Set your local timezone in `docker-compose.yml`:
 ```yaml
 environment:
   - TZ=Europe/London    # Change to your local timezone
 ```
+An optional application-level health check can be enabled to verify that the SIA Event Server and IP-Check module are alive and responsive.
+
+To use the Docker health check, set the ports you want to test in the environment variables:
+```yaml
+environment:
+  - HEALTHCHECK_PORT1=10000 # Port to test
+  - HEALTHCHECK_PORT2=10001 # Optional, set to 0 if not used
+```
+Then uncomment the `healthcheck` section in `docker-compose.yml`:
+```yaml
+healthcheck:
+  test: ["CMD-SHELL", "python3 -u sia_server_tester.py --ping $${HEALTHCHECK_PORT1:-0} $${HEALTHCHECK_PORT2:-0} --quiet"]
+  interval: 60s
+  timeout: 5s
+  retries: 3
+  start_period: 10s
+```
+Docker will then report the container as healthy or unhealthy based on the health check result. Docker does not automatically restart or otherwise act on an unhealthy container unless additional configuration is used.
+
+
+## Health Check
+
+SIA-Server provides an application-level health check for both the SIA Event Server and the IP-Check module. It can be used by monitoring applications to verify that the services are alive and responsive.
+
+The health check uses a simple TCP `PING`/`PONG` exchange. Send the ASCII text `PING` to the listening port and the server will respond with the ASCII text `PONG`.
+
+`PING` must be an exact match. Additional characters are not accepted, so for example `PING\n` will not trigger a response.
+
+### Access Control
+
+Health check requests are subject to the configured `REJECT_POLICY`.
+
+When `REJECT_POLICY = drop`, `PING` is only answered when the connection originates from localhost (`127.0.0.1`). With other `REJECT_POLICY` settings, `PING` is answered regardless of the source address.
+
+This allows the health check to be used safely by local monitoring and container health checks without creating an unrestricted response mechanism when rejected connections are configured to be silently dropped.
+
+### Monitoring Applications
+
+The health check can be used with monitoring applications such as Uptime Kuma, Zabbix, Nagios, or Icinga to monitor the SIA Event Server and IP-Check module and trigger alerts or other actions when they become unavailable.
+
+The `sia_server_tester.py` utility includes support for performing these checks:
+
+```bash
+python3 sia_server_tester.py --ping port1 [port2 ...]
+```
+The tester sends `PING` to each specified port and verifies the response. It exits with status code `0` when all specified ports respond successfully, and status code `1` if any check fails.
+
+Port numbers set to `0` are skipped, allowing individual checks to be disabled.
+
+For Docker deployments, this functionality is available as an optional Docker health check. See [Using Docker](#using-docker).
 
 ## Security & privacy guidelines
 
