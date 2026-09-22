@@ -199,6 +199,10 @@ class AppConfig:
         self.IP_CHECK_WATCHDOG_TIMEOUT      = (
             "Heartbeat lost, last heartbeat received was %last_panel_time"
         )
+        self.EVENT_HEARTBEAT_WATCHDOG       = False
+        self.EVENT_HEARTBEAT_EVENTTYPE      = 'Old'
+        self.EVENT_HEARTBEAT_EVENTCODE      = 'RX'
+        self.EVENT_HEARTBEAT_TEXT           = '[HEARTBT.]'
         self.MAX_QUEUE_SIZE        = 50
         self.MAX_RETRIES           = 10
         self.MAX_RETRY_TIME        = 30
@@ -348,7 +352,55 @@ def _validate_ip_check_format(template: str, name: str) -> bool:
             is_valid = False
 
     return is_valid
-  
+
+
+def _get_watchdog_raw(config: configparser.ConfigParser, key: str) -> Optional[str]:
+    """Retrieve raw value from [WATCHDOG] (case-insensitive section match)."""
+    for sec in config.sections():
+        if sec.lower() == 'watchdog':
+            if config.has_option(sec, key):
+                return config.get(sec, key)
+    return None
+
+
+def _get_ip_check_raw(config: configparser.ConfigParser, key: str) -> Optional[str]:
+    """Retrieve raw value from [IP-Check] (case-insensitive section match)."""
+    for sec in config.sections():
+        if sec.lower() == 'ip-check':
+            if config.has_option(sec, key):
+                return config.get(sec, key)
+    return None
+
+
+def _get_watchdog_setting(
+    config: configparser.ConfigParser,
+    key: str,
+    legacy_ip_check_key: Optional[str] = None,
+    fallback: Optional[str] = None,
+) -> Optional[str]:
+    """
+    Retrieve a watchdog setting using strict 4-level precedence:
+      1. Correct key under [WATCHDOG]
+      2. Correct key under [IP-Check]
+      3. Alternate/legacy key under [IP-Check] if such exists today
+      4. Fallback default
+    """
+    val = _get_watchdog_raw(config, key)
+    if val is not None:
+        return val
+
+    val = _get_ip_check_raw(config, key)
+    if val is not None:
+        return val
+
+    if legacy_ip_check_key:
+        val = _get_ip_check_raw(config, legacy_ip_check_key)
+        if val is not None:
+            return val
+
+    return fallback
+
+
 def load_application_config(config_file: str = 'sia-server.conf') -> AppConfig:
     """
     Phase 2: Reads and validates server/infrastructure configuration.
@@ -411,6 +463,37 @@ def load_application_config(config_file: str = 'sia-server.conf') -> AppConfig:
     else:
         log.info("Reject Policy: RESPOND - Invalid connections will receive a SIA REJECT.")
 
+    # --- Parse Dimension Heartbeat Watchdog Settings ---
+    if config.has_section('SIA-Server'):
+        hb_watchdog = config.get('SIA-Server', 'event_heartbeat_watchdog', fallback='no').lower()
+        if hb_watchdog in ('yes', 'true'):
+            app_config.EVENT_HEARTBEAT_WATCHDOG = True
+        elif hb_watchdog in ('no', 'false'):
+            app_config.EVENT_HEARTBEAT_WATCHDOG = False
+        else:
+            log.warning("Invalid EVENT_HEARTBEAT_WATCHDOG '%s' in [SIA-Server]. "
+                        "Must be 'yes' or 'no'. Using default 'no'.", hb_watchdog)
+            app_config.EVENT_HEARTBEAT_WATCHDOG = False
+
+        hb_type = config.get('SIA-Server', 'event_heartbeat_eventtype', fallback='Old')
+        if hb_type.lower() in ('old', 'new'):
+            app_config.EVENT_HEARTBEAT_EVENTTYPE = hb_type.capitalize()
+        else:
+            log.warning("Invalid EVENT_HEARTBEAT_EVENTTYPE '%s' in [SIA-Server]. "
+                        "Must be 'Old' or 'New'. Using default 'Old'.", hb_type)
+            app_config.EVENT_HEARTBEAT_EVENTTYPE = 'Old'
+
+        hb_code = config.get('SIA-Server', 'event_heartbeat_eventcode', fallback='RX').upper()
+        if len(hb_code) != 2:
+            log.warning("Invalid EVENT_HEARTBEAT_EVENTCODE '%s' in [SIA-Server]. "
+                        "Must be exactly 2 characters. Using default 'RX'.", hb_code)
+            hb_code = 'RX'
+        app_config.EVENT_HEARTBEAT_EVENTCODE = hb_code
+
+        app_config.EVENT_HEARTBEAT_TEXT = config.get(
+            'SIA-Server', 'event_heartbeat_text', fallback='[HEARTBT.]'
+        )
+
     # --- Validate and load [IP-Check] section ---
     if config.has_section('IP-Check'):
         if config.getboolean('IP-Check', 'enabled', fallback=False):
@@ -426,113 +509,118 @@ def load_application_config(config_file: str = 'sia-server.conf') -> AppConfig:
                 log.critical("Configuration Error in [IP-Check]: listen_port must be a number.")
                 is_valid = False
 
-            try:
-                threshold = config.getfloat('IP-Check', 'watchdog_threshold',
-                                            fallback=app_config.IP_CHECK_WATCHDOG)
-                if threshold <= 1.0:
-                    log.info("Watchdog is DISABLED (watchdog_threshold = %.1f).", threshold)
-                    app_config.IP_CHECK_WATCHDOG = threshold
-                elif threshold > 10.0:
-                    log.warning("Invalid WATCHDOG_THRESHOLD '%.1f' in [IP-Check]. "
-                                "Must be 1.1 - 10.0 or <= 1.0 to disable. Using default %.1f.",
-                                threshold, app_config.IP_CHECK_WATCHDOG)
-                else:
-                    app_config.IP_CHECK_WATCHDOG = threshold
-            except ValueError:
-                log.warning("Invalid WATCHDOG_THRESHOLD in [IP-Check]. Must be a number. "
-                            "Using default %.1f.", app_config.IP_CHECK_WATCHDOG)
+    # --- Validate and load Watchdog configuration ---
+    # Threshold
+    raw_thresh = _get_watchdog_setting(config, 'watchdog_threshold')
+    if raw_thresh is not None:
+        try:
+            threshold = float(raw_thresh)
+            if threshold <= 1.0:
+                log.info("Watchdog is DISABLED (watchdog_threshold = %.1f).", threshold)
+                app_config.IP_CHECK_WATCHDOG = threshold
+            elif threshold > 10.0:
+                log.warning("Invalid WATCHDOG_THRESHOLD '%.1f'. "
+                            "Must be 1.1 - 10.0 or <= 1.0 to disable. Using default %.1f.",
+                            threshold, app_config.IP_CHECK_WATCHDOG)
+            else:
+                app_config.IP_CHECK_WATCHDOG = threshold
+        except ValueError:
+            log.warning("Invalid WATCHDOG_THRESHOLD. Must be a number. "
+                        "Using default %.1f.", app_config.IP_CHECK_WATCHDOG)
 
-            # --- IP Check Event Priorities ---
-            # Monitoring_Started priority (default: 2)
-            try:
-                mon_prio = config.getint('IP-Check', 'monitoring_started_prio',
-                                         fallback=app_config.IP_CHECK_MONITORING_STARTED_PRIO)
-                if not 1 <= mon_prio <= 5:
-                    log.warning("Invalid MONITORING_STARTED_PRIO '%d' in [IP-Check]. "
-                                "Must be 1-5. Using default %d.",
-                                mon_prio, app_config.IP_CHECK_MONITORING_STARTED_PRIO)
-                else:
-                    app_config.IP_CHECK_MONITORING_STARTED_PRIO = mon_prio
-            except ValueError:
-                log.warning("Invalid MONITORING_STARTED_PRIO in [IP-Check]. Must be a number. "
-                            "Using default %d.", app_config.IP_CHECK_MONITORING_STARTED_PRIO)
+    # Monitoring_Started priority (default: 2)
+    raw_mon = _get_watchdog_setting(config, 'monitoring_started_prio')
+    if raw_mon is not None:
+        try:
+            mon_prio = int(raw_mon)
+            if not 1 <= mon_prio <= 5:
+                log.warning("Invalid MONITORING_STARTED_PRIO '%d'. "
+                            "Must be 1-5. Using default %d.",
+                            mon_prio, app_config.IP_CHECK_MONITORING_STARTED_PRIO)
+            else:
+                app_config.IP_CHECK_MONITORING_STARTED_PRIO = mon_prio
+        except ValueError:
+            log.warning("Invalid MONITORING_STARTED_PRIO. Must be a number. "
+                        "Using default %d.", app_config.IP_CHECK_MONITORING_STARTED_PRIO)
 
-            # Connection_Restored priority (default: 2, fallback: watchdog_restore_prio)
-            try:
-                raw_restore = config.get('IP-Check', 'connection_restored_prio',
-                                         fallback=config.get('IP-Check', 'watchdog_restore_prio',
-                                                             fallback=str(app_config.IP_CHECK_CONNECTION_RESTORED_PRIO)))
-                restore_prio = int(raw_restore)
-                if not 1 <= restore_prio <= 5:
-                    log.warning("Invalid CONNECTION_RESTORED_PRIO '%d' in [IP-Check]. "
-                                "Must be 1-5. Using default %d.",
-                                restore_prio, app_config.IP_CHECK_CONNECTION_RESTORED_PRIO)
-                else:
-                    app_config.IP_CHECK_CONNECTION_RESTORED_PRIO = restore_prio
-            except ValueError:
-                log.warning("Invalid CONNECTION_RESTORED_PRIO in [IP-Check]. Must be a number. "
-                            "Using default %d.", app_config.IP_CHECK_CONNECTION_RESTORED_PRIO)
+    # Connection_Restored priority (default: 2, fallback: watchdog_restore_prio)
+    raw_restore = _get_watchdog_setting(config, 'connection_restored_prio',
+                                        legacy_ip_check_key='watchdog_restore_prio')
+    if raw_restore is not None:
+        try:
+            restore_prio = int(raw_restore)
+            if not 1 <= restore_prio <= 5:
+                log.warning("Invalid CONNECTION_RESTORED_PRIO '%d'. "
+                            "Must be 1-5. Using default %d.",
+                            restore_prio, app_config.IP_CHECK_CONNECTION_RESTORED_PRIO)
+            else:
+                app_config.IP_CHECK_CONNECTION_RESTORED_PRIO = restore_prio
+        except ValueError:
+            log.warning("Invalid CONNECTION_RESTORED_PRIO. Must be a number. "
+                        "Using default %d.", app_config.IP_CHECK_CONNECTION_RESTORED_PRIO)
 
-            # Interval_Changed priority (default: 3)
-            try:
-                int_prio = config.getint('IP-Check', 'interval_changed_prio',
-                                         fallback=app_config.IP_CHECK_INTERVAL_CHANGED_PRIO)
-                if not 1 <= int_prio <= 5:
-                    log.warning("Invalid INTERVAL_CHANGED_PRIO '%d' in [IP-Check]. "
-                                "Must be 1-5. Using default %d.",
-                                int_prio, app_config.IP_CHECK_INTERVAL_CHANGED_PRIO)
-                else:
-                    app_config.IP_CHECK_INTERVAL_CHANGED_PRIO = int_prio
-            except ValueError:
-                log.warning("Invalid INTERVAL_CHANGED_PRIO in [IP-Check]. Must be a number. "
-                            "Using default %d.", app_config.IP_CHECK_INTERVAL_CHANGED_PRIO)
+    # Interval_Changed priority (default: 3)
+    raw_int = _get_watchdog_setting(config, 'interval_changed_prio')
+    if raw_int is not None:
+        try:
+            int_prio = int(raw_int)
+            if not 1 <= int_prio <= 5:
+                log.warning("Invalid INTERVAL_CHANGED_PRIO '%d'. "
+                            "Must be 1-5. Using default %d.",
+                            int_prio, app_config.IP_CHECK_INTERVAL_CHANGED_PRIO)
+            else:
+                app_config.IP_CHECK_INTERVAL_CHANGED_PRIO = int_prio
+        except ValueError:
+            log.warning("Invalid INTERVAL_CHANGED_PRIO. Must be a number. "
+                        "Using default %d.", app_config.IP_CHECK_INTERVAL_CHANGED_PRIO)
 
-            # Watchdog_Timeout priority (default: 4, fallback: watchdog_lost_prio)
-            try:
-                raw_lost = config.get('IP-Check', 'watchdog_timeout_prio',
-                                      fallback=config.get('IP-Check', 'watchdog_lost_prio',
-                                                          fallback=str(app_config.IP_CHECK_WATCHDOG_TIMEOUT_PRIO)))
-                lost_prio = int(raw_lost)
-                if not 1 <= lost_prio <= 5:
-                    log.warning("Invalid WATCHDOG_TIMEOUT_PRIO '%d' in [IP-Check]. "
-                                "Must be 1-5. Using default %d.",
-                                lost_prio, app_config.IP_CHECK_WATCHDOG_TIMEOUT_PRIO)
-                else:
-                    app_config.IP_CHECK_WATCHDOG_TIMEOUT_PRIO = lost_prio
-            except ValueError:
-                log.warning("Invalid WATCHDOG_TIMEOUT_PRIO in [IP-Check]. Must be a number. "
-                            "Using default %d.", app_config.IP_CHECK_WATCHDOG_TIMEOUT_PRIO)
+    # Watchdog_Timeout priority (default: 4, fallback: watchdog_lost_prio)
+    raw_lost = _get_watchdog_setting(config, 'watchdog_timeout_prio',
+                                     legacy_ip_check_key='watchdog_lost_prio')
+    if raw_lost is not None:
+        try:
+            lost_prio = int(raw_lost)
+            if not 1 <= lost_prio <= 5:
+                log.warning("Invalid WATCHDOG_TIMEOUT_PRIO '%d'. "
+                            "Must be 1-5. Using default %d.",
+                            lost_prio, app_config.IP_CHECK_WATCHDOG_TIMEOUT_PRIO)
+            else:
+                app_config.IP_CHECK_WATCHDOG_TIMEOUT_PRIO = lost_prio
+        except ValueError:
+            log.warning("Invalid WATCHDOG_TIMEOUT_PRIO. Must be a number. "
+                        "Using default %d.", app_config.IP_CHECK_WATCHDOG_TIMEOUT_PRIO)
 
-            # --- IP Check Notification Formats ---
-            fmt_started = config.get('IP-Check', 'monitoring_started', fallback=None)
-            if fmt_started is not None and fmt_started.strip():
-                if _validate_ip_check_format(fmt_started, 'MONITORING_STARTED'):
-                    app_config.IP_CHECK_MONITORING_STARTED = fmt_started
-                else:
-                    log.warning("Invalid MONITORING_STARTED in [IP-Check]. Notifications disabled for this event.")
-                    app_config.IP_CHECK_MONITORING_STARTED = None
+    # Watchdog Notification Formats
+    fmt_started = _get_watchdog_setting(config, 'monitoring_started')
+    if fmt_started is not None and fmt_started.strip():
+        if _validate_ip_check_format(fmt_started, 'MONITORING_STARTED'):
+            app_config.IP_CHECK_MONITORING_STARTED = fmt_started
+        else:
+            log.warning("Invalid MONITORING_STARTED. Notifications disabled for this event.")
+            app_config.IP_CHECK_MONITORING_STARTED = None
 
-            fmt_restored = config.get('IP-Check', 'connection_restored', fallback=None)
-            if fmt_restored is not None and fmt_restored.strip():
-                if _validate_ip_check_format(fmt_restored, 'CONNECTION_RESTORED'):
-                    app_config.IP_CHECK_CONNECTION_RESTORED = fmt_restored
-                else:
-                    log.warning("Invalid CONNECTION_RESTORED in [IP-Check]. Using default format.")
+    fmt_restored = _get_watchdog_setting(config, 'connection_restored')
+    if fmt_restored is not None and fmt_restored.strip():
+        if _validate_ip_check_format(fmt_restored, 'CONNECTION_RESTORED'):
+            app_config.IP_CHECK_CONNECTION_RESTORED = fmt_restored
+        else:
+            log.warning("Invalid CONNECTION_RESTORED. Using default format.")
 
-            fmt_interval = config.get('IP-Check', 'interval_changed', fallback=None)
-            if fmt_interval is not None and fmt_interval.strip():
-                if _validate_ip_check_format(fmt_interval, 'INTERVAL_CHANGED'):
-                    app_config.IP_CHECK_INTERVAL_CHANGED = fmt_interval
-                else:
-                    log.warning("Invalid INTERVAL_CHANGED in [IP-Check]. Notifications disabled for this event.")
-                    app_config.IP_CHECK_INTERVAL_CHANGED = None
+    fmt_interval = _get_watchdog_setting(config, 'interval_changed')
+    if fmt_interval is not None and fmt_interval.strip():
+        if _validate_ip_check_format(fmt_interval, 'INTERVAL_CHANGED'):
+            app_config.IP_CHECK_INTERVAL_CHANGED = fmt_interval
+        else:
+            log.warning("Invalid INTERVAL_CHANGED. Notifications disabled for this event.")
+            app_config.IP_CHECK_INTERVAL_CHANGED = None
 
-            fmt_timeout = config.get('IP-Check', 'watchdog_timeout', fallback=None)
-            if fmt_timeout is not None and fmt_timeout.strip():
-                if _validate_ip_check_format(fmt_timeout, 'WATCHDOG_TIMEOUT'):
-                    app_config.IP_CHECK_WATCHDOG_TIMEOUT = fmt_timeout
-                else:
-                    log.warning("Invalid WATCHDOG_TIMEOUT in [IP-Check]. Using default format.")
+    fmt_timeout = _get_watchdog_setting(config, 'watchdog_timeout')
+    if fmt_timeout is not None and fmt_timeout.strip():
+        if _validate_ip_check_format(fmt_timeout, 'WATCHDOG_TIMEOUT'):
+            app_config.IP_CHECK_WATCHDOG_TIMEOUT = fmt_timeout
+        else:
+            log.warning("Invalid WATCHDOG_TIMEOUT. Using default format.")
+
 
     # --- Check for port conflicts ---
     if app_config.SIA_SERVER_ENABLED and app_config.IP_CHECK_ENABLED and \
@@ -676,8 +764,8 @@ def load_accounts(config_file: str = 'sia-server.conf') -> AccountsConfig:
 
     accounts_config = AccountsConfig(load_time=time.time())
 
-    system_sections = {'SIA-Server', 'IP-Check', 'Logging', 'Notification'}
-    account_sections = [s for s in config.sections() if s not in system_sections]
+    system_sections = {'sia-server', 'ip-check', 'watchdog', 'logging', 'notification'}
+    account_sections = [s for s in config.sections() if s.lower() not in system_sections]
 
     for section_name in account_sections:
         is_default     = (section_name == 'Default')

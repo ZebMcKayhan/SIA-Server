@@ -8,7 +8,7 @@ Honeywell Galaxy Flex alarm systems. It sends notifications via ntfy.sh.
 This server is configured via 'sia-server.conf' and 'configuration.py'.
 """
 # --- Application Version ---
-__version__ = "2.8.0-beta2"  #
+__version__ = "2.8.0-beta3"
 
 import argparse
 import asyncio
@@ -145,6 +145,9 @@ from galaxy.parser import parse_sia_frame, FrameResult, GalaxyEvent
 from notification import NotificationDispatcher, enqueue_notification
 from galaxy.constants import COMMANDS, COMMAND_BYTES, EVENT_CODE_DESCRIPTIONS
 import ip_check
+import watchdog
+
+watchdog.init(config, accounts)
 
 VALID_COMMANDS = set(COMMANDS.keys())
 
@@ -402,6 +405,29 @@ async def handle_connection(notification_queue: Queue, reader, writer):
             event_type_str = f"{event.event_type} " if event.event_type else ""
             log.info("%sEvent: %s (%s)", event_type_str, event.event_code, description)
 
+            # --- Dimension Heartbeat Watchdog Detection ---
+            if (config.EVENT_HEARTBEAT_WATCHDOG
+                    and event.event_type == config.EVENT_HEARTBEAT_EVENTTYPE
+                    and event.event_code == config.EVENT_HEARTBEAT_EVENTCODE
+                    and event.action_text
+                    and event.action_text.startswith(config.EVENT_HEARTBEAT_TEXT)):
+                interval = watchdog.parse_heartbeat_interval(
+                    event.action_text, config.EVENT_HEARTBEAT_TEXT
+                )
+                if interval is not None:
+                    account_number = event.account or '0'
+                    site_name = event.site_name or account_number
+                    watchdog.update_watchdog(
+                        account_number=account_number,
+                        site_name=site_name,
+                        panel_time=None,
+                        panel_ts=None,
+                        interval=interval,
+                        notification_queue=notification_queue,
+                    )
+                    log.debug("--- Event %d complete (heartbeat consumed) ---", i)
+                    continue
+
             enqueue_notification(event, notification_queue)
 
             log.debug("--- Event %d complete ---", i)
@@ -478,7 +504,6 @@ async def start_servers(notification_queue: Queue):
             log.info('IP Check Service Started')
             log.info('Listening for heartbeats on: %s', ip_check_addrs)
             log.info('='*60)
-            asyncio.create_task(ip_check.watchdog_task(notification_queue))
         except OSError as e:
             log.warning("IP Check Service failed to start: %s. Continuing without it.", e)
 
@@ -548,6 +573,7 @@ def _apply_sighup_reload(new_level: str, new_accounts):
     # Apply accounts — safe here because we are between coroutine steps
     accounts = new_accounts
     ip_check.accounts = new_accounts
+    watchdog.accounts = new_accounts
     if _dispatcher:
         _dispatcher.reload_accounts(new_accounts)
     log.info("SIGHUP reload complete.")
