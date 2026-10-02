@@ -245,16 +245,13 @@ async def handle_ip_check(reader, writer, notification_queue: Queue):
 
             # Parse timestamp and interval from raw bytes
             ts = data[15] + data[16]*256 + data[17]*65536 + data[18]*16777216
-            unix_ts = ts + PANEL_EPOCH_OFFSET
-            dt = datetime.datetime.fromtimestamp(unix_ts, datetime.timezone.utc)
-            panel_time = dt.strftime('%Y-%m-%d %H:%M')
+            panel_time = float(ts + PANEL_EPOCH_OFFSET)
             interval = data[20] + data[21]*256 + data[22]*65536 + data[23]*16777216
 
             watchdog.update_watchdog(
                 account_number=account_number,
                 site_name=site_name,
                 panel_time=panel_time,
-                panel_ts=float(unix_ts),
                 interval=interval,
                 notification_queue=notification_queue,
             )

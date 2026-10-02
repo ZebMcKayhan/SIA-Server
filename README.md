@@ -66,7 +66,8 @@ The project is structured to separate the server logic, protocol parsing, and co
 ├── sia-server.conf         # Main user configuration file.
 ├── configuration.py        # Loads and validates all configuration.
 ├── notification.py         # Handles formatting and sending of notifications.
-├── ip_check.py             # IP Check Service module for heartbeat handling and watchdog monitoring.
+├── ip_check.py             # IP Check Service module — handles the proprietary heartbeat protocol.
+├── watchdog.py             # Generic heartbeat watchdog monitor (used by both IP Check and event heartbeats).
 ├── sia_server_tester.py    # Test client for sending SIA packets to the server.
 ├── Dockerfile              # Docker container definition for portable deployment.
 ├── docker-compose.yml      # Docker Compose configuration for easy container management.

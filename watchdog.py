@@ -2,12 +2,12 @@
 """
 Galaxy SIA Watchdog
 
-Generic watchdog shared by the IP-Check server and the Dimension
-heartbeat monitor.
+Generic watchdog shared by the IP-Check server and the event
+heartbeat monitor (e.g. Galaxy Dimension).
 
 Heartbeat sources:
   - ip_check.py   – decodes the 26-byte IP-Check packet and calls update_watchdog().
-  - sia-server.py – detects a Dimension heartbeat GalaxyEvent and calls update_watchdog().
+  - sia-server.py – detects an event heartbeat GalaxyEvent and calls update_watchdog().
 
 The watchdog task is started **lazily** on the first valid call to
 update_watchdog().  If no heartbeat is ever received, no task is created.
@@ -42,57 +42,16 @@ def init(cfg, accts) -> None:
 # Watchdog state per account.
 # {
 #   account_number: {
-#       'state':           'UNKNOWN' | 'CONNECTED' | 'DISCONNECTED' | 'DISABLED',
-#       'last_seen':       float,        # server time (time.time())
-#       'last_panel_time': str | None,   # formatted panel local time
-#       'last_panel_ts':   float | None, # panel epoch float
-#       'interval':        int,          # heartbeat interval in seconds
+#       'state':      'UNKNOWN' | 'CONNECTED' | 'DISCONNECTED' | 'DISABLED',
+#       'last_seen':  float,        # server time (time.time())
+#       'panel_time': float | None, # panel epoch float
+#       'interval':   int,          # heartbeat interval in seconds
 #   }
 # }
 watchdog_state: dict = {}
 
 # Lazy task handle — None until the first valid heartbeat.
 _watchdog_task_handle: Optional[asyncio.Task] = None
-
-
-# ===================================================================
-# Heartbeat Interval Parsing
-# ===================================================================
-
-def parse_heartbeat_interval(action_text: str, prefix: str) -> Optional[int]:
-    r"""
-    Parse the heartbeat interval from a Dimension heartbeat action_text string.
-
-    Expected format after *prefix*: ``' HH:MM <value>'``
-
-    Example::
-
-        action_text = '[HEARTBT.] 00:05 00001'
-        prefix      = '[HEARTBT.]'
-        → 300   (5 minutes in seconds)
-
-    Returns the interval in integer seconds, or ``None`` if the text
-    cannot be parsed or the resulting interval is zero.
-
-    The trailing ``<value>`` field (e.g. ``00001``) is intentionally
-    discarded — its meaning is not yet confirmed.
-    """
-    remainder = action_text[len(prefix):].strip()
-    match = re.match(r'^(\d{1,2}):(\d{2})\b', remainder)
-    if not match:
-        log.warning(
-            "Watchdog: cannot parse heartbeat interval from action_text %r "
-            "(expected 'HH:MM' after prefix %r).", action_text, prefix)
-        return None
-    hours   = int(match.group(1))
-    minutes = int(match.group(2))
-    interval = hours * 3600 + minutes * 60
-    if interval <= 0:
-        log.warning(
-            "Watchdog: parsed zero-length heartbeat interval from action_text %r - "
-            "ignoring.", action_text)
-        return None
-    return interval
 
 
 # ===================================================================
@@ -226,28 +185,13 @@ def _render_watchdog_field(
         st = time.localtime(ts)
         return format_timestamp_struct(st, fmt) if fmt else time.strftime('%Y-%m-%d %H:%M:%S', st)
 
-    # Panel time fields (may carry a pre-formatted string or a float epoch)
+    # Panel time fields (epoch timestamp float or None)
     if field_name in ('last_panel_time', 'new_panel_time'):
-        ts_key  = 'last_panel_ts'  if field_name == 'last_panel_time' else 'new_panel_ts'
-        ts      = context.get(ts_key)
-        str_val = context.get(field_name)
-        if ts is None and str_val is None:
+        ts = context.get(field_name)
+        if ts is None:
             return None
-        if fmt:
-            if ts is not None:
-                dt = datetime.datetime.fromtimestamp(ts, datetime.timezone.utc)
-                return format_timestamp_dt(dt, fmt)
-            if str_val is not None:
-                try:
-                    dt = datetime.datetime.strptime(
-                        str_val, '%Y-%m-%d %H:%M').replace(tzinfo=datetime.timezone.utc)
-                    return format_timestamp_dt(dt, fmt)
-                except Exception:
-                    return str_val
-            return None
-        if str_val is not None:
-            return str_val
-        return datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).strftime('%Y-%m-%d %H:%M')
+        dt = datetime.datetime.fromtimestamp(ts, datetime.timezone.utc)
+        return format_timestamp_dt(dt, fmt) if fmt else format_timestamp_dt(dt, '%YYYY-%MM-%DD %hh:%mm')
 
     return None
 
@@ -313,8 +257,7 @@ def _format_interval_str(interval: int) -> str:
 def update_watchdog(
     account_number: str,
     site_name: str,
-    panel_time: Optional[str],
-    panel_ts: Optional[float],
+    panel_time: Optional[float],
     interval: int,
     notification_queue: Queue,
 ) -> None:
@@ -324,7 +267,7 @@ def update_watchdog(
     Called by **two** sources:
 
     * ``ip_check.py`` — after validating and decoding a raw IP-Check packet.
-    * ``sia-server.py`` — after detecting and parsing a Dimension heartbeat
+    * ``sia-server.py`` — after detecting and parsing an event heartbeat
       ``GalaxyEvent``.
 
     The watchdog does not know or care which source sent the heartbeat.
@@ -334,9 +277,7 @@ def update_watchdog(
     Args:
         account_number:     Account identifier string.
         site_name:          Human-readable site name (falls back to account_number).
-        panel_time:         Formatted panel local time ``'YYYY-MM-DD HH:MM'``,
-                            or ``None`` when not available (Dimension heartbeats).
-        panel_ts:           Panel epoch ``float`` timestamp, or ``None``.
+        panel_time:         Panel epoch ``float`` timestamp, or ``None`` when not available.
         interval:           Heartbeat interval in **seconds** (must be > 0).
         notification_queue: Notification queue for state-transition messages.
     """
@@ -357,20 +298,18 @@ def update_watchdog(
     prev              = watchdog_state.get(account_number, {})
     current_state     = prev.get('state', 'UNKNOWN')
     previous_interval = prev.get('interval')
-    prev_panel_time   = prev.get('last_panel_time')
-    prev_panel_ts     = prev.get('last_panel_ts')
+    prev_panel_time   = prev.get('panel_time')
     prev_last_seen    = prev.get('last_seen')
-    current_threshold = (previous_interval * config.IP_CHECK_WATCHDOG
+    current_threshold = (previous_interval * config.WATCHDOG_THRESHOLD
                          if previous_interval is not None else None)
-    new_threshold     = interval * config.IP_CHECK_WATCHDOG
+    new_threshold     = interval * config.WATCHDOG_THRESHOLD
 
-    new_state = 'DISABLED' if config.IP_CHECK_WATCHDOG <= 1.0 else 'CONNECTED'
+    new_state = 'DISABLED' if config.WATCHDOG_THRESHOLD <= 1.0 else 'CONNECTED'
     watchdog_state[account_number] = {
-        'state':           new_state,
-        'last_seen':       now,
-        'last_panel_time': panel_time,
-        'last_panel_ts':   panel_ts,
-        'interval':        interval,
+        'state':      new_state,
+        'last_seen':  now,
+        'panel_time': panel_time,
+        'interval':   interval,
     }
 
     # --- State transition notifications ---
@@ -378,7 +317,7 @@ def update_watchdog(
     if current_state == 'DISCONNECTED':
         log.info("Watchdog: Site: %s (Account: %s) - connection restored, interval %s.",
                  site_name, account_number, interval_str)
-        fmt = getattr(config, 'IP_CHECK_CONNECTION_RESTORED', None)
+        fmt = getattr(config, 'WATCHDOG_CONNECTION_RESTORED', None)
         if fmt:
             elapsed = (now - prev_last_seen) if prev_last_seen is not None else None
             msg = format_watchdog_notification(fmt, {
@@ -387,30 +326,28 @@ def update_watchdog(
                 'current_state':   current_state,
                 'new_state':       new_state,
                 'last_panel_time': prev_panel_time,
-                'last_panel_ts':   prev_panel_ts,
                 'last_interval':   previous_interval,
                 'last_threshold':  current_threshold,
                 'last_seen':       prev_last_seen,
                 'elapsed':         elapsed,
                 'new_panel_time':  panel_time,
-                'new_panel_ts':    panel_ts,
                 'new_interval':    interval,
                 'new_threshold':   new_threshold,
             })
             enqueue_message_notification(
                 account_number, site_name, msg,
-                priority=getattr(config, 'IP_CHECK_CONNECTION_RESTORED_PRIO', 2),
+                priority=getattr(config, 'WATCHDOG_CONNECTION_RESTORED_PRIO', 2),
                 queue=notification_queue,
             )
 
     elif current_state == 'UNKNOWN':
-        if config.IP_CHECK_WATCHDOG <= 1.0:
+        if config.WATCHDOG_THRESHOLD <= 1.0:
             log.info("Watchdog: Site: %s (Account: %s) - watchdog DISABLED, interval %s.",
-                     site_name, account_number, interval_str)
+                 site_name, account_number, interval_str)
         else:
             log.info("Watchdog: Site: %s (Account: %s) - monitoring started, interval %s.",
                      site_name, account_number, interval_str)
-        fmt = getattr(config, 'IP_CHECK_MONITORING_STARTED', None)
+        fmt = getattr(config, 'WATCHDOG_MONITORING_STARTED', None)
         if fmt:
             msg = format_watchdog_notification(fmt, {
                 'account':         account_number,
@@ -418,19 +355,17 @@ def update_watchdog(
                 'current_state':   current_state,
                 'new_state':       new_state,
                 'last_panel_time': None,
-                'last_panel_ts':   None,
                 'last_interval':   None,
                 'last_threshold':  None,
                 'last_seen':       None,
                 'elapsed':         None,
                 'new_panel_time':  panel_time,
-                'new_panel_ts':    panel_ts,
                 'new_interval':    interval,
                 'new_threshold':   new_threshold,
             })
             enqueue_message_notification(
                 account_number, site_name, msg,
-                priority=getattr(config, 'IP_CHECK_MONITORING_STARTED_PRIO', 2),
+                priority=getattr(config, 'WATCHDOG_MONITORING_STARTED_PRIO', 2),
                 queue=notification_queue,
             )
 
@@ -439,7 +374,7 @@ def update_watchdog(
         if previous_interval is not None and previous_interval != interval:
             log.info("Watchdog: Site: %s (Account: %s) - interval updated to %s.",
                      site_name, account_number, interval_str)
-            fmt = getattr(config, 'IP_CHECK_INTERVAL_CHANGED', None)
+            fmt = getattr(config, 'WATCHDOG_INTERVAL_CHANGED', None)
             if fmt:
                 elapsed = (now - prev_last_seen) if prev_last_seen is not None else None
                 msg = format_watchdog_notification(fmt, {
@@ -448,19 +383,17 @@ def update_watchdog(
                     'current_state':   current_state,
                     'new_state':       new_state,
                     'last_panel_time': prev_panel_time,
-                    'last_panel_ts':   prev_panel_ts,
                     'last_interval':   previous_interval,
                     'last_threshold':  current_threshold,
                     'last_seen':       prev_last_seen,
                     'elapsed':         elapsed,
                     'new_panel_time':  panel_time,
-                    'new_panel_ts':    panel_ts,
                     'new_interval':    interval,
                     'new_threshold':   new_threshold,
                 })
                 enqueue_message_notification(
                     account_number, site_name, msg,
-                    priority=getattr(config, 'IP_CHECK_INTERVAL_CHANGED_PRIO', 3),
+                    priority=getattr(config, 'WATCHDOG_INTERVAL_CHANGED_PRIO', 3),
                     queue=notification_queue,
                 )
 
@@ -476,7 +409,7 @@ async def watchdog_task(notification_queue: Queue) -> None:
     Started lazily by :func:`update_watchdog` on the first valid heartbeat.
 
     Transitions ``CONNECTED`` accounts to ``DISCONNECTED`` when the time
-    elapsed since ``last_seen`` exceeds ``interval × IP_CHECK_WATCHDOG``.
+    elapsed since ``last_seen`` exceeds ``interval × WATCHDOG_THRESHOLD``.
     """
     log.debug("Watchdog task running.")
     while True:
@@ -492,7 +425,7 @@ async def watchdog_task(notification_queue: Queue) -> None:
                 continue
 
             elapsed   = now - state['last_seen']
-            threshold = interval * config.IP_CHECK_WATCHDOG
+            threshold = interval * config.WATCHDOG_THRESHOLD
             if elapsed <= threshold:
                 continue
 
@@ -500,8 +433,7 @@ async def watchdog_task(notification_queue: Queue) -> None:
             current_state   = state['state']
             new_state       = 'DISCONNECTED'
             watchdog_state[account_number]['state'] = new_state
-            last_panel_time = state['last_panel_time']
-            last_panel_ts   = state.get('last_panel_ts')
+            last_panel_time = state['panel_time']
             last_seen       = state['last_seen']
 
             account_cfg = accounts.get(account_number)
@@ -522,7 +454,7 @@ async def watchdog_task(notification_queue: Queue) -> None:
                 "No ping received for %02d:%02d:%02d.",
                 site_name, account_number, e_h, e_m, e_s)
 
-            fmt = getattr(config, 'IP_CHECK_WATCHDOG_TIMEOUT', None)
+            fmt = getattr(config, 'WATCHDOG_TIMEOUT', None)
             if fmt:
                 msg = format_watchdog_notification(fmt, {
                     'account':         account_number,
@@ -530,18 +462,16 @@ async def watchdog_task(notification_queue: Queue) -> None:
                     'current_state':   current_state,
                     'new_state':       new_state,
                     'last_panel_time': last_panel_time,
-                    'last_panel_ts':   last_panel_ts,
                     'last_interval':   interval,
                     'last_threshold':  threshold,
                     'last_seen':       last_seen,
                     'elapsed':         elapsed,
                     'new_panel_time':  None,
-                    'new_panel_ts':    None,
                     'new_interval':    None,
                     'new_threshold':   None,
                 })
                 enqueue_message_notification(
                     account_number, site_name, msg,
-                    priority=getattr(config, 'IP_CHECK_WATCHDOG_TIMEOUT_PRIO', 4),
+                    priority=getattr(config, 'WATCHDOG_TIMEOUT_PRIO', 4),
                     queue=notification_queue,
                 )

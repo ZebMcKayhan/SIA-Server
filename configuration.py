@@ -186,19 +186,20 @@ class AppConfig:
         self.IP_CHECK_ENABLED               = False
         self.IP_CHECK_ADDR                  = '0.0.0.0'
         self.IP_CHECK_PORT                  = 10001
-        self.IP_CHECK_WATCHDOG              = 2.1
-        self.IP_CHECK_MONITORING_STARTED_PRIO = 2
-        self.IP_CHECK_CONNECTION_RESTORED_PRIO = 2
-        self.IP_CHECK_INTERVAL_CHANGED_PRIO = 3
-        self.IP_CHECK_WATCHDOG_TIMEOUT_PRIO = 4
-        self.IP_CHECK_MONITORING_STARTED    = None
-        self.IP_CHECK_CONNECTION_RESTORED   = (
+        self.WATCHDOG_THRESHOLD             = 2.1
+        self.WATCHDOG_MONITORING_STARTED_PRIO = 2
+        self.WATCHDOG_CONNECTION_RESTORED_PRIO = 2
+        self.WATCHDOG_INTERVAL_CHANGED_PRIO = 3
+        self.WATCHDOG_TIMEOUT_PRIO          = 4
+        self.WATCHDOG_MONITORING_STARTED    = None
+        self.WATCHDOG_CONNECTION_RESTORED   = (
             "Heartbeat received at %new_panel_time, connection restored"
         )
-        self.IP_CHECK_INTERVAL_CHANGED      = None
-        self.IP_CHECK_WATCHDOG_TIMEOUT      = (
+        self.WATCHDOG_INTERVAL_CHANGED      = None
+        self.WATCHDOG_TIMEOUT               = (
             "Heartbeat lost, last heartbeat received was %last_panel_time"
         )
+        # --- Event Heartbeat Watchdog ---
         self.EVENT_HEARTBEAT_WATCHDOG       = False
         self.EVENT_HEARTBEAT_EVENTTYPE      = 'Old'
         self.EVENT_HEARTBEAT_EVENTCODE      = 'RX'
@@ -463,7 +464,7 @@ def load_application_config(config_file: str = 'sia-server.conf') -> AppConfig:
     else:
         log.info("Reject Policy: RESPOND - Invalid connections will receive a SIA REJECT.")
 
-    # --- Parse Dimension Heartbeat Watchdog Settings ---
+    # --- Parse Event Heartbeat Watchdog Settings ---
     if config.has_section('SIA-Server'):
         hb_watchdog = config.get('SIA-Server', 'event_heartbeat_watchdog', fallback='no').lower()
         if hb_watchdog in ('yes', 'true'):
@@ -517,16 +518,16 @@ def load_application_config(config_file: str = 'sia-server.conf') -> AppConfig:
             threshold = float(raw_thresh)
             if threshold <= 1.0:
                 log.info("Watchdog is DISABLED (watchdog_threshold = %.1f).", threshold)
-                app_config.IP_CHECK_WATCHDOG = threshold
+                app_config.WATCHDOG_THRESHOLD = threshold
             elif threshold > 10.0:
                 log.warning("Invalid WATCHDOG_THRESHOLD '%.1f'. "
                             "Must be 1.1 - 10.0 or <= 1.0 to disable. Using default %.1f.",
-                            threshold, app_config.IP_CHECK_WATCHDOG)
+                            threshold, app_config.WATCHDOG_THRESHOLD)
             else:
-                app_config.IP_CHECK_WATCHDOG = threshold
+                app_config.WATCHDOG_THRESHOLD = threshold
         except ValueError:
             log.warning("Invalid WATCHDOG_THRESHOLD. Must be a number. "
-                        "Using default %.1f.", app_config.IP_CHECK_WATCHDOG)
+                        "Using default %.1f.", app_config.WATCHDOG_THRESHOLD)
 
     # Monitoring_Started priority (default: 2)
     raw_mon = _get_watchdog_setting(config, 'monitoring_started_prio')
@@ -536,12 +537,12 @@ def load_application_config(config_file: str = 'sia-server.conf') -> AppConfig:
             if not 1 <= mon_prio <= 5:
                 log.warning("Invalid MONITORING_STARTED_PRIO '%d'. "
                             "Must be 1-5. Using default %d.",
-                            mon_prio, app_config.IP_CHECK_MONITORING_STARTED_PRIO)
+                            mon_prio, app_config.WATCHDOG_MONITORING_STARTED_PRIO)
             else:
-                app_config.IP_CHECK_MONITORING_STARTED_PRIO = mon_prio
+                app_config.WATCHDOG_MONITORING_STARTED_PRIO = mon_prio
         except ValueError:
             log.warning("Invalid MONITORING_STARTED_PRIO. Must be a number. "
-                        "Using default %d.", app_config.IP_CHECK_MONITORING_STARTED_PRIO)
+                        "Using default %d.", app_config.WATCHDOG_MONITORING_STARTED_PRIO)
 
     # Connection_Restored priority (default: 2, fallback: watchdog_restore_prio)
     raw_restore = _get_watchdog_setting(config, 'connection_restored_prio',
@@ -552,12 +553,12 @@ def load_application_config(config_file: str = 'sia-server.conf') -> AppConfig:
             if not 1 <= restore_prio <= 5:
                 log.warning("Invalid CONNECTION_RESTORED_PRIO '%d'. "
                             "Must be 1-5. Using default %d.",
-                            restore_prio, app_config.IP_CHECK_CONNECTION_RESTORED_PRIO)
+                            restore_prio, app_config.WATCHDOG_CONNECTION_RESTORED_PRIO)
             else:
-                app_config.IP_CHECK_CONNECTION_RESTORED_PRIO = restore_prio
+                app_config.WATCHDOG_CONNECTION_RESTORED_PRIO = restore_prio
         except ValueError:
             log.warning("Invalid CONNECTION_RESTORED_PRIO. Must be a number. "
-                        "Using default %d.", app_config.IP_CHECK_CONNECTION_RESTORED_PRIO)
+                        "Using default %d.", app_config.WATCHDOG_CONNECTION_RESTORED_PRIO)
 
     # Interval_Changed priority (default: 3)
     raw_int = _get_watchdog_setting(config, 'interval_changed_prio')
@@ -567,12 +568,12 @@ def load_application_config(config_file: str = 'sia-server.conf') -> AppConfig:
             if not 1 <= int_prio <= 5:
                 log.warning("Invalid INTERVAL_CHANGED_PRIO '%d'. "
                             "Must be 1-5. Using default %d.",
-                            int_prio, app_config.IP_CHECK_INTERVAL_CHANGED_PRIO)
+                            int_prio, app_config.WATCHDOG_INTERVAL_CHANGED_PRIO)
             else:
-                app_config.IP_CHECK_INTERVAL_CHANGED_PRIO = int_prio
+                app_config.WATCHDOG_INTERVAL_CHANGED_PRIO = int_prio
         except ValueError:
             log.warning("Invalid INTERVAL_CHANGED_PRIO. Must be a number. "
-                        "Using default %d.", app_config.IP_CHECK_INTERVAL_CHANGED_PRIO)
+                        "Using default %d.", app_config.WATCHDOG_INTERVAL_CHANGED_PRIO)
 
     # Watchdog_Timeout priority (default: 4, fallback: watchdog_lost_prio)
     raw_lost = _get_watchdog_setting(config, 'watchdog_timeout_prio',
@@ -583,41 +584,41 @@ def load_application_config(config_file: str = 'sia-server.conf') -> AppConfig:
             if not 1 <= lost_prio <= 5:
                 log.warning("Invalid WATCHDOG_TIMEOUT_PRIO '%d'. "
                             "Must be 1-5. Using default %d.",
-                            lost_prio, app_config.IP_CHECK_WATCHDOG_TIMEOUT_PRIO)
+                            lost_prio, app_config.WATCHDOG_TIMEOUT_PRIO)
             else:
-                app_config.IP_CHECK_WATCHDOG_TIMEOUT_PRIO = lost_prio
+                app_config.WATCHDOG_TIMEOUT_PRIO = lost_prio
         except ValueError:
             log.warning("Invalid WATCHDOG_TIMEOUT_PRIO. Must be a number. "
-                        "Using default %d.", app_config.IP_CHECK_WATCHDOG_TIMEOUT_PRIO)
+                        "Using default %d.", app_config.WATCHDOG_TIMEOUT_PRIO)
 
     # Watchdog Notification Formats
     fmt_started = _get_watchdog_setting(config, 'monitoring_started')
     if fmt_started is not None and fmt_started.strip():
         if _validate_ip_check_format(fmt_started, 'MONITORING_STARTED'):
-            app_config.IP_CHECK_MONITORING_STARTED = fmt_started
+            app_config.WATCHDOG_MONITORING_STARTED = fmt_started
         else:
             log.warning("Invalid MONITORING_STARTED. Notifications disabled for this event.")
-            app_config.IP_CHECK_MONITORING_STARTED = None
+            app_config.WATCHDOG_MONITORING_STARTED = None
 
     fmt_restored = _get_watchdog_setting(config, 'connection_restored')
     if fmt_restored is not None and fmt_restored.strip():
         if _validate_ip_check_format(fmt_restored, 'CONNECTION_RESTORED'):
-            app_config.IP_CHECK_CONNECTION_RESTORED = fmt_restored
+            app_config.WATCHDOG_CONNECTION_RESTORED = fmt_restored
         else:
             log.warning("Invalid CONNECTION_RESTORED. Using default format.")
 
     fmt_interval = _get_watchdog_setting(config, 'interval_changed')
     if fmt_interval is not None and fmt_interval.strip():
         if _validate_ip_check_format(fmt_interval, 'INTERVAL_CHANGED'):
-            app_config.IP_CHECK_INTERVAL_CHANGED = fmt_interval
+            app_config.WATCHDOG_INTERVAL_CHANGED = fmt_interval
         else:
             log.warning("Invalid INTERVAL_CHANGED. Notifications disabled for this event.")
-            app_config.IP_CHECK_INTERVAL_CHANGED = None
+            app_config.WATCHDOG_INTERVAL_CHANGED = None
 
     fmt_timeout = _get_watchdog_setting(config, 'watchdog_timeout')
     if fmt_timeout is not None and fmt_timeout.strip():
         if _validate_ip_check_format(fmt_timeout, 'WATCHDOG_TIMEOUT'):
-            app_config.IP_CHECK_WATCHDOG_TIMEOUT = fmt_timeout
+            app_config.WATCHDOG_TIMEOUT = fmt_timeout
         else:
             log.warning("Invalid WATCHDOG_TIMEOUT. Using default format.")
 

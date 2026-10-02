@@ -8,12 +8,13 @@ Honeywell Galaxy Flex alarm systems. It sends notifications via ntfy.sh.
 This server is configured via 'sia-server.conf' and 'configuration.py'.
 """
 # --- Application Version ---
-__version__ = "2.8.0-beta3"
+__version__ = "2.8.0-beta4"
 
 import argparse
 import asyncio
 import logging
 import logging.handlers
+import re
 import sys
 import signal
 import functools
@@ -27,7 +28,7 @@ parser.add_argument(
     default='sia-server.conf',
     help='Path to configuration file (default: sia-server.conf)'
 )
-args = parser.parse_args()
+args, _ = parser.parse_known_args()
 
 from configuration import load_logging_config, load_application_config, load_accounts, load_log_level
 
@@ -155,6 +156,42 @@ _serve_task = None   # Current serve task, cancelled to trigger shutdown
 _event_loop = None   # The running event loop; used by signal handlers to call_soon_threadsafe
 _dispatcher = None   # Reference to NotificationDispatcher for SIGHUP reload
 _sia_last_ping_ip = None  # Last PING source IP seen on SIA port (for log deduplication)
+
+def parse_heartbeat_interval(action_text: str, prefix: str) -> Optional[int]:
+    r"""
+    Parse the heartbeat interval from an event heartbeat action_text string.
+
+    Expected format after *prefix*: ``' HH:MM <value>'``
+
+    Example::
+
+        action_text = '[HEARTBT.] 00:05 00001'
+        prefix      = '[HEARTBT.]'
+        → 300   (5 minutes in seconds)
+
+    Returns the interval in integer seconds, or ``None`` if the text
+    cannot be parsed or the resulting interval is zero.
+
+    The trailing ``<value>`` field (e.g. ``00001``) is intentionally
+    discarded — its meaning is not yet confirmed.
+    """
+    remainder = action_text[len(prefix):].strip()
+    match = re.match(r'^(\d{1,2}):(\d{2})\b', remainder)
+    if not match:
+        log.warning(
+            "Event heartbeat: cannot parse heartbeat interval from action_text %r "
+            "(expected 'HH:MM' after prefix %r).", action_text, prefix)
+        return None
+    hours   = int(match.group(1))
+    minutes = int(match.group(2))
+    interval = hours * 3600 + minutes * 60
+    if interval <= 0:
+        log.warning(
+            "Event heartbeat: parsed zero-length heartbeat interval from action_text %r - "
+            "ignoring.", action_text)
+        return None
+    return interval
+
 
 # --- END INITIALIZATION ---
 
@@ -405,15 +442,28 @@ async def handle_connection(notification_queue: Queue, reader, writer):
             event_type_str = f"{event.event_type} " if event.event_type else ""
             log.info("%sEvent: %s (%s)", event_type_str, event.event_code, description)
 
-            # --- Dimension Heartbeat Watchdog Detection ---
+            # --- Event Heartbeat Watchdog Detection ---
             if (config.EVENT_HEARTBEAT_WATCHDOG
                     and event.event_type == config.EVENT_HEARTBEAT_EVENTTYPE
                     and event.event_code == config.EVENT_HEARTBEAT_EVENTCODE
                     and event.action_text
                     and event.action_text.startswith(config.EVENT_HEARTBEAT_TEXT)):
-                interval = watchdog.parse_heartbeat_interval(
+                interval = parse_heartbeat_interval(
                     event.action_text, config.EVENT_HEARTBEAT_TEXT
                 )
+                # If interval not found in action_text, check event.value (modifier VAmmmm in minutes)
+                if interval is None and event.value:
+                    try:
+                        val_mins = int(event.value)
+                        if val_mins > 0:
+                            interval = val_mins * 60
+                            log.debug("Event heartbeat: extracted interval %ds from event.value (%d mins)",
+                                      interval, val_mins)
+                        else:
+                            log.warning("Event heartbeat: non-positive interval in event.value: %r", event.value)
+                    except ValueError:
+                        log.warning("Event heartbeat: cannot parse event.value %r as integer minutes", event.value)
+
                 if interval is not None:
                     account_number = event.account or '0'
                     site_name = event.site_name or account_number
@@ -421,7 +471,6 @@ async def handle_connection(notification_queue: Queue, reader, writer):
                         account_number=account_number,
                         site_name=site_name,
                         panel_time=None,
-                        panel_ts=None,
                         interval=interval,
                         notification_queue=notification_queue,
                     )
