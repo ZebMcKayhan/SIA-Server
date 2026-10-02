@@ -204,6 +204,28 @@ see [providers/README.md](providers/README.md).
 
     * `respond` — Send a SIA REJECT frame to the client (default).
     * `drop` — Silently close the connection without sending anything.
+  * **Event Heartbeats:** Some panels can send heartbeat information through the normal SIA event path instead of using the separate IP Check service.
+
+  * `EVENT_HEARTBEAT_WATCHDOG`: Enables watchdog monitoring from event heartbeats. Default: `No`.
+  * `EVENT_HEARTBEAT_EVENTTYPE`: Event type that identifies an event heartbeat. Default: `Old`.
+  * `EVENT_HEARTBEAT_EVENTCODE`: Event code that identifies an event heartbeat. Default: `RX`.
+  * `EVENT_HEARTBEAT_TEXT`: Text prefix that identifies an event heartbeat. Default: `[HEARTBT.]`.
+
+    When enabled, a matching event heartbeat is parsed for its heartbeat interval. The interval is normally read from the `HH:MM` value in the event's `action_text`. For example:
+
+    ```text
+    [HEARTBT.] 00:05 00001
+    ```
+
+    represents a 5-minute heartbeat interval.
+
+    Some automatic test messages include a `VAmmmm` modifier, where `mmmm` is the heartbeat interval in minutes.
+
+    The interval from the `action_text` is used first. If no valid interval is found there, the `Value` from a `VAmmmm` modifier is used as a fallback and converted from minutes to seconds.
+
+    Successfully recognized event heartbeats with interval are consumed by the watchdog and are not sent as normal notifications.
+
+
 * **`[IP-Check]` Section:** Configure the optional IP Check Service.
 
 > **Note:** The IP Check server validates all incoming heartbeat packets before responding.
@@ -212,6 +234,7 @@ see [providers/README.md](providers/README.md).
   * `ENABLED`: Controls whether the IP Check Service starts. Default: `No`.
   * `LISTEN_ADDR`, `LISTEN_PORT`: Configure the address and TCP port used by the IP Check Service. The default port is `10001`.
   * Watchdog configuration is described in the **`[WATCHDOG]` Section** below. Watchdog keys may also be placed in this section for backwards compatibility with older configuration files.
+
 * **`[WATCHDOG]` Section:** Configure the generic heartbeat watchdog used by both the IP Check Service and event heartbeats.
 
 > **Note:** This is the preferred location for watchdog configuration.
@@ -310,29 +333,6 @@ For example, with a heartbeat interval of 10 minutes:
     ```
 
     `\n` can be used to insert a line break into a notification.
-
-* **Event Heartbeats:** Some panels can send heartbeat information through the normal SIA event path instead of using the separate IP Check service.
-
-> **Note:** This mechanism is not limited to a specific panel model. Dimension panels are known to send heartbeats through the normal event path.
-
-  * `EVENT_HEARTBEAT_WATCHDOG`: Enables watchdog monitoring from event heartbeats. Default: `No`.
-  * `EVENT_HEARTBEAT_EVENTTYPE`: Event type that identifies an event heartbeat. Default: `Old`.
-  * `EVENT_HEARTBEAT_EVENTCODE`: Event code that identifies an event heartbeat. Default: `RX`.
-  * `EVENT_HEARTBEAT_TEXT`: Text prefix that identifies an event heartbeat. Default: `[HEARTBT.]`.
-
-    When enabled, a matching event heartbeat is parsed for its heartbeat interval. The interval is normally read from the `HH:MM` value in the event's `action_text`. For example:
-
-    ```text
-    [HEARTBT.] 00:05 00001
-    ```
-
-    represents a 5-minute heartbeat interval.
-
-    Some automatic test messages include a `VAmmmm` modifier, where `mmmm` is the heartbeat interval in minutes. For example, `VA1440` represents a 24-hour interval (`1440` minutes = `86400` seconds). When present, this value is available in the event's `Value` field.
-
-    The interval from the `action_text` is used first. If no valid interval is found there, the `Value` from a `VAmmmm` modifier is used as a fallback and converted from minutes to seconds.
-
-    Successfully recognized event heartbeats are consumed by the watchdog and are not sent as normal notifications. If an event heartbeat matches the configured identifiers but its interval cannot be parsed, the event remains available for normal notification handling.
 
 * **`[Logging]` Section:** Control the log level and output destination.
 
