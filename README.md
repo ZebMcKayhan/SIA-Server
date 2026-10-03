@@ -227,19 +227,16 @@ see [providers/README.md](providers/README.md).
 
 
 * **`[IP-Check]` Section:** Configure the optional IP Check Service.
-
-> **Note:** The IP Check server validates all incoming heartbeat packets before responding.
-    > It verifies the packet length and header. Invalid packets are dropped.
-
-  * `ENABLED`: Controls whether the IP Check Service starts. Default: `No`.
-  * `LISTEN_ADDR`, `LISTEN_PORT`: Configure the address and TCP port used by the IP Check Service. The default port is `10001`.
-  * Watchdog configuration is described in the **`[WATCHDOG]` Section** below. Watchdog keys may also be placed in this section for backwards compatibility with older configuration files.
+   > **Note:** The IP Check server validates all incoming heartbeat packets before responding.
+       > It verifies the packet length and header. Invalid packets are dropped.
+   * `ENABLED`: Controls whether the IP Check Service starts. Default: `No`.
+   * `LISTEN_ADDR`, `LISTEN_PORT`: Configure the address and TCP port used by the IP Check Service. The default port is `10001`.
+   * Watchdog configuration is described in the **`[WATCHDOG]` Section** below. Watchdog keys may also be placed in this section for backwards compatibility with older configuration files.
 
 * **`[WATCHDOG]` Section:** Configure the generic heartbeat watchdog used by both the IP Check Service and event heartbeats.
-
-> **Note:** This is the preferred location for watchdog configuration.
-    > For backwards compatibility, watchdog keys may also be placed in the `[IP-Check]` section.
-    > Existing configurations using the legacy `[IP-Check]` location continue to work.
+  > **Note:** This is the preferred location for watchdog configuration.
+      > For backwards compatibility, watchdog keys may also be placed in the `[IP-Check]` section.
+      > Existing configurations using the legacy `[IP-Check]` location continue to work.
 
   * `WATCHDOG_THRESHOLD`: Controls how long the server waits after a missed heartbeat before declaring the connection lost.
 The timeout is calculated as: `WATCHDOG_THRESHOLD × heartbeat interval`.
