@@ -178,7 +178,7 @@ def parse_heartbeat_interval(action_text: str, prefix: str) -> Optional[int]:
     remainder = action_text[len(prefix):].strip()
     match = re.match(r'^(\d{1,2}):(\d{2})\b', remainder)
     if not match:
-        log.warning(
+        log.debug(
             "Event heartbeat: cannot parse heartbeat interval from action_text %r "
             "(expected 'HH:MM' after prefix %r).", action_text, prefix)
         return None
@@ -186,7 +186,7 @@ def parse_heartbeat_interval(action_text: str, prefix: str) -> Optional[int]:
     minutes = int(match.group(2))
     interval = hours * 3600 + minutes * 60
     if interval <= 0:
-        log.warning(
+        log.debug(
             "Event heartbeat: parsed zero-length heartbeat interval from action_text %r - "
             "ignoring.", action_text)
         return None
@@ -460,9 +460,10 @@ async def handle_connection(notification_queue: Queue, reader, writer):
                             log.debug("Event heartbeat: extracted interval %ds from event.value (%d mins)",
                                       interval, val_mins)
                         else:
-                            log.warning("Event heartbeat: non-positive interval in event.value: %r", event.value)
+                            log.debug("Event heartbeat: non-positive interval in event.value: %r",
+                                      event.value)
                     except ValueError:
-                        log.warning("Event heartbeat: cannot parse event.value %r as integer minutes", event.value)
+                        log.debug("Event heartbeat: cannot parse event.value %r as integer minutes", event.value)
 
                 if interval is not None:
                     account_number = event.account or '0'
@@ -476,7 +477,13 @@ async def handle_connection(notification_queue: Queue, reader, writer):
                     )
                     log.debug("--- Event %d complete (heartbeat consumed) ---", i)
                     continue
-
+                log.warning(
+                    "Event heartbeat: cannot determine heartbeat interval for event "
+                    "(action_text=%r, value=%r) - heartbeat ignored.",
+                    event.action_text,
+                    event.value,
+                )
+                        
             enqueue_notification(event, notification_queue)
 
             log.debug("--- Event %d complete ---", i)
