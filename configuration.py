@@ -193,11 +193,11 @@ class AppConfig:
         self.WATCHDOG_TIMEOUT_PRIO          = 4
         self.WATCHDOG_MONITORING_STARTED    = None
         self.WATCHDOG_CONNECTION_RESTORED   = (
-            "Heartbeat received at %new_panel_time, connection restored"
+            "Heartbeat received [at %new_panel_time, ]after %elapsed, connection restored."
         )
         self.WATCHDOG_INTERVAL_CHANGED      = None
         self.WATCHDOG_TIMEOUT               = (
-            "Heartbeat lost, last heartbeat received was %last_panel_time"
+            "Heartbeat lost, last heartbeat received was [at %last_panel_time, ]%elapsed ago."
         )
         # --- Event Heartbeat Watchdog ---
         self.EVENT_HEARTBEAT_WATCHDOG       = False
