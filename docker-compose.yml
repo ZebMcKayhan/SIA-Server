@@ -1,7 +1,7 @@
 services:
   sia-server:
     build: .
-    image: sia-server:latest
+    image: zebmckayhan/sia-server:latest
     container_name: sia-server
     environment:
       - HEALTHCHECK_PORT1=10000 # used for healthcheck if enabled
