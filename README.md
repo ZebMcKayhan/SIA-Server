@@ -501,10 +501,12 @@ ports:
   - "10000:10000"   # Must match [SIA-Server] LISTEN_PORT
   - "10001:10001"   # Must match [IP-Check] LISTEN_PORT
 ```
-3. Build and start the container:
+3. Start the container:
 ```bash
 docker compose up -d
 ```
+The Compose file uses the published SIA-Server image from Docker Hub. Docker will pull the image automatically if it is not already available locally.
+
 4. The server is now running. To verify:
 ```bash
 docker compose ps
@@ -513,6 +515,13 @@ docker compose ps
 #### View Logs
 ```bash
 docker compose logs -f
+```
+
+#### Build Locally
+If you have cloned the SIA-Server repository and want to build the image from the local source instead of using the published Docker Hub image:
+```bash
+docker compose build
+docker compose up -d
 ```
 
 #### Stop the Server
