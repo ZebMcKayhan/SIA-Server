@@ -1,9 +1,9 @@
 let configData = {};
 let activeAccountSection = null;
 
-// Complete system defaults catalog extracted directly from configuration.py
+// System defaults map using lowercase keys
 const DEFAULTS_MAP = {
-    "SIA-Server": {
+    "sia-server": {
         "enabled": "yes",
         "listen_addr": "0.0.0.0",
         "listen_port": "10000",
@@ -13,23 +13,23 @@ const DEFAULTS_MAP = {
         "event_heartbeat_eventcode": "RX",
         "event_heartbeat_text": "[HEARTBT.]"
     },
-    "IP-Check": {
+    "ip-check": {
         "enabled": "no",
         "listen_addr": "0.0.0.0",
         "listen_port": "10001"
     },
-    "WATCHDOG": {
+    "watchdog": {
         "watchdog_threshold": "2.1",
         "monitoring_started_prio": "2",
         "connection_restored_prio": "2",
         "interval_changed_prio": "3",
         "watchdog_timeout_prio": "4",
-        "monitoring_started": "(Disabled / Empty)",
+        "monitoring_started": "(Disabled)",
         "connection_restored": "Heartbeat received [at %new_panel_time, ]after %elapsed, connection restored.",
-        "interval_changed": "(Disabled / Empty)",
+        "interval_changed": "(Disabled)",
         "watchdog_timeout": "Heartbeat lost, last heartbeat received was [at %last_panel_time, ]%elapsed ago."
     },
-    "Notification": {
+    "notification": {
         "notification_format_ascii": "%time %action_text [(Group: %group)]",
         "notification_format_data": "%time Event: %event_code [(%event_description)][ User: %user_id][ Zone: %zone][ Group: %group][ Peripheral: %peripheral][ Value: %value]",
         "max_que_size": "50",
@@ -42,7 +42,7 @@ const DEFAULTS_MAP = {
         "priority_4": "RP, TX",
         "priority_5": "(All other unmapped codes)"
     },
-    "Logging": {
+    "logging": {
         "log_level": "INFO",
         "log_to": "Screen",
         "syslog_socket": "/dev/log",
@@ -84,17 +84,22 @@ function renderAccountsTable() {
     const tbody = document.getElementById("accounts-table-body");
     tbody.innerHTML = "";
 
+    const systemSections = ["sia-server", "ip-check", "watchdog", "logging", "notification", "webgui"];
+
     Object.keys(configData).forEach(section => {
-        if (["SIA-Server", "IP-Check", "WATCHDOG", "Logging", "Notification", "WebGUI"].includes(section)) return;
+        if (systemSections.includes(section.toLowerCase())) return;
 
         const sec = configData[section];
         const tr = document.createElement("tr");
 
+        // Clean Account Number display without [] brackets
+        const accountDisplay = section.toLowerCase() === 'default' ? 'Default' : section;
+
         tr.innerHTML = `
-            <td><strong>[${section}]</strong></td>
-            <td>${sec.SITE_NAME || sec.site_name || section}</td>
-            <td>${sec.ENABLED || sec.enabled || 'yes'}</td>
-            <td><span class="badge">${sec.PROVIDER || sec.provider || 'None'}</span></td>
+            <td><strong>${accountDisplay}</strong></td>
+            <td>${sec.site_name || accountDisplay}</td>
+            <td>${sec.enabled || 'yes'}</td>
+            <td><span class="badge">${sec.provider || 'None'}</span></td>
             <td>
                 <button class="btn btn-secondary" onclick="editAccount('${section}')">Edit</button>
             </td>
@@ -107,11 +112,12 @@ function editAccount(section) {
     activeAccountSection = section;
     const data = configData[section] || {};
 
-    document.getElementById("modal-title").innerText = `Edit Account: [${section}]`;
+    const accountDisplay = section.toLowerCase() === 'default' ? 'Default' : section;
+    document.getElementById("modal-title").innerText = `Edit Account: ${accountDisplay}`;
     document.getElementById("modal-account-id").value = section;
-    document.getElementById("modal-site-name").value = data.SITE_NAME || data.site_name || "";
-    document.getElementById("modal-enabled").value = data.ENABLED || data.enabled || "yes";
-    document.getElementById("modal-provider").value = data.PROVIDER || data.provider || "None";
+    document.getElementById("modal-site-name").value = data.site_name || "";
+    document.getElementById("modal-enabled").value = data.enabled || "yes";
+    document.getElementById("modal-provider").value = data.provider || "None";
 
     renderDynamicProviderFields(data);
     document.getElementById("account-modal").classList.add("active");
@@ -138,18 +144,18 @@ function renderDynamicProviderFields(data = {}) {
     `;
 
     if (provider === "ntfy") {
-        container.innerHTML += createInput("NTFY_TOPIC", "NTFY Topic URL", "https://ntfy.sh/my-topic");
-        container.innerHTML += createInput("NTFY_TITLE", "NTFY Title", "SIA Alert");
-        container.innerHTML += createInput("NTFY_TOKEN", "NTFY Bearer Token (Optional)", "tk_...");
+        container.innerHTML += createInput("ntfy_topic", "ntfy_topic", "https://ntfy.sh/my-topic");
+        container.innerHTML += createInput("ntfy_title", "ntfy_title", "SIA Alert");
+        container.innerHTML += createInput("ntfy_token", "ntfy_token", "tk_...");
     } else if (provider === "telegram") {
-        container.innerHTML += createInput("TELEGRAM_TOKEN", "Telegram Bot Token", "123456:ABC-DEF1234...");
-        container.innerHTML += createInput("TELEGRAM_CHAT_ID", "Telegram Chat ID", "-100123456789");
-        container.innerHTML += createInput("TELEGRAM_TITLE", "Title Header", "Security Alarm");
+        container.innerHTML += createInput("telegram_token", "telegram_token", "123456:ABC-DEF1234...");
+        container.innerHTML += createInput("telegram_chat_id", "telegram_chat_id", "-100123456789");
+        container.innerHTML += createInput("telegram_title", "telegram_title", "Security Alarm");
     } else if (provider === "pushover") {
-        container.innerHTML += createInput("PUSHOVER_TOKEN", "Pushover App Token", "azg123...");
-        container.innerHTML += createInput("PUSHOVER_USER", "Pushover User Key", "u123...");
+        container.innerHTML += createInput("pushover_token", "pushover_token", "azg123...");
+        container.innerHTML += createInput("pushover_user", "pushover_user", "u123...");
     } else if (provider === "webhook") {
-        container.innerHTML += createInput("WEBHOOK_URL", "Webhook Target URL", "https://api.example.com/endpoint");
+        container.innerHTML += createInput("webhook_url", "webhook_url", "https://api.example.com/endpoint");
     }
 }
 
@@ -159,9 +165,9 @@ function saveAccountModal() {
 
     if (!configData[section]) configData[section] = {};
 
-    configData[section]["SITE_NAME"] = document.getElementById("modal-site-name").value;
-    configData[section]["ENABLED"] = document.getElementById("modal-enabled").value;
-    configData[section]["PROVIDER"] = document.getElementById("modal-provider").value;
+    configData[section]["site_name"] = document.getElementById("modal-site-name").value;
+    configData[section]["enabled"] = document.getElementById("modal-enabled").value;
+    configData[section]["provider"] = document.getElementById("modal-provider").value;
 
     document.querySelectorAll("[id^='field_']").forEach(input => {
         const key = input.id.replace("field_", "");
@@ -182,7 +188,6 @@ function renderSystemForms() {
         const sec = configData[sectionName];
         const defaults = DEFAULTS_MAP[sectionName] || {};
 
-        // Merge set keys and default keys so missing keys display as grey placeholders
         const allKeys = Array.from(new Set([...Object.keys(sec), ...Object.keys(defaults)]));
 
         allKeys.forEach(key => {
@@ -201,10 +206,10 @@ function renderSystemForms() {
         });
     };
 
-    renderSectionForm("WATCHDOG", "watchdog-form");
-    renderSectionForm("IP-Check", "ipcheck-form");
-    renderSectionForm("Notification", "notifications-form");
-    renderSectionForm("SIA-Server", "server-form");
+    renderSectionForm("watchdog", "watchdog-form");
+    renderSectionForm("ip-check", "ipcheck-form");
+    renderSectionForm("notification", "notifications-form");
+    renderSectionForm("sia-server", "server-form");
 }
 
 async function saveConfiguration() {
