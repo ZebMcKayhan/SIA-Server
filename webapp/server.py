@@ -2,18 +2,17 @@ import os
 import sys
 import signal
 import configparser
-import asyncio
+import secrets
 from typing import Dict, Any
-from fastapi import FastAPI, HTTPException, Request, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-import secrets
 
 app = FastAPI(title="SIA-Server WebGUI", docs_url=None, redoc_url=None)
 security = HTTPBasic()
 
-# Configuration path resolution
+# Path resolution
 CONFIG_PATH = os.environ.get("SIA_CONFIG")
 if not CONFIG_PATH:
     if os.path.isdir("/config"):
@@ -21,14 +20,22 @@ if not CONFIG_PATH:
     else:
         CONFIG_PATH = os.path.join(os.getcwd(), "sia-server.conf")
 
-# Memory log buffer for stdout/log tailing
 LOG_FILE_PATH = os.environ.get("SIA_LOG_FILE", "/tmp/sia-server.log")
 
 
-def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
-    """Simple Basic Auth against config.ini WebGUI section or fallback defaults."""
-    config = configparser.ConfigParser(interpolation=None)
+def get_ini_parser() -> configparser.ConfigParser:
+    """Configured parser with inline comment stripping matching configuration.py."""
+    config = configparser.ConfigParser(
+        inline_comment_prefixes=('#', ';'),
+        interpolation=None,
+    )
     config.optionxform = str  # Preserve case
+    return config
+
+
+def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
+    """Basic Auth authentication."""
+    config = get_ini_parser()
     if os.path.exists(CONFIG_PATH):
         config.read(CONFIG_PATH)
 
@@ -49,30 +56,53 @@ def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
 
 @app.get("/api/config")
 def read_config(username: str = Depends(get_current_user)):
-    """Reads the INI file into structured JSON grouped by sections."""
+    """Reads the INI file, cleans inline comments, and maps legacy Watchdog settings."""
     if not os.path.exists(CONFIG_PATH):
         raise HTTPException(status_code=404, detail=f"Config file not found at {CONFIG_PATH}")
 
-    config = configparser.ConfigParser(interpolation=None)
-    config.optionxform = str
+    config = get_ini_parser()
     config.read(CONFIG_PATH)
 
     data = {}
     for section in config.sections():
         data[section] = dict(config[section])
+
+    # Dynamic legacy section bridging for WATCHDOG / IP-CHECK
+    if "WATCHDOG" not in data:
+        data["WATCHDOG"] = {}
+
+    if "IP-Check" in data:
+        # Migrate legacy IP-Check keys to Watchdog if missing in Watchdog
+        ip_sec = data["IP-Check"]
+        legacy_mappings = {
+            "watchdog_threshold": "watchdog_threshold",
+            "watchdog_restore_prio": "connection_restored_prio",
+            "watchdog_lost_prio": "watchdog_timeout_prio",
+            "monitoring_started_prio": "monitoring_started_prio",
+            "interval_changed_prio": "interval_changed_prio",
+            "monitoring_started": "monitoring_started",
+            "connection_restored": "connection_restored",
+            "interval_changed": "interval_changed",
+            "watchdog_timeout": "watchdog_timeout",
+        }
+        for old_key, new_key in legacy_mappings.items():
+            if old_key in ip_sec and new_key not in data["WATCHDOG"]:
+                data["WATCHDOG"][new_key] = ip_sec[old_key]
+
     return {"path": CONFIG_PATH, "config": data}
 
 
 @app.post("/api/config")
 async def save_config(payload: Dict[str, Any], username: str = Depends(get_current_user)):
-    """Saves updated JSON back to the INI file format while keeping section keys intact."""
-    config = configparser.ConfigParser(interpolation=None)
-    config.optionxform = str
+    """Saves sanitized configuration back to disk."""
+    config = get_ini_parser()
 
     for section_name, section_data in payload.items():
         config.add_section(section_name)
         for key, value in section_data.items():
-            config.set(section_name, key, str(value))
+            # Strip trailing inline comments if pasted manually
+            clean_val = str(value).split('#')[0].split(';')[0].strip()
+            config.set(section_name, key, clean_val)
 
     try:
         with open(CONFIG_PATH, "w") as configfile:
@@ -84,23 +114,21 @@ async def save_config(payload: Dict[str, Any], username: str = Depends(get_curre
 
 @app.post("/api/reload")
 def trigger_hot_reload(username: str = Depends(get_current_user)):
-    """Executes SIGHUP signal on Unix/Linux/Docker or direct internal call."""
+    """Dispatches SIGHUP signal to server process."""
     try:
         if sys.platform != "win32":
-            # Send SIGHUP to parent or self
             os.kill(os.getppid(), signal.SIGHUP)
-            return {"status": "success", "message": "SIGHUP signal dispatched successfully"}
+            return {"status": "success", "message": "SIGHUP signal sent to sia-server process"}
         else:
-            return {"status": "warning", "message": "SIGHUP not supported on Windows natively"}
+            return {"status": "warning", "message": "SIGHUP hot-reload is not supported on Windows"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to dispatch signal: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to reload process: {str(e)}")
 
 
 @app.get("/api/logs")
 def get_logs(lines: int = 100, username: str = Depends(get_current_user)):
-    """Fetches the tail end of the log output file."""
     if not os.path.exists(LOG_FILE_PATH):
-        return {"logs": [f"Log file not found at {LOG_FILE_PATH}. Logging may be set to Screen or Syslog."]}
+        return {"logs": [f"Log file not found at {LOG_FILE_PATH}."]}
 
     try:
         with open(LOG_FILE_PATH, "r") as f:
@@ -110,7 +138,6 @@ def get_logs(lines: int = 100, username: str = Depends(get_current_user)):
         return {"logs": [f"Error reading log file: {str(e)}"]}
 
 
-# Static frontend files mounting
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
