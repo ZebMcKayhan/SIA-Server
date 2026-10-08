@@ -1,1 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SIA-Server Admin</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="top-bar">
+        <div class="brand">🌌 <span>SIA-Server</span> Admin</div>
+        <div class="status-badge"><span class="dot"></span> Running</div>
+        <div class="top-actions">
+            <button class="btn btn-lightning" id="btn-reload" onclick="triggerReload()">⚡ Hot Reload (SIGHUP)</button>
+            <button class="btn btn-save" onclick="saveConfiguration()">💾 Save Config</button>
+        </div>
+    </div>
 
+    <div class="main-layout">
+        <div class="sidebar">
+            <div class="nav-item active" onclick="switchTab('accounts')">📑 Accounts / Sites</div>
+            <div class="nav-item" onclick="switchTab('watchdog')">⏰ Watchdog & IP-Check</div>
+            <div class="nav-item" onclick="switchTab('notifications')">🔔 Priorities & Formats</div>
+            <div class="nav-item" onclick="switchTab('server')">⚙️ Server Core & Logging</div>
+            <div class="nav-item" onclick="switchTab('logs')">📜 Live Logs</div>
+        </div>
+
+        <div class="content-area">
+            <!-- TAB: ACCOUNTS -->
+            <div id="tab-accounts" class="tab-pane active">
+                <div class="pane-header">
+                    <h2>Accounts & Sites Configuration</h2>
+                    <button class="btn btn-primary" onclick="openAccountModal()">+ Add New Account</button>
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Account ID</th>
+                            <th>Site Name</th>
+                            <th>Enabled</th>
+                            <th>Provider</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="accounts-table-body">
+                        <!-- Rendered dynamically -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- TAB: WATCHDOG -->
+            <div id="tab-watchdog" class="tab-pane">
+                <h2>Watchdog & IP-Check Settings</h2>
+                <div class="form-container" id="watchdog-form"></div>
+            </div>
+
+            <!-- TAB: NOTIFICATIONS -->
+            <div id="tab-notifications" class="tab-pane">
+                <h2>Notification Formats & Event Priorities</h2>
+                <div class="form-container" id="notifications-form"></div>
+            </div>
+
+            <!-- TAB: SERVER CORE -->
+            <div id="tab-server" class="tab-pane">
+                <h2>Server Core & Logging Configuration</h2>
+                <div class="form-container" id="server-form"></div>
+            </div>
+
+            <!-- TAB: LOGS -->
+            <div id="tab-logs" class="tab-pane">
+                <div class="pane-header">
+                    <h2>Live Server Output Logs</h2>
+                    <button class="btn btn-secondary" onclick="fetchLogs()">🔄 Refresh Logs</button>
+                </div>
+                <div class="log-console" id="log-console">Loading log stream...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- EDIT ACCOUNT MODAL -->
+    <div class="modal-overlay" id="account-modal">
+        <div class="modal">
+            <h3 id="modal-title">Edit Account Section</h3>
+            <div class="form-group">
+                <label>Account ID / Section Header</label>
+                <input type="text" id="modal-account-id" placeholder="e.g. 123456 or Default">
+            </div>
+            <div class="form-group">
+                <label>Site Name (SITE_NAME)</label>
+                <input type="text" id="modal-site-name" placeholder="My Home">
+            </div>
+            <div class="form-group">
+                <label>Enabled (ENABLED)</label>
+                <select id="modal-enabled">
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                    <option value="Secure">Secure (Encrypted Session Only)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Provider (PROVIDER)</label>
+                <select id="modal-provider" onchange="renderDynamicProviderFields()">
+                    <option value="ntfy">ntfy</option>
+                    <option value="telegram">telegram</option>
+                    <option value="pushover">pushover</option>
+                    <option value="webhook">webhook</option>
+                    <option value="None">None</option>
+                    <option value="Custom">Custom / External</option>
+                </select>
+            </div>
+
+            <!-- Dynamic Fields Render Container -->
+            <div id="dynamic-provider-fields" class="dynamic-box"></div>
+
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeAccountModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveAccountModal()">Save Account</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
