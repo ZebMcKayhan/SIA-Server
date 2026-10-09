@@ -38,12 +38,37 @@ body { background-color: #121824; color: #e2e8f0; height: 100vh; display: flex; 
 .form-group input, .form-group select { background: #0f172a; border: 1px solid #334155; color: #f8fafc; padding: 10px; border-radius: 6px; font-size: 0.9rem; }
 .form-group input::placeholder { color: #64748b; font-style: italic; }
 
-/* Tooltip Help Icons (?) */
+/* Tooltip Help Icons (?) - Scoped Strictly to ? button */
 .help-btn { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; background-color: #334155; color: #38bdf8; border-radius: 50%; font-size: 0.75rem; font-weight: bold; cursor: pointer; user-select: none; }
 .help-btn:hover { background-color: #0284c7; color: #ffffff; }
 
-.help-tooltip { display: none; position: absolute; top: 28px; left: 0; background: #020617; color: #e2e8f0; border: 1px solid #0284c7; padding: 10px 12px; border-radius: 6px; font-size: 0.8rem; text-transform: none; font-weight: normal; line-height: 1.4; z-index: 50; box-shadow: 0 4px 12px rgba(0,0,0,0.5); max-width: 400px; }
-.form-group:hover .help-tooltip, .help-tooltip.show { display: block; }
+/* Tooltip Card Positioning - Appears above/next to label without covering text boxes */
+.help-tooltip { 
+    display: none; 
+    position: absolute; 
+    bottom: 100%; 
+    left: 20px; 
+    margin-bottom: 6px;
+    background: #020617; 
+    color: #e2e8f0; 
+    border: 1px solid #0284c7; 
+    padding: 10px 12px; 
+    border-radius: 6px; 
+    font-size: 0.8rem; 
+    text-transform: none; 
+    font-weight: normal; 
+    line-height: 1.4; 
+    z-index: 100; 
+    box-shadow: 0 4px 12px rgba(0,0,0,0.6); 
+    max-width: 380px; 
+    pointer-events: none;
+}
+
+/* Tooltip visibility trigger ONLY on ? hover or active toggle class */
+.help-btn:hover + .help-tooltip, 
+.help-tooltip.show { 
+    display: block; 
+}
 
 /* Modals */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; justify-content: center; align-items: center; z-index: 100; padding: 15px; }
