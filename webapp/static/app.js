@@ -1,7 +1,77 @@
 let configData = {};
 let hasConfigFileComments = false;
 
-// Canonical defaults catalog
+// Complete README Documentation Help Catalog
+const HELP_TEXTS = {
+    // [SIA-Server]
+    "ENABLED": "Controls whether the SIA Event Server or service starts. Set to No if running IP-Check only.",
+    "LISTEN_ADDR": "Network IP address interface to bind and listen on (default 0.0.0.0).",
+    "LISTEN_PORT": "TCP port for the main SIA event server listener (default 10000).",
+    "REJECT_POLICY": "respond: Send SIA REJECT frame to client. drop: Silently close connection without sending anything.",
+    "EVENT_HEARTBEAT_WATCHDOG": "Enables watchdog monitoring from SIA event heartbeats (e.g. Galaxy Dimension).",
+    "EVENT_HEARTBEAT_EVENTTYPE": "Event type identifying an event heartbeat (Old or New). Default: Old.",
+    "EVENT_HEARTBEAT_EVENTCODE": "2-character SIA event code identifying heartbeats. Default: RX.",
+    "EVENT_HEARTBEAT_TEXT": "Text prefix in action_text identifying heartbeats. Default: [HEARTBT.].",
+
+    // [IP-Check]
+    "IP_CHECK_ENABLED": "Controls whether the optional IP Check Service starts. Default: No.",
+    "IP_CHECK_LISTEN_ADDR": "IP address interface used by the IP Check Service.",
+    "IP_CHECK_LISTEN_PORT": "TCP port used by the IP Check Service (default 10001).",
+
+    // [WATCHDOG]
+    "WATCHDOG_THRESHOLD": "Missed heartbeat multiplier before declaring lost connection (calculated as THRESHOLD x interval). Range 1.1 - 10.0. Set <= 1.0 to disable.",
+    "MONITORING_STARTED_PRIO": "Notification priority (1-5) when monitoring starts for an account. Default: 2.",
+    "CONNECTION_RESTORED_PRIO": "Notification priority (1-5) when a disconnected heartbeat is restored. Default: 2.",
+    "INTERVAL_CHANGED_PRIO": "Notification priority (1-5) when panel changes its heartbeat interval. Default: 3.",
+    "WATCHDOG_TIMEOUT_PRIO": "Notification priority (1-5) when watchdog detects a lost connection timeout. Default: 4.",
+    "MONITORING_STARTED": "Message format when first valid heartbeat is received. Placeholders: %account, %site_name, %new_panel_time, %new_interval.",
+    "CONNECTION_RESTORED": "Message format when connection is restored after timeout. Placeholders: %elapsed, %new_panel_time.",
+    "INTERVAL_CHANGED": "Message format when heartbeat interval changes. Placeholders: %last_interval, %new_interval.",
+    "WATCHDOG_TIMEOUT": "Message format when heartbeat is lost beyond threshold timeout. Placeholders: %last_panel_time, %elapsed.",
+
+    // [Notification]
+    "NOTIFICATION_FORMAT_ASCII": "Format for SIA Level 3 events with human-readable action_text. Placeholders: %time, %action_text, %group, %account, %site_name.",
+    "NOTIFICATION_FORMAT_DATA": "Format for SIA Level 0-2 events. Placeholders: %time, %event_code, %event_description, %user_id, %zone, %group, %value.",
+    "MAX_QUE_SIZE": "Maximum number of failed events to queue up (1 to 1000). Default: 50.",
+    "MAX_RETRIES": "Maximum retry attempts before dropping (0 = infinite). Default: 10.",
+    "MAX_RETRY_TIME": "Max minutes between exponential retries (1-1000). Default: 30.",
+    "DEFAULT_PRIORITY": "Priority level (1-5) used for unlisted or unknown event codes. Default: 5.",
+    "PRIORITY_1": "Very Low Priority SIA Event Codes (e.g., routine events).",
+    "PRIORITY_2": "Low Priority SIA Event Codes (e.g. RX, RP, TS, TE).",
+    "PRIORITY_3": "Normal Priority SIA Event Codes (e.g. CL, OP, CA, OA, BC, OR).",
+    "PRIORITY_4": "High Priority SIA Event Codes (e.g. AR, XR).",
+    "PRIORITY_5": "Urgent Priority SIA Event Codes (e.g. BA, BV, TA, FA, PA, AT, XT).",
+
+    // [Logging]
+    "LOG_LEVEL": "Log verbosity level (DEBUG, INFO, WARNING, ERROR). Default: INFO.",
+    "LOG_TO": "Log output target: Screen (stdout), File (log file), or Syslog (system log/Windows event log).",
+    "LOG_FILE": "Full file path for logs when LOG_TO = File (e.g. /tmp/sia-server.log or C:\\Logs\\sia.log).",
+    "LOG_MAX_MB": "Maximum size per log file in MB before rotating (1-100). Default: 10.",
+    "LOG_BACKUP_COUNT": "Number of rotated log files to retain (1-10). Default: 5.",
+    "SYSLOG_SOCKET": "Socket path for Syslog written on Linux/Unix (default /dev/log).",
+    "SYSLOG_FACILITY": "Syslog facility category (daemon, user, local0-local7). Default: user.",
+
+    // Providers
+    "NTFY_TOPIC": "Public or private ntfy.sh topic URL (e.g. https://ntfy.sh/your-topic).",
+    "NTFY_TITLE": "Title header displayed in ntfy notifications. Default: Galaxy Alarm.",
+    "NTFY_AUTH": "Authentication type for private topics: None, Token, or Userpass.",
+    "NTFY_TOKEN": "Secret Bearer token required when NTFY_AUTH = Token.",
+    "NTFY_USER": "Username required when NTFY_AUTH = Userpass.",
+    "NTFY_PASS": "Password required when NTFY_AUTH = Userpass.",
+    "TELEGRAM_TOKEN": "Telegram Bot Token obtained from @BotFather.",
+    "TELEGRAM_CHAT_ID": "Target Telegram Chat or Channel ID.",
+    "TELEGRAM_API_URL": "Optional Telegram API base URL endpoint (default: https://api.telegram.org).",
+    "PUSHOVER_TOKEN": "Pushover Application API Token.",
+    "PUSHOVER_USER": "Pushover User or Group Key.",
+    "PUSHOVER_SOUND": "Notification alert sound choice (e.g. siren, alien, cosmic).",
+    "PUSHOVER_RETRY": "Seconds between retry attempts for emergency priority (min 30).",
+    "PUSHOVER_EXPIRE": "Seconds until emergency retries stop (max 10800).",
+    "PUSHOVER_DEVICE": "Target specific device name only.",
+    "WEBHOOK_URL": "Target HTTP Webhook Endpoint URL.",
+    "WEBHOOK_METHOD": "HTTP Request Method: POST or PUT (default POST).",
+    "WEBHOOK_AUTH": "Authentication type: None, Token, or Userpass."
+};
+
 const DEFAULTS_MAP = {
     "SIA-Server": {
         "ENABLED": "Yes",
@@ -68,6 +138,13 @@ function getValueCaseInsensitive(obj, keyName) {
     if (!obj) return undefined;
     const targetKey = Object.keys(obj).find(k => k.toLowerCase() === keyName.toLowerCase());
     return targetKey ? obj[targetKey] : undefined;
+}
+
+function toggleHelpTooltip(el) {
+    const tooltip = el.nextElementSibling;
+    if (tooltip) {
+        tooltip.classList.toggle("show");
+    }
 }
 
 async function loadConfig() {
@@ -158,12 +235,19 @@ function renderDynamicProviderFields(data = {}) {
 
     const getVal = (key) => getValueCaseInsensitive(data, key) || "";
 
-    const createInput = (key, label, placeholder="") => `
-        <div class="form-group">
-            <label>${label}</label>
-            <input type="text" id="field_${key}" value="${getVal(key)}" placeholder="${placeholder}">
-        </div>
-    `;
+    const createInput = (key, label, placeholder="") => {
+        const helpText = HELP_TEXTS[key.toUpperCase()] || "Configuration setting for provider.";
+        return `
+            <div class="form-group">
+                <label>
+                    ${label}
+                    <span class="help-btn" onclick="toggleHelpTooltip(this)">?</span>
+                    <span class="help-tooltip">${helpText}</span>
+                </label>
+                <input type="text" id="field_${key}" value="${getVal(key)}" placeholder="${placeholder}">
+            </div>
+        `;
+    };
 
     if (provider === "ntfy") {
         container.innerHTML += createInput("NTFY_TITLE", "NTFY_TITLE (Optional)", "Galaxy Alarm");
@@ -172,7 +256,11 @@ function renderDynamicProviderFields(data = {}) {
         const currentAuth = getVal("NTFY_AUTH") || "None";
         container.innerHTML += `
             <div class="form-group">
-                <label>NTFY_AUTH</label>
+                <label>
+                    NTFY_AUTH
+                    <span class="help-btn" onclick="toggleHelpTooltip(this)">?</span>
+                    <span class="help-tooltip">${HELP_TEXTS['NTFY_AUTH']}</span>
+                </label>
                 <select id="field_NTFY_AUTH" onchange="toggleSubAuthFields('ntfy')">
                     <option value="None" ${currentAuth === 'None' ? 'selected' : ''}>None</option>
                     <option value="Token" ${currentAuth === 'Token' ? 'selected' : ''}>Token</option>
@@ -198,7 +286,11 @@ function renderDynamicProviderFields(data = {}) {
         let soundOptions = PUSHOVER_SOUNDS.map(s => `<option value="${s}" ${s === soundVal ? 'selected' : ''}>${s}</option>`).join("");
         container.innerHTML += `
             <div class="form-group">
-                <label>PUSHOVER_SOUND (Optional)</label>
+                <label>
+                    PUSHOVER_SOUND (Optional)
+                    <span class="help-btn" onclick="toggleHelpTooltip(this)">?</span>
+                    <span class="help-tooltip">${HELP_TEXTS['PUSHOVER_SOUND']}</span>
+                </label>
                 <select id="field_PUSHOVER_SOUND">${soundOptions}</select>
             </div>
         `;
@@ -213,7 +305,11 @@ function renderDynamicProviderFields(data = {}) {
         const methodVal = getVal("WEBHOOK_METHOD") || "POST";
         container.innerHTML += `
             <div class="form-group">
-                <label>WEBHOOK_METHOD</label>
+                <label>
+                    WEBHOOK_METHOD
+                    <span class="help-btn" onclick="toggleHelpTooltip(this)">?</span>
+                    <span class="help-tooltip">${HELP_TEXTS['WEBHOOK_METHOD']}</span>
+                </label>
                 <select id="field_WEBHOOK_METHOD">
                     <option value="POST" ${methodVal === 'POST' ? 'selected' : ''}>POST</option>
                     <option value="PUT" ${methodVal === 'PUT' ? 'selected' : ''}>PUT</option>
@@ -224,7 +320,11 @@ function renderDynamicProviderFields(data = {}) {
         const authVal = getVal("WEBHOOK_AUTH") || "None";
         container.innerHTML += `
             <div class="form-group">
-                <label>WEBHOOK_AUTH</label>
+                <label>
+                    WEBHOOK_AUTH
+                    <span class="help-btn" onclick="toggleHelpTooltip(this)">?</span>
+                    <span class="help-tooltip">${HELP_TEXTS['WEBHOOK_AUTH']}</span>
+                </label>
                 <select id="field_WEBHOOK_AUTH" onchange="toggleSubAuthFields('webhook')">
                     <option value="None" ${authVal === 'None' ? 'selected' : ''}>None</option>
                     <option value="Token" ${authVal === 'Token' ? 'selected' : ''}>Token</option>
@@ -248,18 +348,30 @@ function toggleSubAuthFields(type, data = {}) {
     if (authChoice === "Token") {
         subContainer.innerHTML = `
             <div class="form-group">
-                <label>${type.toUpperCase()}_TOKEN</label>
+                <label>
+                    ${type.toUpperCase()}_TOKEN
+                    <span class="help-btn" onclick="toggleHelpTooltip(this)">?</span>
+                    <span class="help-tooltip">${HELP_TEXTS[type.toUpperCase() + '_TOKEN']}</span>
+                </label>
                 <input type="text" id="field_${type.toUpperCase()}_TOKEN" value="${getVal(type.toUpperCase() + '_TOKEN')}">
             </div>
         `;
     } else if (authChoice === "Userpass") {
         subContainer.innerHTML = `
             <div class="form-group">
-                <label>${type.toUpperCase()}_USER</label>
+                <label>
+                    ${type.toUpperCase()}_USER
+                    <span class="help-btn" onclick="toggleHelpTooltip(this)">?</span>
+                    <span class="help-tooltip">${HELP_TEXTS[type.toUpperCase() + '_USER']}</span>
+                </label>
                 <input type="text" id="field_${type.toUpperCase()}_USER" value="${getVal(type.toUpperCase() + '_USER')}">
             </div>
             <div class="form-group">
-                <label>${type.toUpperCase()}_PASS</label>
+                <label>
+                    ${type.toUpperCase()}_PASS
+                    <span class="help-btn" onclick="toggleHelpTooltip(this)">?</span>
+                    <span class="help-tooltip">${HELP_TEXTS[type.toUpperCase() + '_PASS']}</span>
+                </label>
                 <input type="password" id="field_${type.toUpperCase()}_PASS" value="${getVal(type.toUpperCase() + '_PASS')}">
             </div>
         `;
@@ -308,10 +420,15 @@ function renderSectionForm(sectionName, containerId) {
     allKeys.forEach(key => {
         const currentValue = getValueCaseInsensitive(sec, key) !== undefined ? getValueCaseInsensitive(sec, key) : "";
         const defaultPlaceholder = defaults[key] || "(disabled)";
+        const helpText = HELP_TEXTS[key.toUpperCase()] || "Configuration setting for " + sectionName;
 
         container.innerHTML += `
             <div class="form-group">
-                <label>${key}</label>
+                <label>
+                    ${key}
+                    <span class="help-btn" onclick="toggleHelpTooltip(this)">?</span>
+                    <span class="help-tooltip">${helpText}</span>
+                </label>
                 <input type="text" 
                        value="${currentValue}" 
                        placeholder="Default: ${defaultPlaceholder}" 
@@ -332,7 +449,11 @@ function renderLoggingForm() {
     const levelVal = getValueCaseInsensitive(sec, "LOG_LEVEL") || "INFO";
     container.innerHTML += `
         <div class="form-group">
-            <label>LOG_LEVEL</label>
+            <label>
+                LOG_LEVEL
+                <span class="help-btn" onclick="toggleHelpTooltip(this)">?</span>
+                <span class="help-tooltip">${HELP_TEXTS['LOG_LEVEL']}</span>
+            </label>
             <select onchange="updateConfigValue('${secKey}', 'LOG_LEVEL', this.value)">
                 ${['DEBUG', 'INFO', 'WARNING', 'ERROR'].map(l => `<option value="${l}" ${l === levelVal.toUpperCase() ? 'selected' : ''}>${l}</option>`).join('')}
             </select>
@@ -343,7 +464,11 @@ function renderLoggingForm() {
     const currentLogTo = logToVal.charAt(0).toUpperCase() + logToVal.slice(1).toLowerCase();
     container.innerHTML += `
         <div class="form-group">
-            <label>LOG_TO</label>
+            <label>
+                LOG_TO
+                <span class="help-btn" onclick="toggleHelpTooltip(this)">?</span>
+                <span class="help-tooltip">${HELP_TEXTS['LOG_TO']}</span>
+            </label>
             <select id="logging_log_to_select" onchange="updateConfigValue('${secKey}', 'LOG_TO', this.value); renderLoggingForm();">
                 <option value="Screen" ${currentLogTo === 'Screen' ? 'selected' : ''}>Screen</option>
                 <option value="File" ${currentLogTo === 'File' ? 'selected' : ''}>File</option>
@@ -364,9 +489,14 @@ function renderLoggingForm() {
 
 function createLoggingInput(secKey, key, defaultVal) {
     const currentValue = getValueCaseInsensitive(configData[secKey], key) || "";
+    const helpText = HELP_TEXTS[key.toUpperCase()] || "Logging configuration parameter.";
     return `
         <div class="form-group">
-            <label>${key}</label>
+            <label>
+                ${key}
+                <span class="help-btn" onclick="toggleHelpTooltip(this)">?</span>
+                <span class="help-tooltip">${helpText}</span>
+            </label>
             <input type="text" value="${currentValue}" placeholder="Default: ${defaultVal}" onchange="updateConfigValue('${secKey}', '${key}', this.value)">
         </div>
     `;
