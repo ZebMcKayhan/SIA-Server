@@ -95,15 +95,15 @@
         <div class="modal">
             <h3 id="modal-title">Edit Account</h3>
             <div class="form-group">
-                <label>ACCOUNT NUMBER / ID</label>
+                <label>ACCOUNT NUMBER / ID <span class="help-btn" onclick="toggleHelpTooltip(this)">?</span><span class="help-tooltip">The unique account ID assigned to the panel in brackets (e.g. 123456 or Default).</span></label>
                 <input type="text" id="modal-account-id" placeholder="e.g. 123456 or Default">
             </div>
             <div class="form-group">
-                <label>SITE_NAME</label>
+                <label>SITE_NAME <span class="help-btn" onclick="toggleHelpTooltip(this)">?</span><span class="help-tooltip">A friendly name for the site (e.g., 'Main House'). If omitted, the account number is used.</span></label>
                 <input type="text" id="modal-site-name" placeholder="My Home">
             </div>
             <div class="form-group">
-                <label>ENABLED</label>
+                <label>ENABLED <span class="help-btn" onclick="toggleHelpTooltip(this)">?</span><span class="help-tooltip">Yes: Accept all. No: Reject connection. Secure: Only accept encrypted connections.</span></label>
                 <select id="modal-enabled">
                     <option value="Yes">Yes</option>
                     <option value="No">No</option>
@@ -111,7 +111,7 @@
                 </select>
             </div>
             <div class="form-group">
-                <label>PROVIDER</label>
+                <label>PROVIDER <span class="help-btn" onclick="toggleHelpTooltip(this)">?</span><span class="help-tooltip">The notification provider for this site (ntfy, telegram, pushover, webhook, or None).</span></label>
                 <select id="modal-provider" onchange="renderDynamicProviderFields()">
                     <option value="ntfy">ntfy</option>
                     <option value="telegram">telegram</option>
