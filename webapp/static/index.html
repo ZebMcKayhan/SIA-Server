@@ -8,22 +8,22 @@
 </head>
 <body>
     <div class="top-bar">
-        <div class="brand">🌌 <span>SIA-Server</span> Admin</div>
+        <div class="brand">SIA-Server Admin</div>
         <div class="top-actions">
-            <button class="btn btn-lightning" id="btn-reload" onclick="triggerReload()">⚡ Reload</button>
-            <button class="btn btn-save" onclick="saveConfiguration()">💾 Save</button>
+            <button class="btn btn-lightning" id="btn-reload" onclick="triggerReload()">Hot Reload</button>
+            <button class="btn btn-save" onclick="promptSaveConfiguration()">Save Config</button>
         </div>
     </div>
 
     <div class="main-layout">
-        <!-- Sidebar / Navigation Tabs -->
         <div class="sidebar">
-            <div class="nav-item active" onclick="switchTab('accounts')">📑 Accounts</div>
-            <div class="nav-item" onclick="switchTab('watchdog')">⏰ Watchdog</div>
-            <div class="nav-item" onclick="switchTab('ipcheck')">🌐 IP-Check</div>
-            <div class="nav-item" onclick="switchTab('notifications')">🔔 Priorities & Formats</div>
-            <div class="nav-item" onclick="switchTab('server')">⚙️ Server Core</div>
-            <div class="nav-item" onclick="switchTab('logs')">📜 Live Logs</div>
+            <div class="nav-item active" onclick="switchTab('accounts')">Accounts</div>
+            <div class="nav-item" onclick="switchTab('watchdog')">Watchdog</div>
+            <div class="nav-item" onclick="switchTab('ipcheck')">IP-Check</div>
+            <div class="nav-item" onclick="switchTab('notifications')">Priorities & Formats</div>
+            <div class="nav-item" onclick="switchTab('logging')">Logging</div>
+            <div class="nav-item" onclick="switchTab('server')">Server Core</div>
+            <div class="nav-item" onclick="switchTab('logs')">Live Logs</div>
         </div>
 
         <div class="content-area">
@@ -67,9 +67,15 @@
                 <div class="form-container" id="notifications-form"></div>
             </div>
 
+            <!-- TAB: LOGGING -->
+            <div id="tab-logging" class="tab-pane">
+                <h2>Logging Configuration</h2>
+                <div class="form-container" id="logging-form"></div>
+            </div>
+
             <!-- TAB: SERVER CORE -->
             <div id="tab-server" class="tab-pane">
-                <h2>Server Core & Logging Configuration</h2>
+                <h2>Server Core Settings</h2>
                 <div class="form-container" id="server-form"></div>
             </div>
 
@@ -77,7 +83,7 @@
             <div id="tab-logs" class="tab-pane">
                 <div class="pane-header">
                     <h2>Live Logs</h2>
-                    <button class="btn btn-secondary" onclick="fetchLogs()">🔄 Refresh</button>
+                    <button class="btn btn-secondary" onclick="fetchLogs()">Refresh</button>
                 </div>
                 <div class="log-console" id="log-console">Loading log stream...</div>
             </div>
@@ -89,23 +95,23 @@
         <div class="modal">
             <h3 id="modal-title">Edit Account</h3>
             <div class="form-group">
-                <label>Account ID</label>
+                <label>ACCOUNT NUMBER / ID</label>
                 <input type="text" id="modal-account-id" placeholder="e.g. 123456 or Default">
             </div>
             <div class="form-group">
-                <label>Site Name</label>
+                <label>SITE_NAME</label>
                 <input type="text" id="modal-site-name" placeholder="My Home">
             </div>
             <div class="form-group">
-                <label>Enabled</label>
+                <label>ENABLED</label>
                 <select id="modal-enabled">
-                    <option value="yes">Yes</option>
-                    <option value="no">No</option>
-                    <option value="secure">Secure (Encrypted Session Only)</option>
+                    <option value="Yes">Yes</option>
+                    <option value="No">No</option>
+                    <option value="Secure">Secure</option>
                 </select>
             </div>
             <div class="form-group">
-                <label>Provider</label>
+                <label>PROVIDER</label>
                 <select id="modal-provider" onchange="renderDynamicProviderFields()">
                     <option value="ntfy">ntfy</option>
                     <option value="telegram">telegram</option>
@@ -119,7 +125,7 @@
 
             <div class="modal-actions">
                 <button class="btn btn-secondary" onclick="closeAccountModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="saveAccountModal()">Save</button>
+                <button class="btn btn-primary" onclick="saveAccountModal()">Save Account</button>
             </div>
         </div>
     </div>
