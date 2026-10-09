@@ -140,10 +140,23 @@ function getValueCaseInsensitive(obj, keyName) {
     return targetKey ? obj[targetKey] : undefined;
 }
 
+document.addEventListener("click", (evt) => {
+    if (!evt.target.classList.contains("help-btn")) {
+        document.querySelectorAll(".help-tooltip.show").forEach(el => el.classList.remove("show"));
+    }
+});
+
 function toggleHelpTooltip(el) {
+    evt = window.event;
+    if (evt) evt.stopPropagation();
+    
     const tooltip = el.nextElementSibling;
     if (tooltip) {
-        tooltip.classList.toggle("show");
+        const isShown = tooltip.classList.contains("show");
+        document.querySelectorAll(".help-tooltip.show").forEach(t => t.classList.remove("show"));
+        if (!isShown) {
+            tooltip.classList.add("show");
+        }
     }
 }
 
