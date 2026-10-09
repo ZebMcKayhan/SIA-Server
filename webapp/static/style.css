@@ -31,24 +31,31 @@ body { background-color: #121824; color: #e2e8f0; height: 100vh; display: flex; 
 .data-table th, .data-table td { padding: 12px 14px; text-align: left; border-bottom: 1px solid #334155; font-size: 0.9rem; }
 .data-table th { background: #0f172a; color: #94a3b8; font-size: 0.8rem; text-transform: uppercase; }
 
-/* Dynamic Forms */
+/* Forms & Labels */
 .form-container { background: #1e293b; padding: 20px; border-radius: 8px; border: 1px solid #334155; }
-.form-group { margin-bottom: 15px; display: flex; flex-direction: column; gap: 6px; }
-.form-group label { font-size: 0.85rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; }
+.form-group { margin-bottom: 15px; display: flex; flex-direction: column; gap: 6px; position: relative; }
+.form-group label { font-size: 0.85rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; display: flex; align-items: center; gap: 6px; }
 .form-group input, .form-group select { background: #0f172a; border: 1px solid #334155; color: #f8fafc; padding: 10px; border-radius: 6px; font-size: 0.9rem; }
 .form-group input::placeholder { color: #64748b; font-style: italic; }
+
+/* Tooltip Help Icons (?) */
+.help-btn { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; background-color: #334155; color: #38bdf8; border-radius: 50%; font-size: 0.75rem; font-weight: bold; cursor: pointer; user-select: none; }
+.help-btn:hover { background-color: #0284c7; color: #ffffff; }
+
+.help-tooltip { display: none; position: absolute; top: 28px; left: 0; background: #020617; color: #e2e8f0; border: 1px solid #0284c7; padding: 10px 12px; border-radius: 6px; font-size: 0.8rem; text-transform: none; font-weight: normal; line-height: 1.4; z-index: 50; box-shadow: 0 4px 12px rgba(0,0,0,0.5); max-width: 400px; }
+.form-group:hover .help-tooltip, .help-tooltip.show { display: block; }
 
 /* Modals */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; justify-content: center; align-items: center; z-index: 100; padding: 15px; }
 .modal-overlay.active { display: flex; }
-.modal { background: #1e293b; width: 100%; max-width: 500px; padding: 20px; border-radius: 8px; border: 1px solid #334155; }
+.modal { background: #1e293b; width: 100%; max-width: 500px; padding: 20px; border-radius: 8px; border: 1px solid #334155; max-height: 90vh; overflow-y: auto; }
 .dynamic-box { background: #0f172a; padding: 12px; border-radius: 6px; margin-top: 10px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 
 /* Logs Console */
 .log-console { background: #020617; border: 1px solid #334155; padding: 12px; font-family: monospace; height: calc(100vh - 160px); overflow-y: auto; color: #38bdf8; font-size: 0.8rem; border-radius: 6px; white-space: pre-wrap; }
 
-/* Mobile View Adjustments */
+/* Responsive / Mobile */
 @media (max-width: 768px) {
     body { height: auto; overflow-y: auto; }
     .main-layout { flex-direction: column; overflow: visible; }
