@@ -1,10 +1,9 @@
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
 body { background-color: #121824; color: #e2e8f0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
-/* Top Header */
+/* Header */
 .top-bar { height: 55px; background-color: #1e293b; border-bottom: 1px solid #334155; display: flex; align-items: center; padding: 0 15px; justify-content: space-between; flex-shrink: 0; }
 .brand { font-size: 1.1rem; font-weight: bold; color: #f8fafc; }
-.brand span { color: #38bdf8; }
 .top-actions { display: flex; gap: 8px; }
 
 /* Buttons */
@@ -35,21 +34,21 @@ body { background-color: #121824; color: #e2e8f0; height: 100vh; display: flex; 
 /* Dynamic Forms */
 .form-container { background: #1e293b; padding: 20px; border-radius: 8px; border: 1px solid #334155; }
 .form-group { margin-bottom: 15px; display: flex; flex-direction: column; gap: 6px; }
-.form-group label { font-size: 0.85rem; color: #94a3b8; font-weight: 600; text-transform: lowercase; }
+.form-group label { font-size: 0.85rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; }
 .form-group input, .form-group select { background: #0f172a; border: 1px solid #334155; color: #f8fafc; padding: 10px; border-radius: 6px; font-size: 0.9rem; }
 .form-group input::placeholder { color: #64748b; font-style: italic; }
 
 /* Modals */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; justify-content: center; align-items: center; z-index: 100; padding: 15px; }
 .modal-overlay.active { display: flex; }
-.modal { background: #1e293b; width: 100%; max-width: 480px; padding: 20px; border-radius: 8px; border: 1px solid #334155; }
+.modal { background: #1e293b; width: 100%; max-width: 500px; padding: 20px; border-radius: 8px; border: 1px solid #334155; }
 .dynamic-box { background: #0f172a; padding: 12px; border-radius: 6px; margin-top: 10px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 
 /* Logs Console */
 .log-console { background: #020617; border: 1px solid #334155; padding: 12px; font-family: monospace; height: calc(100vh - 160px); overflow-y: auto; color: #38bdf8; font-size: 0.8rem; border-radius: 6px; white-space: pre-wrap; }
 
-/* Responsive / Mobile View */
+/* Mobile View Adjustments */
 @media (max-width: 768px) {
     body { height: auto; overflow-y: auto; }
     .main-layout { flex-direction: column; overflow: visible; }
