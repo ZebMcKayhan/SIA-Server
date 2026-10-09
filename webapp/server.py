@@ -12,7 +12,6 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 app = FastAPI(title="SIA-Server WebGUI", docs_url=None, redoc_url=None)
 security = HTTPBasic()
 
-# Path resolution
 CONFIG_PATH = os.environ.get("SIA_CONFIG")
 if not CONFIG_PATH:
     if os.path.isdir("/config"):
@@ -24,13 +23,13 @@ LOG_FILE_PATH = os.environ.get("SIA_LOG_FILE", "/tmp/sia-server.log")
 
 
 def get_ini_parser() -> configparser.ConfigParser:
-    """Configured parser with inline comment stripping and case-insensitivity."""
+    """Parser setup that strips inline comments and preserves section cases."""
     config = configparser.ConfigParser(
         inline_comment_prefixes=('#', ';'),
         interpolation=None,
     )
-    # Case-insensitive option matching to prevent duplicates
-    config.optionxform = str.lower
+    # Convert option keys to uppercase for canonical INI output
+    config.optionxform = lambda optionstr: optionstr.upper()
     return config
 
 
@@ -39,13 +38,11 @@ def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
     if os.path.exists(CONFIG_PATH):
         config.read(CONFIG_PATH)
 
-    admin_user = config.get("webgui", "admin_user", fallback="admin")
-    admin_pass = config.get("webgui", "admin_pass", fallback="admin")
+    admin_user = config.get("WebGUI", "ADMIN_USER", fallback="admin")
+    admin_pass = config.get("WebGUI", "ADMIN_PASS", fallback="admin")
 
-    is_correct_username = secrets.compare_digest(credentials.username, admin_user)
-    is_correct_password = secrets.compare_digest(credentials.password, admin_pass)
-
-    if not (is_correct_username and is_correct_password):
+    if not (secrets.compare_digest(credentials.username, admin_user) and 
+            secrets.compare_digest(credentials.password, admin_pass)):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -54,37 +51,21 @@ def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
     return credentials.username
 
 
-def resolve_watchdog_settings(raw_config: Dict[str, Dict[str, str]]) -> Dict[str, str]:
-    """Applies the exact 4-tier precedence from configuration.py for Watchdog values."""
-    watchdog_sec = raw_config.get("watchdog", {})
-    ipcheck_sec = raw_config.get("ip-check", {})
-
-    def get_val(key: str, legacy_ip_key: str = None, default: str = "") -> str:
-        if key in watchdog_sec:
-            return watchdog_sec[key]
-        if key in ipcheck_sec:
-            return ipcheck_sec[key]
-        if legacy_ip_key and legacy_ip_key in ipcheck_sec:
-            return ipcheck_sec[legacy_ip_key]
-        return default
-
-    return {
-        "watchdog_threshold": get_val("watchdog_threshold", default="2.1"),
-        "monitoring_started_prio": get_val("monitoring_started_prio", default="2"),
-        "connection_restored_prio": get_val("connection_restored_prio", "watchdog_restore_prio", default="2"),
-        "interval_changed_prio": get_val("interval_changed_prio", default="3"),
-        "watchdog_timeout_prio": get_val("watchdog_timeout_prio", "watchdog_lost_prio", default="4"),
-        "monitoring_started": get_val("monitoring_started", default=""),
-        "connection_restored": get_val(
-            "connection_restored",
-            default="Heartbeat received [at %new_panel_time, ]after %elapsed, connection restored."
-        ),
-        "interval_changed": get_val("interval_changed", default=""),
-        "watchdog_timeout": get_val(
-            "watchdog_timeout",
-            default="Heartbeat lost, last heartbeat received was [at %last_panel_time, ]%elapsed ago."
-        ),
-    }
+def has_comments_or_legacy(file_path: str) -> bool:
+    """Scans config file to check if it contains comments or legacy keys."""
+    if not os.path.exists(file_path):
+        return False
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                stripped = line.strip()
+                if stripped.startswith('#') or stripped.startswith(';'):
+                    return True
+                if 'watchdog_restore_prio' in stripped or 'watchdog_lost_prio' in stripped:
+                    return True
+    except Exception:
+        pass
+    return False
 
 
 @app.get("/api/config")
@@ -97,13 +78,16 @@ def read_config(username: str = Depends(get_current_user)):
 
     data = {}
     for section in config.sections():
-        # Store as lowercase dictionary keys to unify UI access
-        data[section.lower()] = dict(config[section])
+        # Preserve section case strictly ([Default], [SIA-Server], [WATCHDOG], [IP-Check], [Logging], [Notification])
+        data[section] = dict(config[section])
 
-    # Unify Watchdog settings into a single section using configuration.py rules
-    data["watchdog"] = resolve_watchdog_settings(data)
+    contains_comments = has_comments_or_legacy(CONFIG_PATH)
 
-    return {"path": CONFIG_PATH, "config": data}
+    return {
+        "path": CONFIG_PATH, 
+        "config": data, 
+        "has_comments": contains_comments
+    }
 
 
 @app.post("/api/config")
@@ -117,7 +101,7 @@ async def save_config(payload: Dict[str, Any], username: str = Depends(get_curre
             config.set(section_name, key, clean_val)
 
     try:
-        with open(CONFIG_PATH, "w") as configfile:
+        with open(CONFIG_PATH, "w", encoding='utf-8') as configfile:
             config.write(configfile)
         return {"status": "success", "message": "Configuration saved successfully"}
     except Exception as e:
@@ -142,7 +126,7 @@ def get_logs(lines: int = 100, username: str = Depends(get_current_user)):
         return {"logs": [f"Log file not found at {LOG_FILE_PATH}."]}
 
     try:
-        with open(LOG_FILE_PATH, "r") as f:
+        with open(LOG_FILE_PATH, "r", encoding='utf-8') as f:
             all_lines = f.readlines()
             return {"logs": [line.strip() for line in all_lines[-lines:]]}
     except Exception as e:
