@@ -78,8 +78,60 @@ def read_config(username: str = Depends(get_current_user)):
 
     data = {}
     for section in config.sections():
-        # Preserve section case strictly ([Default], [SIA-Server], [WATCHDOG], [IP-Check], [Logging], [Notification])
+        # Preserve original section casing strictly ([Default], [SIA-Server], [Watchdog], [IP-Check], [Logging], [Notification])
         data[section] = dict(config[section])
+
+    # Find watchdog and ip-check sections case-insensitively
+    watchdog_sec_name = next((s for s in data.keys() if s.lower() == 'watchdog'), None)
+    ipcheck_sec_name = next((s for s in data.keys() if s.lower() == 'ip-check'), None)
+
+    if not watchdog_sec_name:
+        watchdog_sec_name = "Watchdog"
+        data[watchdog_sec_name] = {}
+
+    watchdog_data = data[watchdog_sec_name]
+    ipcheck_data = data[ipcheck_sec_name] if ipcheck_sec_name else {}
+
+    # Exact 4-level precedence mapping from configuration.py
+    watchdog_keys = [
+        "WATCHDOG_THRESHOLD",
+        "MONITORING_STARTED_PRIO",
+        "CONNECTION_RESTORED_PRIO",
+        "INTERVAL_CHANGED_PRIO",
+        "WATCHDOG_TIMEOUT_PRIO",
+        "MONITORING_STARTED",
+        "CONNECTION_RESTORED",
+        "INTERVAL_CHANGED",
+        "WATCHDOG_TIMEOUT"
+    ]
+    legacy_map = {
+        "CONNECTION_RESTORED_PRIO": "watchdog_restore_prio",
+        "WATCHDOG_TIMEOUT_PRIO": "watchdog_lost_prio"
+    }
+
+    for key in watchdog_keys:
+        existing_val = None
+        # 1. Check [Watchdog] section
+        for k, v in watchdog_data.items():
+            if k.upper() == key.upper():
+                existing_val = v
+                break
+        
+        # 2 & 3. Check [IP-Check] section or legacy keys if missing in Watchdog
+        if existing_val is None or existing_val == "":
+            for k, v in ipcheck_data.items():
+                if k.upper() == key.upper():
+                    existing_val = v
+                    break
+            if (existing_val is None or existing_val == "") and key in legacy_map:
+                legacy_key = legacy_map[key]
+                for k, v in ipcheck_data.items():
+                    if k.upper() == legacy_key.upper():
+                        existing_val = v
+                        break
+        
+        if existing_val is not None and existing_val != "":
+            watchdog_data[key] = existing_val
 
     contains_comments = has_comments_or_legacy(CONFIG_PATH)
 
